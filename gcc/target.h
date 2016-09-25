@@ -211,6 +211,17 @@ typedef auto_vec<unsigned short, 32> auto_vec_perm_indices;
 
 extern struct gcc_target targetm;
 
+/* Return the mode that should be used to hold a scalar shift amount
+   when shifting values of the given mode.  */
+/* ??? This could in principle be generated automatically from the .md
+   shift patterns, but for now word_mode should be universally OK.  */
+
+inline scalar_int_mode
+get_shift_amount_mode (machine_mode)
+{
+  return word_mode;
+}
+
 #ifdef GCC_TM_H
 
 #ifndef CUMULATIVE_ARGS_MAGIC
