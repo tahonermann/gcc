@@ -375,6 +375,10 @@ complete_mode (struct mode_data *m)
       m->bytesize = 2 * m->component->bytesize;
       break;
 
+    case MODE_VECTOR_BOOL:
+      validate_mode (m, UNSET, SET, SET, SET, UNSET);
+      break;
+
     case MODE_VECTOR_INT:
     case MODE_VECTOR_FLOAT:
     case MODE_VECTOR_FRACT:
@@ -524,6 +528,36 @@ make_vector_modes (enum mode_class cl, unsigned int width,
       v->component = m;
       v->ncomponents = ncomponents;
     }
+}
+
+/* Create a vector of booleans with COUNT elements and BYTESIZE bytes
+   in total.  */
+#define VECTOR_BOOL_MODE(COUNT, BYTESIZE) \
+  make_vector_bool_mode (COUNT, BYTESIZE, __FILE__, __LINE__)
+static void ATTRIBUTE_UNUSED
+make_vector_bool_mode (unsigned int count, unsigned int bytesize,
+		       const char *file, unsigned int line)
+{
+  struct mode_data *m = find_mode ("BI");
+  if (!m)
+    {
+      error ("%s:%d: no mode \"BI\"", file, line);
+      return;
+    }
+
+  char buf[8];
+  if ((size_t) snprintf (buf, sizeof buf, "V%uBI", count) >= sizeof buf)
+    {
+      error ("%s:%d: number of vector elements is too high",
+	     file, line);
+      return;
+    }
+
+  struct mode_data *v = new_mode (MODE_VECTOR_BOOL,
+				  xstrdup (buf), file, line);
+  v->component = m;
+  v->ncomponents = count;
+  v->bytesize = bytesize;
 }
 
 /* Input.  */
@@ -1438,7 +1472,8 @@ emit_mode_wider (void)
 
 	  /* For vectors we want twice the number of components,
 	     with the same element type.  */
-	  if (m->cl == MODE_VECTOR_INT
+	  if (m->cl == MODE_VECTOR_BOOL
+	      || m->cl == MODE_VECTOR_INT
 	      || m->cl == MODE_VECTOR_FLOAT
 	      || m->cl == MODE_VECTOR_FRACT
 	      || m->cl == MODE_VECTOR_UFRACT
@@ -1657,6 +1692,7 @@ emit_mode_adjustments (void)
       printf ("\n  /* %s:%d */\n", a->file, a->line);
       switch (a->mode->cl)
 	{
+	case MODE_VECTOR_BOOL:
 	case MODE_VECTOR_INT:
 	case MODE_VECTOR_FLOAT:
 	case MODE_VECTOR_FRACT:
@@ -1686,6 +1722,10 @@ emit_mode_adjustments (void)
 	      printf ("  mode_unit_size[E_%smode] = s;\n", m->name);
 	      printf ("  mode_base_align[E_%smode] = s & (~s + 1);\n",
 		      m->name);
+	      break;
+
+	    case MODE_VECTOR_BOOL:
+	      /* Changes to BImode should not affect vector booleans.  */
 	      break;
 
 	    case MODE_VECTOR_INT:
@@ -1726,6 +1766,10 @@ emit_mode_adjustments (void)
 	    case MODE_COMPLEX_INT:
 	    case MODE_COMPLEX_FLOAT:
 	      printf ("  mode_base_align[E_%smode] = s;\n", m->name);
+	      break;
+
+	    case MODE_VECTOR_BOOL:
+	      /* Changes to BImode should not affect vector booleans.  */
 	      break;
 
 	    case MODE_VECTOR_INT:
