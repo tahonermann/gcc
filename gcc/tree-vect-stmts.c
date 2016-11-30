@@ -7969,6 +7969,7 @@ vectorizable_load (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
   poly_uint64 vf;
   tree aggr_type;
   gather_scatter_info gs_info;
+  bool firstfaulting_p = false;
   vec_info *vinfo = stmt_info->vinfo;
   tree ref_type;
 
@@ -8009,6 +8010,7 @@ vectorizable_load (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
       loop = LOOP_VINFO_LOOP (loop_vinfo);
       nested_in_vect_loop = nested_in_vect_loop_p (loop, stmt);
       vf = LOOP_VINFO_VECT_FACTOR (loop_vinfo);
+      firstfaulting_p = LOOP_VINFO_FIRSTFAULTING_EXECUTION (loop_vinfo);
     }
   else
     vf = 1;
@@ -8129,6 +8131,17 @@ vectorizable_load (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
 	  && !widened_gather_support_p (vectype, &gs_info, stmt, &wgather))
 	return false;
     }
+
+  if (firstfaulting_p && memory_access_type != VMAT_CONTIGUOUS)
+    {
+      if (dump_enabled_p ())
+	dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
+			"Non-contiguous not supported for first faulting\n");
+      return false;
+    }
+
+  if (firstfaulting_p)
+    gcc_assert (LOOP_VINFO_SPECULATIVE_EXECUTION (loop_vinfo));
 
   if (!vec_stmt) /* transformation not required.  */
     {
@@ -8459,6 +8472,12 @@ vectorizable_load (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
     }
 
   alignment_support_scheme = vect_supportable_dr_alignment (first_dr, false);
+
+  /* TODO: This is icky.  For firstfaulting, force the known alignment.
+     Maybe instead add extra checks elsewhere below.  */
+  if (firstfaulting_p)
+    alignment_support_scheme = dr_unaligned_supported;
+
   gcc_assert (alignment_support_scheme);
   bool masked_loop_p = (loop_vinfo && LOOP_VINFO_FULLY_MASKED_P (loop_vinfo));
   /* Targets with load-lane instructions or support for fully-masked loops
@@ -8721,9 +8740,21 @@ vectorizable_load (gimple *stmt, gimple_stmt_iterator *gsi, gimple **vec_stmt,
 		      align = least_bit_hwi (misalign);
 		    if (mask)
 		      {
+			/* At present we always start a first-faulting
+			   load at the first element.  */
+			gcc_assert (!firstfaulting_p);
 			tree ptr = build_int_cst (ref_type, align);
 			gcall *call = gimple_build_call_internal
 			  (IFN_MASK_LOAD, 3, dataref_ptr, ptr, mask);
+			gimple_call_set_lhs (call, vec_dest);
+			gimple_call_set_nothrow (call, true);
+			new_stmt = call;
+		      }
+		    else if (firstfaulting_p)
+		      {
+			tree ptr = build_int_cst (ref_type, align);
+			gcall *call = gimple_build_call_internal
+			  (IFN_FIRSTFAULT_LOAD, 2, dataref_ptr, ptr);
 			gimple_call_set_lhs (call, vec_dest);
 			gimple_call_set_nothrow (call, true);
 			new_stmt = call;
@@ -9637,10 +9668,12 @@ vectorizable_comparison (gimple *stmt, gimple_stmt_iterator *gsi,
       vect_model_simple_cost (stmt_info, ncopies * (1 + (bitop2 != NOP_EXPR)),
 			      dts, ndts, NULL, NULL);
 
-      /* Speulative loops need to AND the comparison result with the
-	 mask of active values.  */
+      /* First-faulting loops need to AND the comparison result with the
+	 mask of elements that didn't fault.  Other speculative loops need
+	 to AND it with the mask of active values.  */
       if (LOOP_VINFO_CAN_FULLY_MASK_P (loop_vinfo)
-	  && LOOP_VINFO_SPECULATIVE_EXECUTION (loop_vinfo))
+	  && LOOP_VINFO_SPECULATIVE_EXECUTION (loop_vinfo)
+	  && !LOOP_VINFO_FIRSTFAULTING_EXECUTION (loop_vinfo))
 	{
 	  tree final_type = vect_mask_type_for_speculation (loop_vinfo);
 	  vect_record_loop_mask (loop_vinfo, &LOOP_VINFO_MASKS (loop_vinfo),
@@ -9686,7 +9719,8 @@ vectorizable_comparison (gimple *stmt, gimple_stmt_iterator *gsi,
 
   bool masked_speculative_p
     = (LOOP_VINFO_SPECULATIVE_EXECUTION (loop_vinfo)
-       && LOOP_VINFO_MASK_SKIP_NITERS (loop_vinfo));
+       && (LOOP_VINFO_MASK_SKIP_NITERS (loop_vinfo)
+	   || LOOP_VINFO_FIRSTFAULTING_EXECUTION (loop_vinfo)));
 
   /* Pick an array of masks to use as the comparison results that feed
      a GIMPLE_COND.  If all input elements are valid, we can operate
@@ -9805,8 +9839,11 @@ vectorizable_comparison (gimple *stmt, gimple_stmt_iterator *gsi,
       if (masked_speculative_p)
 	{
 	  /* Work out which elements of the unmasked result are valid.  */
-	  mask = vect_get_loop_mask (gsi, &LOOP_VINFO_MASKS (loop_vinfo),
-				     1, mask_type, 0);
+	  if (LOOP_VINFO_FIRSTFAULTING_EXECUTION (loop_vinfo))
+	    mask = LOOP_VINFO_NONFAULTING (loop_vinfo).mask;
+	  else
+	    mask = vect_get_loop_mask (gsi, &LOOP_VINFO_MASKS (loop_vinfo),
+				       1, mask_type, 0);
 
 	  /* Get the mask of values that actually matter.  */
 	  tree masked_res = make_ssa_name (mask_type);

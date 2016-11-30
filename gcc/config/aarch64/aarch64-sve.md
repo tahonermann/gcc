@@ -189,6 +189,30 @@
   "st1<Vesize>\t%1.<Vetype>, %2, %0"
 )
 
+(define_expand "firstfault_load<mode>"
+  [(set (match_operand:SVE_ALL 0 "register_operand")
+	(unspec:SVE_ALL
+	  [(match_operand:SVE_ALL 1 "aarch64_sve_ldff1_operand")
+	   (match_dup 2)
+	   (reg:SI FFRT_REGNUM)]
+	  UNSPEC_LDFF1))]
+  "TARGET_SVE"
+  {
+    operands[2] = force_reg (<VPRED>mode, CONSTM1_RTX (<VPRED>mode));
+  }
+)
+
+(define_insn "*firstfault_load<mode>"
+  [(set (match_operand:SVE_ALL 0 "register_operand" "=w")
+	(unspec:SVE_ALL
+	  [(match_operand:SVE_ALL 1 "aarch64_sve_ldff1_operand" "Utf")
+	   (match_operand:<VPRED> 2 "register_operand" "Upl")
+	   (reg:SI FFRT_REGNUM)]
+	  UNSPEC_LDFF1))]
+  "TARGET_SVE"
+  "ldff1<Vesize>\t%0.<Vetype>, %2/z, %j1";
+)
+
 ;; SVE structure moves.
 (define_expand "mov<mode>"
   [(set (match_operand:SVE_STRUCT 0 "nonimmediate_operand")
@@ -2489,6 +2513,23 @@
 	  (match_operand:SVE_F 4 "register_operand" "0")))]
   "TARGET_SVE && aarch64_simd_identity_value (<CODE>, <MODE>mode, operands[3])"
   "<sve_fp_op>\t%0.<Vetype>, %1/m, %0.<Vetype>, %2.<Vetype>"
+)
+
+(define_insn "read_nf<mode>"
+  [(set (match_operand:PRED_ALL 0 "register_operand" "=Upa")
+	(unspec:PRED_ALL [(reg:SI FFRT_REGNUM)] UNSPEC_READ_NF))
+   (set (reg:SI FFRT_REGNUM) (const_int 0))]
+  "TARGET_SVE"
+  "rdffr\t%0.b"
+)
+
+(define_insn "write_nf<mode>"
+  [(set (reg:SI FFRT_REGNUM)
+	(unspec:SI [(match_operand:PRED_ALL 0 "register_operand" "Upa")
+		    (reg:SI FFRT_REGNUM)]
+	 UNSPEC_WRITE_NF))]
+  "TARGET_SVE"
+  "wrffr\t%0.b"
 )
 
 (define_expand "mask_popcount<mode>"
