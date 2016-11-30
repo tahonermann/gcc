@@ -344,8 +344,7 @@
 	/* The last element can be extracted with a LASTB and a false
 	   predicate.  */
 	rtx sel = force_reg (<VPRED>mode, CONST0_RTX (<VPRED>mode));
-	emit_insn (gen_aarch64_sve_lastb<mode> (operands[0],
-						operands[1], sel));
+	emit_insn (gen_extract_last_<mode> (operands[0], operands[1], sel));
 	DONE;
       }
     if (!CONST_INT_P (operands[2]))
@@ -364,8 +363,7 @@
 	emit_insn (gen_vec_cmp<v_int_equiv><vpred> (sel, cmp, series, zero));
 
 	/* Select the element using LASTB.  */
-	emit_insn (gen_aarch64_sve_lastb<mode> (operands[0],
-						operands[1], sel));
+	emit_insn (gen_extract_last_<mode> (operands[0], operands[1], sel));
 	DONE;
       }
   }
@@ -430,7 +428,7 @@
 
 ;; Extract the last active element of operand 1 into operand 0.
 ;; If no elements are active, extract the last inactive element instead.
-(define_insn "aarch64_sve_lastb<mode>"
+(define_insn "extract_last_<mode>"
   [(set (match_operand:<VEL> 0 "register_operand" "=r, w")
 	(unspec:<VEL>
 	  [(match_operand:SVE_ALL 1 "register_operand" "w, w")
@@ -1089,6 +1087,28 @@
 	  (match_operand:PRED_ALL 1 "register_operand" "Upa")))]
   "TARGET_SVE"
   "<logical_nn>\t%0.b, %1/z, %2.b, %3.b"
+)
+
+(define_insn "aarch64_brka_<mode>"
+  [(set (match_operand:PRED_ALL 0 "register_operand" "=Upa")
+	(unspec:PRED_ALL
+	  [(match_operand:PRED_ALL 1 "register_operand" "Upa")
+	   (match_operand:PRED_ALL 2 "register_operand" "Upa")]
+	  UNSPEC_BRKA))]
+  "TARGET_SVE"
+  "brka\t%0.b, %1/z, %2.b"
+)
+
+(define_expand "break_after_<mode>"
+  [(set (match_operand:PRED_ALL 0 "register_operand")
+	(unspec:PRED_ALL
+	  [(match_dup 2)
+	   (match_operand:PRED_ALL 1 "register_operand")]
+	  UNSPEC_BRKA))]
+  "TARGET_SVE"
+  {
+    operands[2] = force_reg (<MODE>mode, CONSTM1_RTX (<MODE>mode));
+  }
 )
 
 ;; Unpredicated LSL, LSR and ASR by a vector.
