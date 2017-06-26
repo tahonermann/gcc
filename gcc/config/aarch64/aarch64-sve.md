@@ -732,6 +732,13 @@
 )
 
 (define_expand "<perm_optab>_<mode>"
+  [(set (match_operand:PRED_ALL 0 "register_operand")
+	(unspec:PRED_ALL [(match_operand:PRED_ALL 1 "register_operand")
+			  (match_operand:PRED_ALL 2 "register_operand")]
+			 OPTAB_PERMUTE))]
+  "TARGET_SVE")
+
+(define_expand "<perm_optab>_<mode>"
   [(set (match_operand:SVE_ALL 0 "register_operand")
 	(unspec:SVE_ALL [(match_operand:SVE_ALL 1 "register_operand")
 			 (match_operand:SVE_ALL 2 "register_operand")]
@@ -753,6 +760,15 @@
 	  UNSPEC_TBL))]
   "TARGET_SVE"
   "tbl\t%0.<Vetype>, %1.<Vetype>, %2.<Vetype>"
+)
+
+(define_insn "*aarch64_sve_<perm_insn><perm_hilo><mode>"
+  [(set (match_operand:PRED_ALL 0 "register_operand" "=Upa")
+	(unspec:PRED_ALL [(match_operand:PRED_ALL 1 "register_operand" "Upa")
+			  (match_operand:PRED_ALL 2 "register_operand" "Upa")]
+			 PERMUTE))]
+  "TARGET_SVE"
+  "<perm_insn><perm_hilo>\t%0.<Vetype>, %1.<Vetype>, %2.<Vetype>"
 )
 
 (define_insn "*aarch64_sve_<perm_insn><perm_hilo><mode>"
@@ -1520,6 +1536,18 @@
   "<maxmin_uns_op>\t%0.<Vetype>, %1/m, %0.<Vetype>, %3.<Vetype>"
 )
 
+;; Predicated integer operations.
+(define_insn "cond_<optab><mode>"
+  [(set (match_operand:SVE_I 0 "register_operand" "=w")
+	(unspec:SVE_I
+	  [(match_operand:<VPRED> 1 "register_operand" "Upl")
+	   (match_operand:SVE_I 2 "register_operand" "0")
+	   (match_operand:SVE_I 3 "register_operand" "w")]
+	  SVE_COND_INT_OP))]
+  "TARGET_SVE"
+  "<sve_int_op>\t%0.<Vetype>, %1/m, %0.<Vetype>, %3.<Vetype>"
+)
+
 ;; Unpredicated integer add reduction.
 (define_expand "reduc_plus_scal_<mode>"
   [(set (match_operand:<VEL> 0 "register_operand")
@@ -2194,6 +2222,18 @@
     operands[4] = gen_reg_rtx (V8SImode);
     operands[5] = gen_reg_rtx (V8SImode);
   }
+)
+
+;; Predicated floating-point operations.
+(define_insn "cond_<optab><mode>"
+  [(set (match_operand:SVE_F 0 "register_operand" "=w")
+	(unspec:SVE_F
+	  [(match_operand:<VPRED> 1 "register_operand" "Upl")
+	   (match_operand:SVE_F 2 "register_operand" "0")
+	   (match_operand:SVE_F 3 "register_operand" "w")]
+	  SVE_COND_FP_OP))]
+  "TARGET_SVE"
+  "<sve_fp_op>\t%0.<Vetype>, %1/m, %0.<Vetype>, %3.<Vetype>"
 )
 
 (define_insn "vec_shl_insert_<mode>"
