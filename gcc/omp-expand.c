@@ -695,7 +695,7 @@ expand_parallel_call (struct omp_region *region, basic_block bb,
 				      false, GSI_CONTINUE_LINKING);
     }
 
-  gsi = gsi_last_bb (bb);
+  gsi = gsi_last_nondebug_bb (bb);
   t = gimple_omp_parallel_data_arg (entry_stmt);
   if (t == NULL)
     t1 = null_pointer_node;
@@ -748,7 +748,7 @@ expand_cilk_for_call (basic_block bb, gomp_parallel *entry_stmt,
   gcc_assert (count != NULL_TREE);
   count = OMP_CLAUSE_OPERAND (count, 0);
 
-  gsi = gsi_last_bb (bb);
+  gsi = gsi_last_nondebug_bb (bb);
   t = gimple_omp_parallel_data_arg (entry_stmt);
   if (t == NULL)
     t1 = null_pointer_node;
@@ -874,7 +874,7 @@ expand_task_call (struct omp_region *region, basic_block bb,
   else
     priority = integer_zero_node;
 
-  gsi = gsi_last_bb (bb);
+  gsi = gsi_last_nondebug_bb (bb);
   tree t = gimple_omp_task_data_arg (entry_stmt);
   if (t == NULL)
     t2 = null_pointer_node;
@@ -951,15 +951,15 @@ remove_exit_barrier (struct omp_region *region)
      statements that can appear in between are extremely limited -- no
      memory operations at all.  Here, we allow nothing at all, so the
      only thing we allow to precede this GIMPLE_OMP_RETURN is a label.  */
-  gsi = gsi_last_bb (exit_bb);
+  gsi = gsi_last_nondebug_bb (exit_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
-  gsi_prev (&gsi);
+  gsi_prev_nondebug (&gsi);
   if (!gsi_end_p (gsi) && gimple_code (gsi_stmt (gsi)) != GIMPLE_LABEL)
     return;
 
   FOR_EACH_EDGE (e, ei, exit_bb->preds)
     {
-      gsi = gsi_last_bb (e->src);
+      gsi = gsi_last_nondebug_bb (e->src);
       if (gsi_end_p (gsi))
 	continue;
       stmt = gsi_stmt (gsi);
@@ -1186,7 +1186,7 @@ expand_omp_taskreg (struct omp_region *region)
 
       entry_succ_e = single_succ_edge (entry_bb);
 
-      gsi = gsi_last_bb (entry_bb);
+      gsi = gsi_last_nondebug_bb (entry_bb);
       gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_PARALLEL
 		  || gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_TASK);
       gsi_remove (&gsi, true);
@@ -1299,7 +1299,7 @@ expand_omp_taskreg (struct omp_region *region)
 
       /* Split ENTRY_BB at GIMPLE_OMP_PARALLEL or GIMPLE_OMP_TASK,
 	 so that it can be moved to the child function.  */
-      gsi = gsi_last_bb (entry_bb);
+      gsi = gsi_last_nondebug_bb (entry_bb);
       stmt = gsi_stmt (gsi);
       gcc_assert (stmt && (gimple_code (stmt) == GIMPLE_OMP_PARALLEL
 			   || gimple_code (stmt) == GIMPLE_OMP_TASK));
@@ -1315,7 +1315,7 @@ expand_omp_taskreg (struct omp_region *region)
 	  gcc_assert (e2->dest == region->exit);
 	  remove_edge (BRANCH_EDGE (entry_bb));
 	  set_immediate_dominator (CDI_DOMINATORS, e2->dest, e->src);
-	  gsi = gsi_last_bb (region->exit);
+	  gsi = gsi_last_nondebug_bb (region->exit);
 	  gcc_assert (!gsi_end_p (gsi)
 		      && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
 	  gsi_remove (&gsi, true);
@@ -1324,7 +1324,7 @@ expand_omp_taskreg (struct omp_region *region)
       /* Convert GIMPLE_OMP_{RETURN,CONTINUE} into a RETURN_EXPR.  */
       if (exit_bb)
 	{
-	  gsi = gsi_last_bb (exit_bb);
+	  gsi = gsi_last_nondebug_bb (exit_bb);
 	  gcc_assert (!gsi_end_p (gsi)
 		      && (gimple_code (gsi_stmt (gsi))
 			  == (e2 ? GIMPLE_OMP_CONTINUE : GIMPLE_OMP_RETURN)));
@@ -1787,7 +1787,7 @@ expand_omp_for_init_counts (struct omp_for_data *fd, gimple_stmt_iterator *gsi,
 	  if (l2_dom_bb == NULL)
 	    l2_dom_bb = entry_bb;
 	  entry_bb = e->dest;
-	  *gsi = gsi_last_bb (entry_bb);
+	  *gsi = gsi_last_nondebug_bb (entry_bb);
 	}
 
       if (POINTER_TYPE_P (itype))
@@ -2592,7 +2592,7 @@ expand_omp_for_generic (struct omp_region *region,
   l3_bb = BRANCH_EDGE (entry_bb)->dest;
   exit_bb = region->exit;
 
-  gsi = gsi_last_bb (entry_bb);
+  gsi = gsi_last_nondebug_bb (entry_bb);
 
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_FOR);
   if (fd->ordered
@@ -2622,7 +2622,7 @@ expand_omp_for_generic (struct omp_region *region,
 	  e = split_block (entry_bb, gsi_stmt (gsi));
 	  entry_bb = e->dest;
 	  make_edge (zero_iter1_bb, entry_bb, EDGE_FALLTHRU);
-	  gsi = gsi_last_bb (entry_bb);
+	  gsi = gsi_last_nondebug_bb (entry_bb);
 	  set_immediate_dominator (CDI_DOMINATORS, entry_bb,
 				   get_immediate_dominator (CDI_DOMINATORS,
 							    zero_iter1_bb));
@@ -2643,7 +2643,7 @@ expand_omp_for_generic (struct omp_region *region,
 	      e = split_block (entry_bb, gsi_stmt (gsi));
 	      entry_bb = e->dest;
 	      make_edge (zero_iter2_bb, entry_bb, EDGE_FALLTHRU);
-	      gsi = gsi_last_bb (entry_bb);
+	      gsi = gsi_last_nondebug_bb (entry_bb);
 	      set_immediate_dominator (CDI_DOMINATORS, entry_bb,
 				       get_immediate_dominator
 					 (CDI_DOMINATORS, zero_iter2_bb));
@@ -3061,7 +3061,7 @@ expand_omp_for_generic (struct omp_region *region,
     {
       /* Code to control the increment and predicate for the sequential
 	 loop goes in the CONT_BB.  */
-      gsi = gsi_last_bb (cont_bb);
+      gsi = gsi_last_nondebug_bb (cont_bb);
       gomp_continue *cont_stmt = as_a <gomp_continue *> (gsi_stmt (gsi));
       gcc_assert (gimple_code (cont_stmt) == GIMPLE_OMP_CONTINUE);
       vmain = gimple_omp_continue_control_use (cont_stmt);
@@ -3127,7 +3127,7 @@ expand_omp_for_generic (struct omp_region *region,
     }
 
   /* Add the loop cleanup function.  */
-  gsi = gsi_last_bb (exit_bb);
+  gsi = gsi_last_nondebug_bb (exit_bb);
   if (gimple_omp_return_nowait_p (gsi_stmt (gsi)))
     t = builtin_decl_explicit (BUILT_IN_GOMP_LOOP_END_NOWAIT);
   else if (gimple_omp_return_lhs (gsi_stmt (gsi)))
@@ -3347,7 +3347,7 @@ expand_omp_for_static_nochunk (struct omp_region *region,
   exit_bb = region->exit;
 
   /* Iteration space partitioning goes in ENTRY_BB.  */
-  gsi = gsi_last_bb (entry_bb);
+  gsi = gsi_last_nondebug_bb (entry_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_FOR);
 
   if (fd->collapse > 1)
@@ -3479,7 +3479,7 @@ expand_omp_for_static_nochunk (struct omp_region *region,
   gsi_insert_before (&gsi, cond_stmt, GSI_SAME_STMT);
 
   second_bb = split_block (entry_bb, cond_stmt)->dest;
-  gsi = gsi_last_bb (second_bb);
+  gsi = gsi_last_nondebug_bb (second_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_FOR);
 
   gsi_insert_before (&gsi, gimple_build_assign (tt, build_int_cst (itype, 0)),
@@ -3489,7 +3489,7 @@ expand_omp_for_static_nochunk (struct omp_region *region,
   gsi_insert_before (&gsi, assign_stmt, GSI_SAME_STMT);
 
   third_bb = split_block (second_bb, assign_stmt)->dest;
-  gsi = gsi_last_bb (third_bb);
+  gsi = gsi_last_nondebug_bb (third_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_FOR);
 
   t = build2 (MULT_EXPR, itype, q, threadid);
@@ -3631,7 +3631,7 @@ expand_omp_for_static_nochunk (struct omp_region *region,
     {
       /* The code controlling the sequential loop replaces the
 	 GIMPLE_OMP_CONTINUE.  */
-      gsi = gsi_last_bb (cont_bb);
+      gsi = gsi_last_nondebug_bb (cont_bb);
       gomp_continue *cont_stmt = as_a <gomp_continue *> (gsi_stmt (gsi));
       gcc_assert (gimple_code (cont_stmt) == GIMPLE_OMP_CONTINUE);
       vmain = gimple_omp_continue_control_use (cont_stmt);
@@ -3664,7 +3664,7 @@ expand_omp_for_static_nochunk (struct omp_region *region,
     }
 
   /* Replace the GIMPLE_OMP_RETURN with a barrier, or nothing.  */
-  gsi = gsi_last_bb (exit_bb);
+  gsi = gsi_last_nondebug_bb (exit_bb);
   if (!gimple_omp_return_nowait_p (gsi_stmt (gsi)))
     {
       t = gimple_omp_return_lhs (gsi_stmt (gsi));
@@ -3831,7 +3831,7 @@ expand_omp_for_static_chunk (struct omp_region *region,
   exit_bb = region->exit;
 
   /* Trip and adjustment setup goes in ENTRY_BB.  */
-  gsi = gsi_last_bb (entry_bb);
+  gsi = gsi_last_nondebug_bb (entry_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_FOR);
 
   if (fd->collapse > 1)
@@ -4137,7 +4137,7 @@ expand_omp_for_static_chunk (struct omp_region *region,
     {
       /* The code controlling the sequential loop goes in CONT_BB,
 	 replacing the GIMPLE_OMP_CONTINUE.  */
-      gsi = gsi_last_bb (cont_bb);
+      gsi = gsi_last_nondebug_bb (cont_bb);
       gomp_continue *cont_stmt = as_a <gomp_continue *> (gsi_stmt (gsi));
       vmain = gimple_omp_continue_control_use (cont_stmt);
       vback = gimple_omp_continue_control_def (cont_stmt);
@@ -4181,7 +4181,7 @@ expand_omp_for_static_chunk (struct omp_region *region,
     }
 
   /* Replace the GIMPLE_OMP_RETURN with a barrier, or nothing.  */
-  gsi = gsi_last_bb (exit_bb);
+  gsi = gsi_last_nondebug_bb (exit_bb);
   if (!gimple_omp_return_nowait_p (gsi_stmt (gsi)))
     {
       t = gimple_omp_return_lhs (gsi_stmt (gsi));
@@ -4392,7 +4392,7 @@ expand_cilk_for (struct omp_region *region, struct omp_for_data *fd)
   basic_block exit_bb = region->exit;
   basic_block l2_dom_bb = NULL;
 
-  gimple_stmt_iterator gsi = gsi_last_bb (entry_bb);
+  gimple_stmt_iterator gsi = gsi_last_nondebug_bb (entry_bb);
 
   /* Below statements until the "tree high_val = ..." are pseudo statements
      used to pass information to be used by expand_omp_taskreg.
@@ -4437,7 +4437,7 @@ expand_cilk_for (struct omp_region *region, struct omp_for_data *fd)
   if (!broken_loop)
     {
       /* Code to control the increment goes in the CONT_BB.  */
-      gsi = gsi_last_bb (cont_bb);
+      gsi = gsi_last_nondebug_bb (cont_bb);
       stmt = gsi_stmt (gsi);
       gcc_assert (gimple_code (stmt) == GIMPLE_OMP_CONTINUE);
       stmt = gimple_build_assign (ind_var, PLUS_EXPR, ind_var,
@@ -4467,7 +4467,7 @@ expand_cilk_for (struct omp_region *region, struct omp_for_data *fd)
   gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
 
   /* Remove GIMPLE_OMP_RETURN.  */
-  gsi = gsi_last_bb (exit_bb);
+  gsi = gsi_last_nondebug_bb (exit_bb);
   gsi_remove (&gsi, true);
 
   /* Connect the new blocks.  */
@@ -4641,7 +4641,7 @@ expand_omp_simd (struct omp_region *region, struct omp_for_data *fd)
   exit_bb = region->exit;
   l2_dom_bb = NULL;
 
-  gsi = gsi_last_bb (entry_bb);
+  gsi = gsi_last_nondebug_bb (entry_bb);
 
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_FOR);
   /* Not needed in SSA form right now.  */
@@ -4736,7 +4736,7 @@ expand_omp_simd (struct omp_region *region, struct omp_for_data *fd)
   if (!broken_loop)
     {
       /* Code to control the increment goes in the CONT_BB.  */
-      gsi = gsi_last_bb (cont_bb);
+      gsi = gsi_last_nondebug_bb (cont_bb);
       stmt = gsi_stmt (gsi);
       gcc_assert (gimple_code (stmt) == GIMPLE_OMP_CONTINUE);
 
@@ -4834,7 +4834,7 @@ expand_omp_simd (struct omp_region *region, struct omp_for_data *fd)
     }
 
   /* Remove GIMPLE_OMP_RETURN.  */
-  gsi = gsi_last_bb (exit_bb);
+  gsi = gsi_last_nondebug_bb (exit_bb);
   gsi_remove (&gsi, true);
 
   /* Connect the new blocks.  */
@@ -4960,7 +4960,7 @@ expand_omp_taskloop_for_outer (struct omp_region *region,
   gcc_assert (BRANCH_EDGE (entry_bb)->dest == FALLTHRU_EDGE (cont_bb)->dest);
   exit_bb = region->exit;
 
-  gsi = gsi_last_bb (entry_bb);
+  gsi = gsi_last_nondebug_bb (entry_bb);
   gimple *for_stmt = gsi_stmt (gsi);
   gcc_assert (gimple_code (for_stmt) == GIMPLE_OMP_FOR);
   if (fd->collapse > 1)
@@ -5061,10 +5061,10 @@ expand_omp_taskloop_for_outer (struct omp_region *region,
   gsi = gsi_for_stmt (for_stmt);
   gsi_remove (&gsi, true);
 
-  gsi = gsi_last_bb (cont_bb);
+  gsi = gsi_last_nondebug_bb (cont_bb);
   gsi_remove (&gsi, true);
 
-  gsi = gsi_last_bb (exit_bb);
+  gsi = gsi_last_nondebug_bb (exit_bb);
   gsi_remove (&gsi, true);
 
   FALLTHRU_EDGE (entry_bb)->probability = profile_probability::always ();
@@ -5138,7 +5138,7 @@ expand_omp_taskloop_for_inner (struct omp_region *region,
   exit_bb = region->exit;
 
   /* Iteration space partitioning goes in ENTRY_BB.  */
-  gsi = gsi_last_bb (entry_bb);
+  gsi = gsi_last_nondebug_bb (entry_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_FOR);
 
   if (fd->collapse > 1)
@@ -5217,7 +5217,7 @@ expand_omp_taskloop_for_inner (struct omp_region *region,
     {
       /* The code controlling the sequential loop replaces the
 	 GIMPLE_OMP_CONTINUE.  */
-      gsi = gsi_last_bb (cont_bb);
+      gsi = gsi_last_nondebug_bb (cont_bb);
       gomp_continue *cont_stmt = as_a <gomp_continue *> (gsi_stmt (gsi));
       gcc_assert (gimple_code (cont_stmt) == GIMPLE_OMP_CONTINUE);
       vmain = gimple_omp_continue_control_use (cont_stmt);
@@ -5254,7 +5254,7 @@ expand_omp_taskloop_for_inner (struct omp_region *region,
   gsi_remove (&gsi, true);
 
   /* Remove the GIMPLE_OMP_RETURN statement.  */
-  gsi = gsi_last_bb (exit_bb);
+  gsi = gsi_last_nondebug_bb (exit_bb);
   gsi_remove (&gsi, true);
 
   FALLTHRU_EDGE (entry_bb)->probability = profile_probability::always ();
@@ -5437,7 +5437,7 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
   entry_bb = split->src;
 
   /* Chunk setup goes at end of entry_bb, replacing the omp_for.  */
-  gsi = gsi_last_bb (entry_bb);
+  gsi = gsi_last_nondebug_bb (entry_bb);
   gomp_for *for_stmt = as_a <gomp_for *> (gsi_stmt (gsi));
   loc = gimple_location (for_stmt);
 
@@ -5564,7 +5564,7 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 
   if (gimple_in_ssa_p (cfun))
     {
-      gsi = gsi_last_bb (cont_bb);
+      gsi = gsi_last_nondebug_bb (cont_bb);
       gomp_continue *cont_stmt = as_a <gomp_continue *> (gsi_stmt (gsi));
 
       offset = gimple_omp_continue_control_use (cont_stmt);
@@ -5688,7 +5688,7 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
      occur, especially when noreturn routines are involved.  */
   if (cont_bb)
     {
-      gsi = gsi_last_bb (cont_bb);
+      gsi = gsi_last_nondebug_bb (cont_bb);
       gomp_continue *cont_stmt = as_a <gomp_continue *> (gsi_stmt (gsi));
       loc = gimple_location (cont_stmt);
 
@@ -5777,7 +5777,7 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 	}
     }
 
-  gsi = gsi_last_bb (exit_bb);
+  gsi = gsi_last_nondebug_bb (exit_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
   loc = gimple_location (gsi_stmt (gsi));
 
@@ -6004,7 +6004,7 @@ expand_omp_sections (struct omp_region *region)
       len = EDGE_COUNT (l0_bb->succs);
       gcc_assert (len > 0);
       e = EDGE_SUCC (l0_bb, len - 1);
-      si = gsi_last_bb (e->dest);
+      si = gsi_last_nondebug_bb (e->dest);
       l2 = NULL_TREE;
       if (gsi_end_p (si)
 	  || gimple_code (gsi_stmt (si)) != GIMPLE_OMP_SECTION)
@@ -6012,7 +6012,7 @@ expand_omp_sections (struct omp_region *region)
       else
 	FOR_EACH_EDGE (e, ei, l0_bb->succs)
 	  {
-	    si = gsi_last_bb (e->dest);
+	    si = gsi_last_nondebug_bb (e->dest);
 	    if (gsi_end_p (si)
 		|| gimple_code (gsi_stmt (si)) != GIMPLE_OMP_SECTION)
 	      {
@@ -6037,7 +6037,7 @@ expand_omp_sections (struct omp_region *region)
 
   /* The call to GOMP_sections_start goes in ENTRY_BB, replacing the
      GIMPLE_OMP_SECTIONS statement.  */
-  si = gsi_last_bb (entry_bb);
+  si = gsi_last_nondebug_bb (entry_bb);
   sections_stmt = as_a <gomp_sections *> (gsi_stmt (si));
   gcc_assert (gimple_code (sections_stmt) == GIMPLE_OMP_SECTIONS);
   vin = gimple_omp_sections_control (sections_stmt);
@@ -6061,7 +6061,7 @@ expand_omp_sections (struct omp_region *region)
 
   /* The switch() statement replacing GIMPLE_OMP_SECTIONS_SWITCH goes in
      L0_BB.  */
-  switch_si = gsi_last_bb (l0_bb);
+  switch_si = gsi_last_nondebug_bb (l0_bb);
   gcc_assert (gimple_code (gsi_stmt (switch_si)) == GIMPLE_OMP_SECTIONS_SWITCH);
   if (exit_reachable)
     {
@@ -6103,7 +6103,7 @@ expand_omp_sections (struct omp_region *region)
       u = build_case_label (u, NULL, t);
       label_vec.quick_push (u);
 
-      si = gsi_last_bb (s_entry_bb);
+      si = gsi_last_nondebug_bb (s_entry_bb);
       gcc_assert (gimple_code (gsi_stmt (si)) == GIMPLE_OMP_SECTION);
       gcc_assert (i < len || gimple_omp_section_last_p (gsi_stmt (si)));
       gsi_remove (&si, true);
@@ -6112,7 +6112,7 @@ expand_omp_sections (struct omp_region *region)
       if (s_exit_bb == NULL)
 	continue;
 
-      si = gsi_last_bb (s_exit_bb);
+      si = gsi_last_nondebug_bb (s_exit_bb);
       gcc_assert (gimple_code (gsi_stmt (si)) == GIMPLE_OMP_RETURN);
       gsi_remove (&si, true);
 
@@ -6138,7 +6138,7 @@ expand_omp_sections (struct omp_region *region)
       tree bfn_decl;
 
       /* Code to get the next section goes in L1_BB.  */
-      si = gsi_last_bb (l1_bb);
+      si = gsi_last_nondebug_bb (l1_bb);
       gcc_assert (gimple_code (gsi_stmt (si)) == GIMPLE_OMP_CONTINUE);
 
       bfn_decl = builtin_decl_explicit (BUILT_IN_GOMP_SECTIONS_NEXT);
@@ -6151,7 +6151,7 @@ expand_omp_sections (struct omp_region *region)
     }
 
   /* Cleanup function replaces GIMPLE_OMP_RETURN in EXIT_BB.  */
-  si = gsi_last_bb (l2_bb);
+  si = gsi_last_nondebug_bb (l2_bb);
   if (gimple_omp_return_nowait_p (gsi_stmt (si)))
     t = builtin_decl_explicit (BUILT_IN_GOMP_SECTIONS_END_NOWAIT);
   else if (gimple_omp_return_lhs (gsi_stmt (si)))
@@ -6179,12 +6179,12 @@ expand_omp_single (struct omp_region *region)
   entry_bb = region->entry;
   exit_bb = region->exit;
 
-  si = gsi_last_bb (entry_bb);
+  si = gsi_last_nondebug_bb (entry_bb);
   gcc_assert (gimple_code (gsi_stmt (si)) == GIMPLE_OMP_SINGLE);
   gsi_remove (&si, true);
   single_succ_edge (entry_bb)->flags = EDGE_FALLTHRU;
 
-  si = gsi_last_bb (exit_bb);
+  si = gsi_last_nondebug_bb (exit_bb);
   if (!gimple_omp_return_nowait_p (gsi_stmt (si)))
     {
       tree t = gimple_omp_return_lhs (gsi_stmt (si));
@@ -6207,7 +6207,7 @@ expand_omp_synch (struct omp_region *region)
   entry_bb = region->entry;
   exit_bb = region->exit;
 
-  si = gsi_last_bb (entry_bb);
+  si = gsi_last_nondebug_bb (entry_bb);
   gcc_assert (gimple_code (gsi_stmt (si)) == GIMPLE_OMP_SINGLE
 	      || gimple_code (gsi_stmt (si)) == GIMPLE_OMP_MASTER
 	      || gimple_code (gsi_stmt (si)) == GIMPLE_OMP_TASKGROUP
@@ -6219,7 +6219,7 @@ expand_omp_synch (struct omp_region *region)
 
   if (exit_bb)
     {
-      si = gsi_last_bb (exit_bb);
+      si = gsi_last_nondebug_bb (exit_bb);
       gcc_assert (gimple_code (gsi_stmt (si)) == GIMPLE_OMP_RETURN);
       gsi_remove (&si, true);
       single_succ_edge (exit_bb)->flags = EDGE_FALLTHRU;
@@ -6240,7 +6240,7 @@ expand_omp_atomic_load (basic_block load_bb, tree addr,
   gimple *stmt;
   tree decl, call, type, itype;
 
-  gsi = gsi_last_bb (load_bb);
+  gsi = gsi_last_nondebug_bb (load_bb);
   stmt = gsi_stmt (gsi);
   gcc_assert (gimple_code (stmt) == GIMPLE_OMP_ATOMIC_LOAD);
   loc = gimple_location (stmt);
@@ -6270,7 +6270,7 @@ expand_omp_atomic_load (basic_block load_bb, tree addr,
   gsi_remove (&gsi, true);
 
   store_bb = single_succ (load_bb);
-  gsi = gsi_last_bb (store_bb);
+  gsi = gsi_last_nondebug_bb (store_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_ATOMIC_STORE);
   gsi_remove (&gsi, true);
 
@@ -6296,14 +6296,14 @@ expand_omp_atomic_store (basic_block load_bb, tree addr,
   machine_mode imode;
   bool exchange;
 
-  gsi = gsi_last_bb (load_bb);
+  gsi = gsi_last_nondebug_bb (load_bb);
   stmt = gsi_stmt (gsi);
   gcc_assert (gimple_code (stmt) == GIMPLE_OMP_ATOMIC_LOAD);
 
   /* If the load value is needed, then this isn't a store but an exchange.  */
   exchange = gimple_omp_atomic_need_value_p (stmt);
 
-  gsi = gsi_last_bb (store_bb);
+  gsi = gsi_last_nondebug_bb (store_bb);
   stmt = gsi_stmt (gsi);
   gcc_assert (gimple_code (stmt) == GIMPLE_OMP_ATOMIC_STORE);
   loc = gimple_location (stmt);
@@ -6348,7 +6348,7 @@ expand_omp_atomic_store (basic_block load_bb, tree addr,
   gsi_remove (&gsi, true);
 
   /* Remove the GIMPLE_OMP_ATOMIC_LOAD that we verified above.  */
-  gsi = gsi_last_bb (load_bb);
+  gsi = gsi_last_nondebug_bb (load_bb);
   gsi_remove (&gsi, true);
 
   if (gimple_in_ssa_p (cfun))
@@ -6395,10 +6395,17 @@ expand_omp_atomic_fetch_op (basic_block load_bb,
 
   gsi = gsi_after_labels (store_bb);
   stmt = gsi_stmt (gsi);
+  if (is_gimple_debug (stmt))
+    {
+      gsi_next_nondebug (&gsi);
+      if (gsi_end_p (gsi))
+	return false;
+      stmt = gsi_stmt (gsi);
+    }
   loc = gimple_location (stmt);
   if (!is_gimple_assign (stmt))
     return false;
-  gsi_next (&gsi);
+  gsi_next_nondebug (&gsi);
   if (gimple_code (gsi_stmt (gsi)) != GIMPLE_OMP_ATOMIC_STORE)
     return false;
   need_new = gimple_omp_atomic_need_value_p (gsi_stmt (gsi));
@@ -6462,7 +6469,7 @@ expand_omp_atomic_fetch_op (basic_block load_bb,
   if (!can_compare_and_swap_p (imode, true) || !can_atomic_load_p (imode))
     return false;
 
-  gsi = gsi_last_bb (load_bb);
+  gsi = gsi_last_nondebug_bb (load_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_ATOMIC_LOAD);
 
   /* OpenMP does not imply any barrier-like semantics on its atomic ops.
@@ -6485,10 +6492,10 @@ expand_omp_atomic_fetch_op (basic_block load_bb,
   force_gimple_operand_gsi (&gsi, call, true, NULL_TREE, true, GSI_SAME_STMT);
   gsi_remove (&gsi, true);
 
-  gsi = gsi_last_bb (store_bb);
+  gsi = gsi_last_nondebug_bb (store_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_ATOMIC_STORE);
   gsi_remove (&gsi, true);
-  gsi = gsi_last_bb (store_bb);
+  gsi = gsi_last_nondebug_bb (store_bb);
   stmt = gsi_stmt (gsi);
   gsi_remove (&gsi, true);
 
@@ -6541,7 +6548,7 @@ expand_omp_atomic_pipeline (basic_block load_bb, basic_block store_bb,
     return false;
 
   /* Load the initial value, replacing the GIMPLE_OMP_ATOMIC_LOAD.  */
-  si = gsi_last_bb (load_bb);
+  si = gsi_last_nondebug_bb (load_bb);
   gcc_assert (gimple_code (gsi_stmt (si)) == GIMPLE_OMP_ATOMIC_LOAD);
 
   /* For floating-point values, we'll need to view-convert them to integers
@@ -6621,7 +6628,7 @@ expand_omp_atomic_pipeline (basic_block load_bb, basic_block store_bb,
     }
   gsi_remove (&si, true);
 
-  si = gsi_last_bb (store_bb);
+  si = gsi_last_nondebug_bb (store_bb);
   gcc_assert (gimple_code (gsi_stmt (si)) == GIMPLE_OMP_ATOMIC_STORE);
 
   if (iaddr == addr)
@@ -6724,7 +6731,7 @@ expand_omp_atomic_mutex (basic_block load_bb, basic_block store_bb,
   gassign *stmt;
   tree t;
 
-  si = gsi_last_bb (load_bb);
+  si = gsi_last_nondebug_bb (load_bb);
   gcc_assert (gimple_code (gsi_stmt (si)) == GIMPLE_OMP_ATOMIC_LOAD);
 
   t = builtin_decl_explicit (BUILT_IN_GOMP_ATOMIC_START);
@@ -6735,7 +6742,7 @@ expand_omp_atomic_mutex (basic_block load_bb, basic_block store_bb,
   gsi_insert_before (&si, stmt, GSI_SAME_STMT);
   gsi_remove (&si, true);
 
-  si = gsi_last_bb (store_bb);
+  si = gsi_last_nondebug_bb (store_bb);
   gcc_assert (gimple_code (gsi_stmt (si)) == GIMPLE_OMP_ATOMIC_STORE);
 
   stmt = gimple_build_assign (build_simple_mem_ref (unshare_expr (addr)),
@@ -7234,7 +7241,7 @@ expand_omp_target (struct omp_region *region)
 
       /* Split ENTRY_BB at GIMPLE_*,
 	 so that it can be moved to the child function.  */
-      gsi = gsi_last_bb (entry_bb);
+      gsi = gsi_last_nondebug_bb (entry_bb);
       stmt = gsi_stmt (gsi);
       gcc_assert (stmt
 		  && gimple_code (stmt) == gimple_code (entry_stmt));
@@ -7246,7 +7253,7 @@ expand_omp_target (struct omp_region *region)
       /* Convert GIMPLE_OMP_RETURN into a RETURN_EXPR.  */
       if (exit_bb)
 	{
-	  gsi = gsi_last_bb (exit_bb);
+	  gsi = gsi_last_nondebug_bb (exit_bb);
 	  gcc_assert (!gsi_end_p (gsi)
 		      && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
 	  stmt = gimple_build_return (NULL);
@@ -7428,7 +7435,7 @@ expand_omp_target (struct omp_region *region)
 	e = split_block_after_labels (new_bb);
       else
 	{
-	  gsi = gsi_last_bb (new_bb);
+	  gsi = gsi_last_nondebug_bb (new_bb);
 	  gsi_prev (&gsi);
 	  e = split_block (new_bb, gsi_stmt (gsi));
 	}
@@ -7463,11 +7470,11 @@ expand_omp_target (struct omp_region *region)
       make_edge (else_bb, new_bb, EDGE_FALLTHRU);
 
       device = tmp_var;
-      gsi = gsi_last_bb (new_bb);
+      gsi = gsi_last_nondebug_bb (new_bb);
     }
   else
     {
-      gsi = gsi_last_bb (new_bb);
+      gsi = gsi_last_nondebug_bb (new_bb);
       device = force_gimple_operand_gsi (&gsi, device, true, NULL_TREE,
 					 true, GSI_SAME_STMT);
     }
@@ -7611,7 +7618,7 @@ expand_omp_target (struct omp_region *region)
     }
   if (data_region && region->exit)
     {
-      gsi = gsi_last_bb (region->exit);
+      gsi = gsi_last_nondebug_bb (region->exit);
       g = gsi_stmt (gsi);
       gcc_assert (g && gimple_code (g) == GIMPLE_OMP_RETURN);
       gsi_remove (&gsi, true);
@@ -7692,17 +7699,17 @@ grid_expand_omp_for_loop (struct omp_region *kfor, bool intra_group)
       gsi_insert_before (&gsi, assign_stmt, GSI_SAME_STMT);
     }
   /* Remove the omp for statement.  */
-  gsi = gsi_last_bb (kfor->entry);
+  gsi = gsi_last_nondebug_bb (kfor->entry);
   gsi_remove (&gsi, true);
 
   /* Remove the GIMPLE_OMP_CONTINUE statement.  */
-  gsi = gsi_last_bb (kfor->cont);
+  gsi = gsi_last_nondebug_bb (kfor->cont);
   gcc_assert (!gsi_end_p (gsi)
 	      && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_CONTINUE);
   gsi_remove (&gsi, true);
 
   /* Replace the GIMPLE_OMP_RETURN with a barrier, if necessary.  */
-  gsi = gsi_last_bb (kfor->exit);
+  gsi = gsi_last_nondebug_bb (kfor->exit);
   gcc_assert (!gsi_end_p (gsi)
 	      && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
   if (intra_group)
@@ -7846,11 +7853,11 @@ grid_expand_target_grid_body (struct omp_region *target)
   grid_expand_omp_for_loop (kfor, false);
 
   /* Remove the omp for statement.  */
-  gimple_stmt_iterator gsi = gsi_last_bb (gpukernel->entry);
+  gimple_stmt_iterator gsi = gsi_last_nondebug_bb (gpukernel->entry);
   gsi_remove (&gsi, true);
   /* Replace the GIMPLE_OMP_RETURN at the end of the kernel region with a real
      return.  */
-  gsi = gsi_last_bb (gpukernel->exit);
+  gsi = gsi_last_nondebug_bb (gpukernel->exit);
   gcc_assert (!gsi_end_p (gsi)
 	      && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
   gimple *ret_stmt = gimple_build_return (NULL);
@@ -8034,7 +8041,7 @@ build_omp_regions_1 (basic_block bb, struct omp_region *parent,
   gimple *stmt;
   basic_block son;
 
-  gsi = gsi_last_bb (bb);
+  gsi = gsi_last_nondebug_bb (bb);
   if (!gsi_end_p (gsi) && is_gimple_omp (gsi_stmt (gsi)))
     {
       struct omp_region *region;
