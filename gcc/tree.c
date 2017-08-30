@@ -1030,7 +1030,8 @@ make_node (enum tree_code code MEM_STAT_DECL)
   switch (type)
     {
     case tcc_statement:
-      TREE_SIDE_EFFECTS (t) = 1;
+      if (code != DEBUG_BEGIN_STMT)
+	TREE_SIDE_EFFECTS (t) = 1;
       break;
 
     case tcc_declaration:
@@ -4428,7 +4429,10 @@ build1 (enum tree_code code, tree type, tree node MEM_STAT_DECL)
     }
 
   if (TREE_CODE_CLASS (code) == tcc_statement)
-    TREE_SIDE_EFFECTS (t) = 1;
+    {
+      if (code != DEBUG_BEGIN_STMT)
+	TREE_SIDE_EFFECTS (t) = 1;
+    }
   else switch (code)
     {
     case VA_ARG_EXPR:
