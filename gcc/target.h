@@ -222,6 +222,21 @@ get_shift_amount_mode (machine_mode)
   return word_mode;
 }
 
+/* Return an estimate of the runtime value of X, for use in things
+   like cost calculations or profiling frequencies.  Note that this
+   function should never be used in situations where the actual
+   runtime value is needed for correctness, since the function only
+   provides a rough guess.  */
+
+static inline HOST_WIDE_INT
+estimated_poly_value (poly_int64 x)
+{
+  if (NUM_POLY_INT_COEFFS == 1)
+    return x.coeffs[0];
+  else
+    return targetm.estimated_poly_value (x);
+}
+
 #ifdef GCC_TM_H
 
 #ifndef CUMULATIVE_ARGS_MAGIC
