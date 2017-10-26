@@ -121,8 +121,7 @@
      case 5: return "fmov\t%d0, %1";
      case 6: return "mov\t%0, %1";
      case 7:
-	return aarch64_output_simd_mov_immediate (operands[1],
-						  <MODE>mode, 64);
+	return aarch64_output_simd_mov_immediate (operands[1], 64);
      default: gcc_unreachable ();
      }
 }
@@ -155,7 +154,7 @@
     case 6:
 	return "#";
     case 7:
-	return aarch64_output_simd_mov_immediate (operands[1], <MODE>mode, 128);
+	return aarch64_output_simd_mov_immediate (operands[1], 128);
     default:
 	gcc_unreachable ();
     }
@@ -651,8 +650,8 @@
       case 0:
 	return "and\t%0.<Vbtype>, %1.<Vbtype>, %2.<Vbtype>";
       case 1:
-	return aarch64_output_simd_mov_immediate (operands[2],
-	   <MODE>mode, GET_MODE_BITSIZE (<MODE>mode), AARCH64_CHECK_BIC);
+	return aarch64_output_simd_mov_immediate (operands[2], <bitsize>,
+						  AARCH64_CHECK_BIC);
       default:
 	gcc_unreachable ();
       }
@@ -672,8 +671,8 @@
       case 0:
 	return "orr\t%0.<Vbtype>, %1.<Vbtype>, %2.<Vbtype>";
       case 1:
-	return aarch64_output_simd_mov_immediate (operands[2],
-		<MODE>mode, GET_MODE_BITSIZE (<MODE>mode), AARCH64_CHECK_ORR);
+	return aarch64_output_simd_mov_immediate (operands[2], <bitsize>,
+						  AARCH64_CHECK_ORR);
       default:
 	gcc_unreachable ();
       }
