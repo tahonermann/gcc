@@ -252,8 +252,8 @@
       {
         rtx dst_low_part = gen_lowpart (<VHALF>mode, dst);
         rtx dst_high_part = gen_highpart (<VHALF>mode, dst);
-        rtx lo = aarch64_simd_vect_par_cnst_half (<MODE>mode, false);
-        rtx hi = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+	rtx lo = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, false);
+	rtx hi = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
 
         emit_insn
           (gen_aarch64_simd_mov_from_<mode>low (dst_low_part, src, lo));
@@ -1436,7 +1436,7 @@
   (match_operand:<VHALF> 1 "register_operand" "")]
  "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, false);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, false);
   if (BYTES_BIG_ENDIAN)
     emit_insn (gen_aarch64_simd_move_hi_quad_be_<mode> (operands[0],
 		    operands[1], p));
@@ -1520,7 +1520,7 @@
    (ANY_EXTEND:<VWIDE> (match_operand:VQW 1 "register_operand"))]
   "TARGET_SIMD"
   {
-    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
     emit_insn (gen_aarch64_simd_vec_unpack<su>_hi_<mode> (operands[0],
 							  operands[1], p));
     DONE;
@@ -1532,7 +1532,7 @@
    (ANY_EXTEND:<VWIDE> (match_operand:VQW 1 "register_operand" ""))]
   "TARGET_SIMD"
   {
-    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, false);
+    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, false);
     emit_insn (gen_aarch64_simd_vec_unpack<su>_lo_<mode> (operands[0],
 							  operands[1], p));
     DONE;
@@ -1652,7 +1652,7 @@
    (ANY_EXTEND:<VWIDE> (match_operand:VQW 2 "register_operand" ""))]
  "TARGET_SIMD"
  {
-   rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, false);
+   rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, false);
    emit_insn (gen_aarch64_simd_vec_<su>mult_lo_<mode> (operands[0],
 						       operands[1],
 						       operands[2], p));
@@ -1679,7 +1679,7 @@
    (ANY_EXTEND:<VWIDE> (match_operand:VQW 2 "register_operand" ""))]
  "TARGET_SIMD"
  {
-   rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+   rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
    emit_insn (gen_aarch64_simd_vec_<su>mult_hi_<mode> (operands[0],
 						       operands[1],
 						       operands[2], p));
@@ -2083,7 +2083,7 @@
    (match_operand:VQ_HSF 1 "register_operand" "")]
   "TARGET_SIMD"
   {
-    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, false);
+    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, false);
     emit_insn (gen_aarch64_simd_vec_unpacks_lo_<mode> (operands[0],
 						       operands[1], p));
     DONE;
@@ -2106,7 +2106,7 @@
    (match_operand:VQ_HSF 1 "register_operand" "")]
   "TARGET_SIMD"
   {
-    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
     emit_insn (gen_aarch64_simd_vec_unpacks_lo_<mode> (operands[0],
 						       operands[1], p));
     DONE;
@@ -3027,7 +3027,7 @@
    (match_operand:VQW 2 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_saddl<mode>_hi_internal (operands[0], operands[1],
                                                   operands[2], p));
   DONE;
@@ -3039,7 +3039,7 @@
    (match_operand:VQW 2 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_uaddl<mode>_hi_internal (operands[0], operands[1],
                                                   operands[2], p));
   DONE;
@@ -3051,7 +3051,7 @@
    (match_operand:VQW 2 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_ssubl<mode>_hi_internal (operands[0], operands[1],
 						operands[2], p));
   DONE;
@@ -3063,7 +3063,7 @@
    (match_operand:VQW 2 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_usubl<mode>_hi_internal (operands[0], operands[1],
 						operands[2], p));
   DONE;
@@ -3089,7 +3089,7 @@
 		      (match_operand:<VDBLW> 2 "register_operand" "")))]
   "TARGET_SIMD"
   {
-    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, false);
+    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, false);
     rtx temp = gen_reg_rtx (GET_MODE (operands[0]));
 
     emit_insn (gen_aarch64_saddw<mode>_internal (temp, operands[2],
@@ -3117,7 +3117,7 @@
 		      (match_operand:<VDBLW> 2 "register_operand" "")))]
   "TARGET_SIMD"
   {
-    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, false);
+    rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, false);
     rtx temp = gen_reg_rtx (GET_MODE (operands[0]));
 
     emit_insn (gen_aarch64_uaddw<mode>_internal (temp, operands[2],
@@ -3178,7 +3178,7 @@
    (match_operand:VQW 2 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_saddw2<mode>_internal (operands[0], operands[1],
 						operands[2], p));
   DONE;
@@ -3190,7 +3190,7 @@
    (match_operand:VQW 2 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_uaddw2<mode>_internal (operands[0], operands[1],
 						operands[2], p));
   DONE;
@@ -3203,7 +3203,7 @@
    (match_operand:VQW 2 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_ssubw2<mode>_internal (operands[0], operands[1],
 						operands[2], p));
   DONE;
@@ -3215,7 +3215,7 @@
    (match_operand:VQW 2 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_usubw2<mode>_internal (operands[0], operands[1],
 						operands[2], p));
   DONE;
@@ -3735,7 +3735,7 @@
    (match_operand:VQ_HSI 3 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmlal2<mode>_internal (operands[0], operands[1],
 						  operands[2], operands[3], p));
   DONE;
@@ -3748,7 +3748,7 @@
    (match_operand:VQ_HSI 3 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmlsl2<mode>_internal (operands[0], operands[1],
 						  operands[2], operands[3], p));
   DONE;
@@ -3816,7 +3816,7 @@
    (match_operand:SI 4 "immediate_operand" "i")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmlal2_lane<mode>_internal (operands[0], operands[1],
 						       operands[2], operands[3],
 						       operands[4], p));
@@ -3831,7 +3831,7 @@
    (match_operand:SI 4 "immediate_operand" "i")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmlal2_laneq<mode>_internal (operands[0], operands[1],
 						       operands[2], operands[3],
 						       operands[4], p));
@@ -3846,7 +3846,7 @@
    (match_operand:SI 4 "immediate_operand" "i")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmlsl2_lane<mode>_internal (operands[0], operands[1],
 						       operands[2], operands[3],
 						       operands[4], p));
@@ -3861,7 +3861,7 @@
    (match_operand:SI 4 "immediate_operand" "i")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmlsl2_laneq<mode>_internal (operands[0], operands[1],
 						       operands[2], operands[3],
 						       operands[4], p));
@@ -3894,7 +3894,7 @@
    (match_operand:<VEL> 3 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmlal2_n<mode>_internal (operands[0], operands[1],
 						    operands[2], operands[3],
 						    p));
@@ -3908,7 +3908,7 @@
    (match_operand:<VEL> 3 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmlsl2_n<mode>_internal (operands[0], operands[1],
 						    operands[2], operands[3],
 						    p));
@@ -4062,7 +4062,7 @@
    (match_operand:VQ_HSI 2 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmull2<mode>_internal (operands[0], operands[1],
 						  operands[2], p));
   DONE;
@@ -4123,7 +4123,7 @@
    (match_operand:SI 3 "immediate_operand" "i")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmull2_lane<mode>_internal (operands[0], operands[1],
 						       operands[2], operands[3],
 						       p));
@@ -4137,7 +4137,7 @@
    (match_operand:SI 3 "immediate_operand" "i")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmull2_laneq<mode>_internal (operands[0], operands[1],
 						       operands[2], operands[3],
 						       p));
@@ -4170,7 +4170,7 @@
    (match_operand:<VEL> 2 "register_operand" "w")]
   "TARGET_SIMD"
 {
-  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, true);
+  rtx p = aarch64_simd_vect_par_cnst_half (<MODE>mode, <nunits>, true);
   emit_insn (gen_aarch64_sqdmull2_n<mode>_internal (operands[0], operands[1],
 						    operands[2], p));
   DONE;
