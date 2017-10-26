@@ -4632,7 +4632,7 @@
   if (BYTES_BIG_ENDIAN)
     {
       rtx tmp = gen_reg_rtx (OImode);
-      rtx mask = aarch64_reverse_mask (<MODE>mode);
+      rtx mask = aarch64_reverse_mask (<MODE>mode, <nunits>);
       emit_insn (gen_aarch64_simd_ld2<mode> (tmp, operands[1]));
       emit_insn (gen_aarch64_rev_reglistoi (operands[0], tmp, mask));
     }
@@ -4676,7 +4676,7 @@
   if (BYTES_BIG_ENDIAN)
     {
       rtx tmp = gen_reg_rtx (OImode);
-      rtx mask = aarch64_reverse_mask (<MODE>mode);
+      rtx mask = aarch64_reverse_mask (<MODE>mode, <nunits>);
       emit_insn (gen_aarch64_rev_reglistoi (tmp, operands[1], mask));
       emit_insn (gen_aarch64_simd_st2<mode> (operands[0], tmp));
     }
@@ -4730,7 +4730,7 @@
   if (BYTES_BIG_ENDIAN)
     {
       rtx tmp = gen_reg_rtx (CImode);
-      rtx mask = aarch64_reverse_mask (<MODE>mode);
+      rtx mask = aarch64_reverse_mask (<MODE>mode, <nunits>);
       emit_insn (gen_aarch64_simd_ld3<mode> (tmp, operands[1]));
       emit_insn (gen_aarch64_rev_reglistci (operands[0], tmp, mask));
     }
@@ -4774,7 +4774,7 @@
   if (BYTES_BIG_ENDIAN)
     {
       rtx tmp = gen_reg_rtx (CImode);
-      rtx mask = aarch64_reverse_mask (<MODE>mode);
+      rtx mask = aarch64_reverse_mask (<MODE>mode, <nunits>);
       emit_insn (gen_aarch64_rev_reglistci (tmp, operands[1], mask));
       emit_insn (gen_aarch64_simd_st3<mode> (operands[0], tmp));
     }
@@ -4828,7 +4828,7 @@
   if (BYTES_BIG_ENDIAN)
     {
       rtx tmp = gen_reg_rtx (XImode);
-      rtx mask = aarch64_reverse_mask (<MODE>mode);
+      rtx mask = aarch64_reverse_mask (<MODE>mode, <nunits>);
       emit_insn (gen_aarch64_simd_ld4<mode> (tmp, operands[1]));
       emit_insn (gen_aarch64_rev_reglistxi (operands[0], tmp, mask));
     }
@@ -4872,7 +4872,7 @@
   if (BYTES_BIG_ENDIAN)
     {
       rtx tmp = gen_reg_rtx (XImode);
-      rtx mask = aarch64_reverse_mask (<MODE>mode);
+      rtx mask = aarch64_reverse_mask (<MODE>mode, <nunits>);
       emit_insn (gen_aarch64_rev_reglistxi (tmp, operands[1], mask));
       emit_insn (gen_aarch64_simd_st4<mode> (operands[0], tmp));
     }
