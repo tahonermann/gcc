@@ -1140,13 +1140,18 @@ aarch64_array_mode_supported_p (machine_mode mode,
 static unsigned int
 aarch64_hard_regno_nregs (unsigned regno, machine_mode mode)
 {
+  /* ??? Logically we should only need to provide a value when
+     HARD_REGNO_MODE_OK says that the combination is valid,
+     but at the moment we need to handle all modes.  Just ignore
+     any runtime parts for registers that can't store them.  */
+  HOST_WIDE_INT lowest_size = constant_lower_bound (GET_MODE_SIZE (mode));
   switch (aarch64_regno_regclass (regno))
     {
     case FP_REGS:
     case FP_LO_REGS:
-      return (GET_MODE_SIZE (mode) + UNITS_PER_VREG - 1) / UNITS_PER_VREG;
+      return CEIL (lowest_size, UNITS_PER_VREG);
     default:
-      return (GET_MODE_SIZE (mode) + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
+      return CEIL (lowest_size, UNITS_PER_WORD);
     }
   gcc_unreachable ();
 }
@@ -1189,25 +1194,17 @@ aarch64_hard_regno_mode_ok (unsigned regno, machine_mode mode)
 static bool
 aarch64_hard_regno_call_part_clobbered (unsigned int regno, machine_mode mode)
 {
-  return FP_REGNUM_P (regno) && GET_MODE_SIZE (mode) > 8;
+  return FP_REGNUM_P (regno) && may_gt (GET_MODE_SIZE (mode), 8);
 }
 
 /* Implement HARD_REGNO_CALLER_SAVE_MODE.  */
 machine_mode
-aarch64_hard_regno_caller_save_mode (unsigned regno, unsigned nregs,
-				     machine_mode mode)
+aarch64_hard_regno_caller_save_mode (unsigned, unsigned, machine_mode mode)
 {
-  /* Handle modes that fit within single registers.  */
-  if (nregs == 1 && GET_MODE_SIZE (mode) <= 16)
-    {
-      if (GET_MODE_SIZE (mode) >= 4)
-        return mode;
-      else
-        return SImode;
-    }
-  /* Fall back to generic for multi-reg and very large modes.  */
+  if (must_ge (GET_MODE_SIZE (mode), 4))
+    return mode;
   else
-    return choose_hard_reg_mode (regno, nregs, false);
+    return SImode;
 }
 
 /* Implement TARGET_CONSTANT_ALIGNMENT.  Make strings word-aligned so
@@ -1320,11 +1317,10 @@ static enum tls_model
 tls_symbolic_operand_type (rtx addr)
 {
   enum tls_model tls_kind = TLS_MODEL_NONE;
-  rtx sym, addend;
-
   if (GET_CODE (addr) == CONST)
     {
-      split_const (addr, &sym, &addend);
+      poly_int64 addend;
+      rtx sym = strip_offset (addr, &addend);
       if (GET_CODE (sym) == SYMBOL_REF)
 	tls_kind = SYMBOL_REF_TLS_MODEL (sym);
     }
@@ -2263,8 +2259,12 @@ aarch64_pass_by_reference (cumulative_args_t pcum ATTRIBUTE_UNUSED,
   int nregs;
 
   /* GET_MODE_SIZE (BLKmode) is useless since it is 0.  */
-  size = (mode == BLKmode && type)
-    ? int_size_in_bytes (type) : (int) GET_MODE_SIZE (mode);
+  if (mode == BLKmode && type)
+    size = int_size_in_bytes (type);
+  else
+    /* No frontends can create types with variable-sized modes, so we
+       shouldn't be asked to pass or return them.  */
+    size = GET_MODE_SIZE (mode).to_constant ();
 
   /* Aggregates are passed by reference based on their size.  */
   if (type && AGGREGATE_TYPE_P (type))
@@ -2361,8 +2361,8 @@ aarch64_function_value (const_tree type, const_tree func,
 	  for (i = 0; i < count; i++)
 	    {
 	      rtx tmp = gen_rtx_REG (ag_mode, V0_REGNUM + i);
-	      tmp = gen_rtx_EXPR_LIST (VOIDmode, tmp,
-				       GEN_INT (i * GET_MODE_SIZE (ag_mode)));
+	      rtx offset = gen_int_mode (i * GET_MODE_SIZE (ag_mode), Pmode);
+	      tmp = gen_rtx_EXPR_LIST (VOIDmode, tmp, offset);
 	      XVECEXP (par, 0, i) = tmp;
 	    }
 	  return par;
@@ -2489,9 +2489,13 @@ aarch64_layout_arg (cumulative_args_t pcum_v, machine_mode mode,
   pcum->aapcs_arg_processed = true;
 
   /* Size in bytes, rounded to the nearest multiple of 8 bytes.  */
-  size
-    = ROUND_UP (type ? int_size_in_bytes (type) : GET_MODE_SIZE (mode),
-		UNITS_PER_WORD);
+  if (type)
+    size = int_size_in_bytes (type);
+  else
+    /* No frontends can create types with variable-sized modes, so we
+       shouldn't be asked to pass or return them.  */
+    size = GET_MODE_SIZE (mode).to_constant ();
+  size = ROUND_UP (size, UNITS_PER_WORD);
 
   allocate_ncrn = (type) ? !(FLOAT_TYPE_P (type)) : !FLOAT_MODE_P (mode);
   allocate_nvrn = aarch64_vfp_is_call_candidate (pcum_v,
@@ -2528,9 +2532,9 @@ aarch64_layout_arg (cumulative_args_t pcum_v, machine_mode mode,
 		{
 		  rtx tmp = gen_rtx_REG (pcum->aapcs_vfp_rmode,
 					 V0_REGNUM + nvrn + i);
-		  tmp = gen_rtx_EXPR_LIST
-		    (VOIDmode, tmp,
-		     GEN_INT (i * GET_MODE_SIZE (pcum->aapcs_vfp_rmode)));
+		  rtx offset = gen_int_mode
+		    (i * GET_MODE_SIZE (pcum->aapcs_vfp_rmode), Pmode);
+		  tmp = gen_rtx_EXPR_LIST (VOIDmode, tmp, offset);
 		  XVECEXP (par, 0, i) = tmp;
 		}
 	      pcum->aapcs_reg = par;
@@ -2755,8 +2759,13 @@ aarch64_pad_reg_upward (machine_mode mode, const_tree type,
   /* Small composite types are always padded upward.  */
   if (BYTES_BIG_ENDIAN && aarch64_composite_type_p (type, mode))
     {
-      HOST_WIDE_INT size = (type ? int_size_in_bytes (type)
-			    : GET_MODE_SIZE (mode));
+      HOST_WIDE_INT size;
+      if (type)
+	size = int_size_in_bytes (type);
+      else
+	/* No frontends can create types with variable-sized modes, so we
+	   shouldn't be asked to pass or return them.  */
+	size = GET_MODE_SIZE (mode).to_constant ();
       if (size < 2 * UNITS_PER_WORD)
 	return true;
     }
@@ -2785,12 +2794,19 @@ aarch64_libgcc_cmp_return_mode (void)
 #define PROBE_STACK_FIRST_REG  9
 #define PROBE_STACK_SECOND_REG 10
 
-/* Emit code to probe a range of stack addresses from FIRST to FIRST+SIZE,
+/* Emit code to probe a range of stack addresses from FIRST to FIRST+POLY_SIZE,
    inclusive.  These are offsets from the current stack pointer.  */
 
 static void
-aarch64_emit_probe_stack_range (HOST_WIDE_INT first, HOST_WIDE_INT size)
+aarch64_emit_probe_stack_range (HOST_WIDE_INT first, poly_int64 poly_size)
 {
+  HOST_WIDE_INT size;
+  if (!poly_size.is_constant (&size))
+    {
+      sorry ("stack probes for SVE frames");
+      return;
+    }
+
   rtx reg1 = gen_rtx_REG (Pmode, PROBE_STACK_FIRST_REG);
 
   /* See the same assertion on PROBE_INTERVAL above.  */
@@ -3075,13 +3091,16 @@ aarch64_layout_frame (void)
     = offset + cfun->machine->frame.saved_varargs_size;
 
   cfun->machine->frame.hard_fp_offset
-    = ROUND_UP (varargs_and_saved_regs_size + get_frame_size (),
-		STACK_BOUNDARY / BITS_PER_UNIT);
+    = aligned_upper_bound (varargs_and_saved_regs_size
+			   + get_frame_size (),
+			   STACK_BOUNDARY / BITS_PER_UNIT);
 
+  /* Both these values are already aligned.  */
+  gcc_assert (multiple_p (crtl->outgoing_args_size,
+			  STACK_BOUNDARY / BITS_PER_UNIT));
   cfun->machine->frame.frame_size
-    = ROUND_UP (cfun->machine->frame.hard_fp_offset
-		+ crtl->outgoing_args_size,
-		STACK_BOUNDARY / BITS_PER_UNIT);
+    = (cfun->machine->frame.hard_fp_offset
+       + crtl->outgoing_args_size);
 
   cfun->machine->frame.locals_offset = cfun->machine->frame.saved_varargs_size;
 
@@ -3096,18 +3115,21 @@ aarch64_layout_frame (void)
   else if (cfun->machine->frame.wb_candidate1 != INVALID_REGNUM)
     max_push_offset = 256;
 
-  if (cfun->machine->frame.frame_size < max_push_offset
-      && crtl->outgoing_args_size == 0)
+  HOST_WIDE_INT const_size, const_fp_offset;
+  if (cfun->machine->frame.frame_size.is_constant (&const_size)
+      && const_size < max_push_offset
+      && must_eq (crtl->outgoing_args_size, 0))
     {
       /* Simple, small frame with no outgoing arguments:
 	 stp reg1, reg2, [sp, -frame_size]!
 	 stp reg3, reg4, [sp, 16]  */
-      cfun->machine->frame.callee_adjust = cfun->machine->frame.frame_size;
+      cfun->machine->frame.callee_adjust = const_size;
     }
-  else if ((crtl->outgoing_args_size
-	    + cfun->machine->frame.saved_regs_size < 512)
+  else if (must_lt (crtl->outgoing_args_size
+		    + cfun->machine->frame.saved_regs_size, 512)
 	   && !(cfun->calls_alloca
-		&& cfun->machine->frame.hard_fp_offset < max_push_offset))
+		&& must_lt (cfun->machine->frame.hard_fp_offset,
+			    max_push_offset)))
     {
       /* Frame with small outgoing arguments:
 	 sub sp, sp, frame_size
@@ -3117,13 +3139,14 @@ aarch64_layout_frame (void)
       cfun->machine->frame.callee_offset
 	= cfun->machine->frame.frame_size - cfun->machine->frame.hard_fp_offset;
     }
-  else if (cfun->machine->frame.hard_fp_offset < max_push_offset)
+  else if (cfun->machine->frame.hard_fp_offset.is_constant (&const_fp_offset)
+	   && const_fp_offset < max_push_offset)
     {
       /* Frame with large outgoing arguments but a small local area:
 	 stp reg1, reg2, [sp, -hard_fp_offset]!
 	 stp reg3, reg4, [sp, 16]
 	 sub sp, sp, outgoing_args_size  */
-      cfun->machine->frame.callee_adjust = cfun->machine->frame.hard_fp_offset;
+      cfun->machine->frame.callee_adjust = const_fp_offset;
       cfun->machine->frame.final_adjust
 	= cfun->machine->frame.frame_size - cfun->machine->frame.callee_adjust;
     }
@@ -3336,7 +3359,7 @@ aarch64_return_address_signing_enabled (void)
    skipping any write-back candidates if SKIP_WB is true.  */
 
 static void
-aarch64_save_callee_saves (machine_mode mode, HOST_WIDE_INT start_offset,
+aarch64_save_callee_saves (machine_mode mode, poly_int64 start_offset,
 			   unsigned start, unsigned limit, bool skip_wb)
 {
   rtx_insn *insn;
@@ -3348,7 +3371,7 @@ aarch64_save_callee_saves (machine_mode mode, HOST_WIDE_INT start_offset,
        regno = aarch64_next_callee_save (regno + 1, limit))
     {
       rtx reg, mem;
-      HOST_WIDE_INT offset;
+      poly_int64 offset;
 
       if (skip_wb
 	  && (regno == cfun->machine->frame.wb_candidate1
@@ -3401,13 +3424,13 @@ aarch64_save_callee_saves (machine_mode mode, HOST_WIDE_INT start_offset,
 
 static void
 aarch64_restore_callee_saves (machine_mode mode,
-			      HOST_WIDE_INT start_offset, unsigned start,
+			      poly_int64 start_offset, unsigned start,
 			      unsigned limit, bool skip_wb, rtx *cfi_ops)
 {
   rtx base_rtx = stack_pointer_rtx;
   unsigned regno;
   unsigned regno2;
-  HOST_WIDE_INT offset;
+  poly_int64 offset;
 
   for (regno = aarch64_next_callee_save (start, limit);
        regno <= limit;
@@ -3452,25 +3475,27 @@ aarch64_restore_callee_saves (machine_mode mode,
 
 static inline bool
 offset_9bit_signed_unscaled_p (machine_mode mode ATTRIBUTE_UNUSED,
-			       HOST_WIDE_INT offset)
+			       poly_int64 offset)
 {
-  return offset >= -256 && offset < 256;
+  HOST_WIDE_INT const_offset;
+  return (offset.is_constant (&const_offset)
+	  && IN_RANGE (const_offset, -256, 255));
 }
 
 static inline bool
-offset_12bit_unsigned_scaled_p (machine_mode mode, HOST_WIDE_INT offset)
+offset_12bit_unsigned_scaled_p (machine_mode mode, poly_int64 offset)
 {
-  return (offset >= 0
-	  && offset < 4096 * GET_MODE_SIZE (mode)
-	  && offset % GET_MODE_SIZE (mode) == 0);
+  HOST_WIDE_INT multiple;
+  return (constant_multiple_p (offset, GET_MODE_SIZE (mode), &multiple)
+	  && IN_RANGE (multiple, 0, 4095));
 }
 
 bool
-aarch64_offset_7bit_signed_scaled_p (machine_mode mode, HOST_WIDE_INT offset)
+aarch64_offset_7bit_signed_scaled_p (machine_mode mode, poly_int64 offset)
 {
-  return (offset >= -64 * GET_MODE_SIZE (mode)
-	  && offset < 64 * GET_MODE_SIZE (mode)
-	  && offset % GET_MODE_SIZE (mode) == 0);
+  HOST_WIDE_INT multiple;
+  return (constant_multiple_p (offset, GET_MODE_SIZE (mode), &multiple)
+	  && IN_RANGE (multiple, -64, 63));
 }
 
 /* Implement TARGET_SHRINK_WRAP_GET_SEPARATE_COMPONENTS.  */
@@ -3487,7 +3512,7 @@ aarch64_get_separate_components (void)
   for (unsigned regno = 0; regno <= LAST_SAVED_REGNUM; regno++)
     if (aarch64_register_saved_on_entry (regno))
       {
-	HOST_WIDE_INT offset = cfun->machine->frame.reg_offset[regno];
+	poly_int64 offset = cfun->machine->frame.reg_offset[regno];
 	if (!frame_pointer_needed)
 	  offset += cfun->machine->frame.frame_size
 		    - cfun->machine->frame.hard_fp_offset;
@@ -3591,7 +3616,7 @@ aarch64_process_components (sbitmap components, bool prologue_p)
 	 so DFmode for the vector registers is enough.  */
       machine_mode mode = GP_REGNUM_P (regno) ? E_DImode : E_DFmode;
       rtx reg = gen_rtx_REG (mode, regno);
-      HOST_WIDE_INT offset = cfun->machine->frame.reg_offset[regno];
+      poly_int64 offset = cfun->machine->frame.reg_offset[regno];
       if (!frame_pointer_needed)
 	offset += cfun->machine->frame.frame_size
 		  - cfun->machine->frame.hard_fp_offset;
@@ -3613,13 +3638,13 @@ aarch64_process_components (sbitmap components, bool prologue_p)
 	  break;
 	}
 
-      HOST_WIDE_INT offset2 = cfun->machine->frame.reg_offset[regno2];
+      poly_int64 offset2 = cfun->machine->frame.reg_offset[regno2];
       /* The next register is not of the same class or its offset is not
 	 mergeable with the current one into a pair.  */
       if (!satisfies_constraint_Ump (mem)
 	  || GP_REGNUM_P (regno) != GP_REGNUM_P (regno2)
-	  || (offset2 - cfun->machine->frame.reg_offset[regno])
-		!= GET_MODE_SIZE (mode))
+	  || may_ne ((offset2 - cfun->machine->frame.reg_offset[regno]),
+		     GET_MODE_SIZE (mode)))
 	{
 	  insn = emit_insn (set);
 	  RTX_FRAME_RELATED_P (insn) = 1;
@@ -3689,11 +3714,19 @@ aarch64_set_handled_components (sbitmap components)
       cfun->machine->reg_is_wrapped_separately[regno] = true;
 }
 
-/* Allocate SIZE bytes of stack space using TEMP1 as a scratch register.  */
+/* Allocate POLY_SIZE bytes of stack space using TEMP1 as a scratch
+   register.  */
 
 static void
-aarch64_allocate_and_probe_stack_space (rtx temp1, HOST_WIDE_INT size)
+aarch64_allocate_and_probe_stack_space (rtx temp1, poly_int64 poly_size)
 {
+  HOST_WIDE_INT size;
+  if (!poly_size.is_constant (&size))
+    {
+      sorry ("stack probes for SVE frames");
+      return;
+    }
+
   HOST_WIDE_INT probe_interval
     = 1 << PARAM_VALUE (PARAM_STACK_CLASH_PROTECTION_PROBE_INTERVAL);
   HOST_WIDE_INT guard_size
@@ -3853,11 +3886,11 @@ aarch64_expand_prologue (void)
 {
   aarch64_layout_frame ();
 
-  HOST_WIDE_INT frame_size = cfun->machine->frame.frame_size;
-  HOST_WIDE_INT initial_adjust = cfun->machine->frame.initial_adjust;
+  poly_int64 frame_size = cfun->machine->frame.frame_size;
+  poly_int64 initial_adjust = cfun->machine->frame.initial_adjust;
   HOST_WIDE_INT callee_adjust = cfun->machine->frame.callee_adjust;
-  HOST_WIDE_INT final_adjust = cfun->machine->frame.final_adjust;
-  HOST_WIDE_INT callee_offset = cfun->machine->frame.callee_offset;
+  poly_int64 final_adjust = cfun->machine->frame.final_adjust;
+  poly_int64 callee_offset = cfun->machine->frame.callee_offset;
   unsigned reg1 = cfun->machine->frame.wb_candidate1;
   unsigned reg2 = cfun->machine->frame.wb_candidate2;
   bool emit_frame_chain = cfun->machine->frame.emit_frame_chain;
@@ -3872,19 +3905,19 @@ aarch64_expand_prologue (void)
     }
 
   if (flag_stack_usage_info)
-    current_function_static_stack_size = frame_size;
+    current_function_static_stack_size = constant_lower_bound (frame_size);
 
   if (flag_stack_check == STATIC_BUILTIN_STACK_CHECK)
     {
       if (crtl->is_leaf && !cfun->calls_alloca)
 	{
-	  if (frame_size > PROBE_INTERVAL
-	      && frame_size > get_stack_check_protect ())
+	  if (may_gt (frame_size, PROBE_INTERVAL)
+	      && may_gt (frame_size, get_stack_check_protect ()))
 	    aarch64_emit_probe_stack_range (get_stack_check_protect (),
 					    (frame_size
 					     - get_stack_check_protect ()));
 	}
-      else if (frame_size > 0)
+      else if (may_gt (frame_size, 0))
 	aarch64_emit_probe_stack_range (get_stack_check_protect (), frame_size);
     }
 
@@ -3919,23 +3952,23 @@ aarch64_expand_prologue (void)
   HOST_WIDE_INT guard_used_by_caller = 1024;
   if (flag_stack_clash_protection)
     {
-      if (frame_size == 0)
+      if (must_eq (frame_size, 0))
 	dump_stack_clash_frame_info (NO_PROBE_NO_FRAME, false);
-      else if (initial_adjust < guard_size - guard_used_by_caller
-	       && final_adjust < guard_size - guard_used_by_caller)
+      else if (must_lt (initial_adjust, guard_size - guard_used_by_caller)
+	       && must_lt (final_adjust, guard_size - guard_used_by_caller))
 	dump_stack_clash_frame_info (NO_PROBE_SMALL_FRAME, true);
     }
 
   /* In theory we should never have both an initial adjustment
      and a callee save adjustment.  Verify that is the case since the
      code below does not handle it for -fstack-clash-protection.  */
-  gcc_assert (initial_adjust == 0 || callee_adjust == 0);
+  gcc_assert (must_eq (initial_adjust, 0) || callee_adjust == 0);
 
   /* Only probe if the initial adjustment is larger than the guard
      less the amount of the guard reserved for use by the caller's
      outgoing args.  */
   if (flag_stack_clash_protection
-      && initial_adjust >= guard_size - guard_used_by_caller)
+      && may_ge (initial_adjust, guard_size - guard_used_by_caller))
     aarch64_allocate_and_probe_stack_space (ip0_rtx, initial_adjust);
   else
     aarch64_sub_sp (ip0_rtx, initial_adjust, true);
@@ -3960,19 +3993,19 @@ aarch64_expand_prologue (void)
 			     callee_adjust != 0 || emit_frame_chain);
 
   /* We may need to probe the final adjustment as well.  */
-  if (flag_stack_clash_protection && final_adjust != 0)
+  if (flag_stack_clash_protection && may_ne (final_adjust, 0))
     {
       /* First probe if the final adjustment is larger than the guard size
 	 less the amount of the guard reserved for use by the caller's
 	 outgoing args.  */
-      if (final_adjust >= guard_size - guard_used_by_caller)
+      if (may_ge (final_adjust, guard_size - guard_used_by_caller))
 	aarch64_allocate_and_probe_stack_space (ip1_rtx, final_adjust);
       else
 	aarch64_sub_sp (ip1_rtx, final_adjust, !frame_pointer_needed);
 
       /* We must also probe if the final adjustment is larger than the guard
 	 that is assumed used by the caller.  This may be sub-optimal.  */
-      if (final_adjust >= guard_used_by_caller)
+      if (may_ge (final_adjust, guard_used_by_caller))
 	{
 	  if (dump_file)
 	    fprintf (dump_file,
@@ -4001,7 +4034,7 @@ aarch64_use_return_insn_p (void)
 
   aarch64_layout_frame ();
 
-  return cfun->machine->frame.frame_size == 0;
+  return must_eq (cfun->machine->frame.frame_size, 0);
 }
 
 /* Generate the epilogue instructions for returning from a function.
@@ -4014,21 +4047,22 @@ aarch64_expand_epilogue (bool for_sibcall)
 {
   aarch64_layout_frame ();
 
-  HOST_WIDE_INT initial_adjust = cfun->machine->frame.initial_adjust;
+  poly_int64 initial_adjust = cfun->machine->frame.initial_adjust;
   HOST_WIDE_INT callee_adjust = cfun->machine->frame.callee_adjust;
-  HOST_WIDE_INT final_adjust = cfun->machine->frame.final_adjust;
-  HOST_WIDE_INT callee_offset = cfun->machine->frame.callee_offset;
+  poly_int64 final_adjust = cfun->machine->frame.final_adjust;
+  poly_int64 callee_offset = cfun->machine->frame.callee_offset;
   unsigned reg1 = cfun->machine->frame.wb_candidate1;
   unsigned reg2 = cfun->machine->frame.wb_candidate2;
   rtx cfi_ops = NULL;
   rtx_insn *insn;
 
   /* We need to add memory barrier to prevent read from deallocated stack.  */
-  bool need_barrier_p = (get_frame_size ()
-			 + cfun->machine->frame.saved_varargs_size) != 0;
+  bool need_barrier_p = may_ne (get_frame_size ()
+				+ cfun->machine->frame.saved_varargs_size, 0);
 
   /* Emit a barrier to prevent loads from a deallocated stack.  */
-  if (final_adjust > crtl->outgoing_args_size || cfun->calls_alloca
+  if (may_gt (final_adjust, crtl->outgoing_args_size)
+      || cfun->calls_alloca
       || crtl->calls_eh_return)
     {
       emit_insn (gen_stack_tie (stack_pointer_rtx, stack_pointer_rtx));
@@ -4039,7 +4073,7 @@ aarch64_expand_epilogue (bool for_sibcall)
      be the same as the stack pointer.  */
   rtx ip0_rtx = gen_rtx_REG (Pmode, IP0_REGNUM);
   rtx ip1_rtx = gen_rtx_REG (Pmode, IP1_REGNUM);
-  if (frame_pointer_needed && (final_adjust || cfun->calls_alloca))
+  if (frame_pointer_needed && (may_ne (final_adjust, 0) || cfun->calls_alloca))
     /* If writeback is used when restoring callee-saves, the CFA
        is restored on the instruction doing the writeback.  */
     aarch64_add_offset (Pmode, stack_pointer_rtx,
@@ -4063,7 +4097,7 @@ aarch64_expand_epilogue (bool for_sibcall)
   if (callee_adjust != 0)
     aarch64_pop_regs (reg1, reg2, callee_adjust, &cfi_ops);
 
-  if (callee_adjust != 0 || initial_adjust > 65536)
+  if (callee_adjust != 0 || may_gt (initial_adjust, 65536))
     {
       /* Emit delayed restores and set the CFA to be SP + initial_adjust.  */
       insn = get_last_insn ();
@@ -4664,9 +4698,9 @@ aarch64_classify_index (struct aarch64_address_info *info, rtx x,
       && contains_reg_of_mode[GENERAL_REGS][GET_MODE (SUBREG_REG (index))])
     index = SUBREG_REG (index);
 
-  if ((shift == 0 ||
-       (shift > 0 && shift <= 3
-	&& (1 << shift) == GET_MODE_SIZE (mode)))
+  if ((shift == 0
+       || (shift > 0 && shift <= 3
+	   && must_eq (1 << shift, GET_MODE_SIZE (mode))))
       && REG_P (index)
       && aarch64_regno_ok_for_index_p (REGNO (index), strict_p))
     {
@@ -4688,7 +4722,7 @@ aarch64_mode_valid_for_sched_fusion_p (machine_mode mode)
   return mode == SImode || mode == DImode
 	 || mode == SFmode || mode == DFmode
 	 || (aarch64_vector_mode_supported_p (mode)
-	     && GET_MODE_SIZE (mode) == 8);
+	     && must_eq (GET_MODE_SIZE (mode), 8));
 }
 
 /* Return true if REGNO is a virtual pointer register, or an eliminable
@@ -4714,6 +4748,7 @@ aarch64_classify_address (struct aarch64_address_info *info,
 {
   enum rtx_code code = GET_CODE (x);
   rtx op0, op1;
+  HOST_WIDE_INT const_size;
 
   /* On BE, we use load/store pair for all large int mode load/stores.
      TI/TFmode may also use a load/store pair.  */
@@ -4723,10 +4758,10 @@ aarch64_classify_address (struct aarch64_address_info *info,
 			    || (BYTES_BIG_ENDIAN
 				&& aarch64_vect_struct_mode_p (mode)));
 
-  bool allow_reg_index_p =
-    !load_store_pair_p
-    && (GET_MODE_SIZE (mode) != 16 || aarch64_vector_mode_supported_p (mode))
-    && !aarch64_vect_struct_mode_p (mode);
+  bool allow_reg_index_p = (!load_store_pair_p
+			    && (may_ne (GET_MODE_SIZE (mode), 16)
+				|| aarch64_vector_mode_supported_p (mode))
+			    && !aarch64_vect_struct_mode_p (mode));
 
   /* On LE, for AdvSIMD, don't support anything other than POST_INC or
      REG addressing.  */
@@ -4759,7 +4794,7 @@ aarch64_classify_address (struct aarch64_address_info *info,
 	  return true;
 	}
 
-      if (GET_MODE_SIZE (mode) != 0
+      if (may_ne (GET_MODE_SIZE (mode), 0)
 	  && CONST_INT_P (op1)
 	  && aarch64_base_register_rtx_p (op0, strict_p))
 	{
@@ -4806,7 +4841,8 @@ aarch64_classify_address (struct aarch64_address_info *info,
 							    offset + 32));
 
 	  if (load_store_pair_p)
-	    return ((GET_MODE_SIZE (mode) == 4 || GET_MODE_SIZE (mode) == 8)
+	    return ((must_eq (GET_MODE_SIZE (mode), 4)
+		     || must_eq (GET_MODE_SIZE (mode), 8))
 		    && aarch64_offset_7bit_signed_scaled_p (mode, offset));
 	  else
 	    return (offset_9bit_signed_unscaled_p (mode, offset)
@@ -4866,7 +4902,8 @@ aarch64_classify_address (struct aarch64_address_info *info,
 		    && offset_9bit_signed_unscaled_p (mode, offset));
 
 	  if (load_store_pair_p)
-	    return ((GET_MODE_SIZE (mode) == 4 || GET_MODE_SIZE (mode) == 8)
+	    return ((must_eq (GET_MODE_SIZE (mode), 4)
+		     || must_eq (GET_MODE_SIZE (mode), 8))
 		    && aarch64_offset_7bit_signed_scaled_p (mode, offset));
 	  else
 	    return offset_9bit_signed_unscaled_p (mode, offset);
@@ -4880,7 +4917,9 @@ aarch64_classify_address (struct aarch64_address_info *info,
          for SI mode or larger.  */
       info->type = ADDRESS_SYMBOLIC;
 
-      if (!load_store_pair_p && GET_MODE_SIZE (mode) >= 4)
+      if (!load_store_pair_p
+	  && GET_MODE_SIZE (mode).is_constant (&const_size)
+	  && const_size >= 4)
 	{
 	  rtx sym, addend;
 
@@ -4906,7 +4945,6 @@ aarch64_classify_address (struct aarch64_address_info *info,
 	    {
 	      /* The symbol and offset must be aligned to the access size.  */
 	      unsigned int align;
-	      unsigned int ref_size;
 
 	      if (CONSTANT_POOL_ADDRESS_P (sym))
 		align = GET_MODE_ALIGNMENT (get_pool_mode (sym));
@@ -4924,12 +4962,12 @@ aarch64_classify_address (struct aarch64_address_info *info,
 	      else
 		align = BITS_PER_UNIT;
 
-	      ref_size = GET_MODE_SIZE (mode);
-	      if (ref_size == 0)
+	      poly_int64 ref_size = GET_MODE_SIZE (mode);
+	      if (must_eq (ref_size, 0))
 		ref_size = GET_MODE_SIZE (DImode);
 
-	      return ((INTVAL (offs) & (ref_size - 1)) == 0
-		      && ((align / BITS_PER_UNIT) & (ref_size - 1)) == 0);
+	      return (multiple_p (INTVAL (offs), ref_size)
+		      && multiple_p (align / BITS_PER_UNIT, ref_size));
 	    }
 	}
       return false;
@@ -5007,19 +5045,24 @@ aarch64_legitimate_address_p (machine_mode mode, rtx x, bool strict_p,
 static bool
 aarch64_legitimize_address_displacement (rtx *disp, rtx *off, machine_mode mode)
 {
-  HOST_WIDE_INT offset = INTVAL (*disp);
-  HOST_WIDE_INT base;
+  HOST_WIDE_INT size;
+  if (GET_MODE_SIZE (mode).is_constant (&size))
+    {
+      HOST_WIDE_INT offset = INTVAL (*disp);
+      HOST_WIDE_INT base;
 
-  if (mode == TImode || mode == TFmode)
-    base = (offset + 0x100) & ~0x1f8;
-  else if ((offset & (GET_MODE_SIZE (mode) - 1)) != 0)
-    base = (offset + 0x100) & ~0x1ff;
-  else
-    base = offset & ~(GET_MODE_SIZE (mode) < 4 ? 0xfff : 0x3ffc);
+      if (mode == TImode || mode == TFmode)
+	base = (offset + 0x100) & ~0x1f8;
+      else if ((offset & (size - 1)) != 0)
+	base = (offset + 0x100) & ~0x1ff;
+      else
+	base = offset & ~(size < 4 ? 0xfff : 0x3ffc);
 
-  *off = GEN_INT (base);
-  *disp = GEN_INT (offset - base);
-  return true;
+      *off = GEN_INT (base);
+      *disp = GEN_INT (offset - base);
+      return true;
+    }
+  return false;
 }
 
 /* Return the binary representation of floating point constant VALUE in INTVAL.
@@ -5870,6 +5913,7 @@ static void
 aarch64_print_operand_address (FILE *f, machine_mode mode, rtx x)
 {
   struct aarch64_address_info addr;
+  unsigned int size;
 
   if (aarch64_classify_address (&addr, x, mode, true))
     switch (addr.type)
@@ -5910,30 +5954,28 @@ aarch64_print_operand_address (FILE *f, machine_mode mode, rtx x)
 	return;
 
       case ADDRESS_REG_WB:
+	/* Writeback is only supported for fixed-width modes.  */
+	size = GET_MODE_SIZE (mode).to_constant ();
 	switch (GET_CODE (x))
 	  {
 	  case PRE_INC:
-	    asm_fprintf (f, "[%s, %d]!", reg_names [REGNO (addr.base)],
-			 GET_MODE_SIZE (mode));
+	    asm_fprintf (f, "[%s, %d]!", reg_names[REGNO (addr.base)], size);
 	    return;
 	  case POST_INC:
-	    asm_fprintf (f, "[%s], %d", reg_names [REGNO (addr.base)],
-			 GET_MODE_SIZE (mode));
+	    asm_fprintf (f, "[%s], %d", reg_names[REGNO (addr.base)], size);
 	    return;
 	  case PRE_DEC:
-	    asm_fprintf (f, "[%s, -%d]!", reg_names [REGNO (addr.base)],
-			 GET_MODE_SIZE (mode));
+	    asm_fprintf (f, "[%s, -%d]!", reg_names[REGNO (addr.base)], size);
 	    return;
 	  case POST_DEC:
-	    asm_fprintf (f, "[%s], -%d", reg_names [REGNO (addr.base)],
-			 GET_MODE_SIZE (mode));
+	    asm_fprintf (f, "[%s], -%d", reg_names[REGNO (addr.base)], size);
 	    return;
 	  case PRE_MODIFY:
-	    asm_fprintf (f, "[%s, %wd]!", reg_names [REGNO (addr.base)],
+	    asm_fprintf (f, "[%s, %wd]!", reg_names[REGNO (addr.base)],
 			 INTVAL (addr.offset));
 	    return;
 	  case POST_MODIFY:
-	    asm_fprintf (f, "[%s], %wd", reg_names [REGNO (addr.base)],
+	    asm_fprintf (f, "[%s], %wd", reg_names[REGNO (addr.base)],
 			 INTVAL (addr.offset));
 	    return;
 	  default:
@@ -6008,6 +6050,39 @@ aarch64_regno_regclass (unsigned regno)
   return NO_REGS;
 }
 
+/* OFFSET is an address offset for mode MODE, which has SIZE bytes.
+   If OFFSET is out of range, return an offset of an anchor point
+   that is in range.  Return 0 otherwise.  */
+
+static HOST_WIDE_INT
+aarch64_anchor_offset (HOST_WIDE_INT offset, HOST_WIDE_INT size,
+		       machine_mode mode)
+{
+  /* Does it look like we'll need a 16-byte load/store-pair operation?  */
+  if (size > 16)
+    return (offset + 0x400) & ~0x7f0;
+
+  /* For offsets that aren't a multiple of the access size, the limit is
+     -256...255.  */
+  if (offset & (size - 1))
+    {
+      /* BLKmode typically uses LDP of X-registers.  */
+      if (mode == BLKmode)
+	return (offset + 512) & ~0x3ff;
+      return (offset + 0x100) & ~0x1ff;
+    }
+
+  /* Small negative offsets are supported.  */
+  if (IN_RANGE (offset, -256, 0))
+    return 0;
+
+  if (mode == TImode || mode == TFmode)
+    return (offset + 0x100) & ~0x1ff;
+
+  /* Use 12-bit offset by access size.  */
+  return offset & (~0xfff * size);
+}
+
 static rtx
 aarch64_legitimize_address (rtx x, rtx /* orig_x  */, machine_mode mode)
 {
@@ -6057,34 +6132,17 @@ aarch64_legitimize_address (rtx x, rtx /* orig_x  */, machine_mode mode)
 	  x = gen_rtx_PLUS (Pmode, base, offset_rtx);
 	}
 
-      /* Does it look like we'll need a 16-byte load/store-pair operation?  */
-      HOST_WIDE_INT base_offset;
-      if (GET_MODE_SIZE (mode) > 16)
-	base_offset = (offset + 0x400) & ~0x7f0;
-      /* For offsets aren't a multiple of the access size, the limit is
-	 -256...255.  */
-      else if (offset & (GET_MODE_SIZE (mode) - 1))
+      HOST_WIDE_INT size;
+      if (GET_MODE_SIZE (mode).is_constant (&size))
 	{
-	  base_offset = (offset + 0x100) & ~0x1ff;
-
-	  /* BLKmode typically uses LDP of X-registers.  */
-	  if (mode == BLKmode)
-	    base_offset = (offset + 512) & ~0x3ff;
-	}
-      /* Small negative offsets are supported.  */
-      else if (IN_RANGE (offset, -256, 0))
-	base_offset = 0;
-      else if (mode == TImode || mode == TFmode)
-	base_offset = (offset + 0x100) & ~0x1ff;
-      /* Use 12-bit offset by access size.  */
-      else
-	base_offset = offset & (~0xfff * GET_MODE_SIZE (mode));
-
-      if (base_offset != 0)
-	{
-	  base = plus_constant (Pmode, base, base_offset);
-	  base = force_operand (base, NULL_RTX);
-	  return plus_constant (Pmode, base, offset - base_offset);
+	  HOST_WIDE_INT base_offset = aarch64_anchor_offset (offset, size,
+							     mode);
+	  if (base_offset != 0)
+	    {
+	      base = plus_constant (Pmode, base, base_offset);
+	      base = force_operand (base, NULL_RTX);
+	      return plus_constant (Pmode, base, offset - base_offset);
+	    }
 	}
     }
 
@@ -6171,7 +6229,7 @@ aarch64_secondary_reload (bool in_p ATTRIBUTE_UNUSED, rtx x,
      because AArch64 has richer addressing modes for LDR/STR instructions
      than LDP/STP instructions.  */
   if (TARGET_FLOAT && rclass == GENERAL_REGS
-      && GET_MODE_SIZE (mode) == 16 && MEM_P (x))
+      && must_eq (GET_MODE_SIZE (mode), 16) && MEM_P (x))
     return FP_REGS;
 
   if (rclass == FP_REGS && (mode == TImode || mode == TFmode) && CONSTANT_P(x))
@@ -6215,7 +6273,7 @@ aarch64_can_eliminate (const int from, const int to)
   return true;
 }
 
-HOST_WIDE_INT
+poly_int64
 aarch64_initial_elimination_offset (unsigned from, unsigned to)
 {
   aarch64_layout_frame ();
@@ -6301,6 +6359,11 @@ aarch64_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
 static unsigned char
 aarch64_class_max_nregs (reg_class_t regclass, machine_mode mode)
 {
+  /* ??? Logically we should only need to provide a value when
+     HARD_REGNO_MODE_OK says that at least one register in REGCLASS
+     can hold MODE, but at the moment we need to handle all modes.
+     Just ignore any runtime parts for registers that can't store them.  */
+  HOST_WIDE_INT lowest_size = constant_lower_bound (GET_MODE_SIZE (mode));
   switch (regclass)
     {
     case CALLER_SAVE_REGS:
@@ -6310,10 +6373,9 @@ aarch64_class_max_nregs (reg_class_t regclass, machine_mode mode)
     case POINTER_AND_FP_REGS:
     case FP_REGS:
     case FP_LO_REGS:
-      return
-	aarch64_vector_mode_p (mode)
-	  ? (GET_MODE_SIZE (mode) + UNITS_PER_VREG - 1) / UNITS_PER_VREG
-	  : (GET_MODE_SIZE (mode) + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
+      return (aarch64_vector_mode_p (mode)
+	      ? CEIL (lowest_size, UNITS_PER_VREG)
+	      : CEIL (lowest_size, UNITS_PER_WORD));
     case STACK_REG:
       return 1;
 
@@ -6864,25 +6926,15 @@ aarch64_address_cost (rtx x,
     {
       /* For the sake of calculating the cost of the shifted register
 	 component, we can treat same sized modes in the same way.  */
-      switch (GET_MODE_BITSIZE (mode))
-	{
-	  case 16:
-	    cost += addr_cost->addr_scale_costs.hi;
-	    break;
-
-	  case 32:
-	    cost += addr_cost->addr_scale_costs.si;
-	    break;
-
-	  case 64:
-	    cost += addr_cost->addr_scale_costs.di;
-	    break;
-
-	  /* We can't tell, or this is a 128-bit vector.  */
-	  default:
-	    cost += addr_cost->addr_scale_costs.ti;
-	    break;
-	}
+      if (must_eq (GET_MODE_BITSIZE (mode), 16))
+	cost += addr_cost->addr_scale_costs.hi;
+      else if (must_eq (GET_MODE_BITSIZE (mode), 32))
+	cost += addr_cost->addr_scale_costs.si;
+      else if (must_eq (GET_MODE_BITSIZE (mode), 64))
+	cost += addr_cost->addr_scale_costs.di;
+      else
+	/* We can't tell, or this is a 128-bit vector.  */
+	cost += addr_cost->addr_scale_costs.ti;
     }
 
   return cost;
@@ -8011,7 +8063,8 @@ cost_plus:
 
 	      if (GET_CODE (op1) == AND && REG_P (XEXP (op1, 0))
 		  && CONST_INT_P (XEXP (op1, 1))
-		  && INTVAL (XEXP (op1, 1)) == GET_MODE_BITSIZE (mode) - 1)
+		  && must_eq (INTVAL (XEXP (op1, 1)),
+			      GET_MODE_BITSIZE (mode) - 1))
 		{
 		  *cost += rtx_cost (op0, mode, (rtx_code) code, 0, speed);
 		  /* We already demanded XEXP (op1, 0) to be REG_P, so
@@ -8059,7 +8112,8 @@ cost_plus:
 
 	      if (GET_CODE (op1) == AND && REG_P (XEXP (op1, 0))
 		  && CONST_INT_P (XEXP (op1, 1))
-		  && INTVAL (XEXP (op1, 1)) == GET_MODE_BITSIZE (mode) - 1)
+		  && must_eq (INTVAL (XEXP (op1, 1)),
+			      GET_MODE_BITSIZE (mode) - 1))
 		{
 		  *cost += rtx_cost (op0, mode, (rtx_code) code, 0, speed);
 		  /* We already demanded XEXP (op1, 0) to be REG_P, so
@@ -8485,7 +8539,7 @@ aarch64_register_move_cost (machine_mode mode,
     return aarch64_register_move_cost (mode, from, GENERAL_REGS)
             + aarch64_register_move_cost (mode, GENERAL_REGS, to);
 
-  if (GET_MODE_SIZE (mode) == 16)
+  if (must_eq (GET_MODE_SIZE (mode), 16))
     {
       /* 128-bit operations on general registers require 2 instructions.  */
       if (from == GENERAL_REGS && to == GENERAL_REGS)
@@ -8858,7 +8912,7 @@ aarch64_builtin_vectorization_cost (enum vect_cost_for_stmt type_of_cost,
 	return fp ? costs->vec_fp_stmt_cost : costs->vec_int_stmt_cost;
 
       case vec_construct:
-        elements = TYPE_VECTOR_SUBPARTS (vectype);
+	elements = estimated_poly_value (TYPE_VECTOR_SUBPARTS (vectype));
 	return elements / 2 + 1;
 
       default:
@@ -10903,6 +10957,10 @@ aarch64_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
 					       &nregs,
 					       &is_ha))
     {
+      /* No frontends can create types with variable-sized modes, so we
+	 shouldn't be asked to pass or return them.  */
+      unsigned int ag_size = GET_MODE_SIZE (ag_mode).to_constant ();
+
       /* TYPE passed in fp/simd registers.  */
       if (!TARGET_FLOAT)
 	aarch64_err_no_fpadvsimd (mode, "varargs");
@@ -10916,8 +10974,8 @@ aarch64_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
 
       if (is_ha)
 	{
-	  if (BYTES_BIG_ENDIAN && GET_MODE_SIZE (ag_mode) < UNITS_PER_VREG)
-	    adjust = UNITS_PER_VREG - GET_MODE_SIZE (ag_mode);
+	  if (BYTES_BIG_ENDIAN && ag_size < UNITS_PER_VREG)
+	    adjust = UNITS_PER_VREG - ag_size;
 	}
       else if (BLOCK_REG_PADDING (mode, type, 1) == PAD_DOWNWARD
 	       && size < UNITS_PER_VREG)
@@ -11305,8 +11363,8 @@ aapcs_vfp_sub_candidate (const_tree type, machine_mode *modep)
 		      - tree_to_uhwi (TYPE_MIN_VALUE (index)));
 
 	/* There must be no padding.  */
-	if (wi::to_wide (TYPE_SIZE (type))
-	    != count * GET_MODE_BITSIZE (*modep))
+	if (may_ne (wi::to_poly_wide (TYPE_SIZE (type)),
+		    count * GET_MODE_BITSIZE (*modep)))
 	  return -1;
 
 	return count;
@@ -11336,8 +11394,8 @@ aapcs_vfp_sub_candidate (const_tree type, machine_mode *modep)
 	  }
 
 	/* There must be no padding.  */
-	if (wi::to_wide (TYPE_SIZE (type))
-	    != count * GET_MODE_BITSIZE (*modep))
+	if (may_ne (wi::to_poly_wide (TYPE_SIZE (type)),
+		    count * GET_MODE_BITSIZE (*modep)))
 	  return -1;
 
 	return count;
@@ -11369,8 +11427,8 @@ aapcs_vfp_sub_candidate (const_tree type, machine_mode *modep)
 	  }
 
 	/* There must be no padding.  */
-	if (wi::to_wide (TYPE_SIZE (type))
-	    != count * GET_MODE_BITSIZE (*modep))
+	if (may_ne (wi::to_poly_wide (TYPE_SIZE (type)),
+		    count * GET_MODE_BITSIZE (*modep)))
 	  return -1;
 
 	return count;
@@ -11392,7 +11450,7 @@ static bool
 aarch64_short_vector_p (const_tree type,
 			machine_mode mode)
 {
-  HOST_WIDE_INT size = -1;
+  poly_int64 size = -1;
 
   if (type && TREE_CODE (type) == VECTOR_TYPE)
     size = int_size_in_bytes (type);
@@ -11400,7 +11458,7 @@ aarch64_short_vector_p (const_tree type,
 	    || GET_MODE_CLASS (mode) == MODE_VECTOR_FLOAT)
     size = GET_MODE_SIZE (mode);
 
-  return (size == 8 || size == 16);
+  return must_eq (size, 8) || must_eq (size, 16);
 }
 
 /* Return TRUE if the type, as described by TYPE and MODE, is a composite
@@ -12042,11 +12100,11 @@ bool
 aarch64_simd_check_vect_par_cnst_half (rtx op, machine_mode mode,
 				       bool high)
 {
-  if (!VECTOR_MODE_P (mode))
+  int nelts;
+  if (!VECTOR_MODE_P (mode) || !GET_MODE_NUNITS (mode).is_constant (&nelts))
     return false;
 
-  rtx ideal = aarch64_simd_vect_par_cnst_half (mode, GET_MODE_NUNITS (mode),
-					       high);
+  rtx ideal = aarch64_simd_vect_par_cnst_half (mode, nelts, high);
   HOST_WIDE_INT count_op = XVECLEN (op, 0);
   HOST_WIDE_INT count_ideal = XVECLEN (ideal, 0);
   int i = 0;
@@ -12131,7 +12189,8 @@ aarch64_simd_emit_reg_reg_move (rtx *operands, machine_mode mode,
 int
 aarch64_simd_attr_length_rglist (machine_mode mode)
 {
-  return (GET_MODE_SIZE (mode) / UNITS_PER_VREG) * 4;
+  /* This is only used (and only meaningful) for Advanced SIMD, not SVE.  */
+  return (GET_MODE_SIZE (mode).to_constant () / UNITS_PER_VREG) * 4;
 }
 
 /* Implement target hook TARGET_VECTOR_ALIGNMENT.  The AAPCS64 sets the maximum
@@ -12211,7 +12270,6 @@ aarch64_simd_make_constant (rtx vals)
   machine_mode mode = GET_MODE (vals);
   rtx const_dup;
   rtx const_vec = NULL_RTX;
-  int n_elts = GET_MODE_NUNITS (mode);
   int n_const = 0;
   int i;
 
@@ -12222,6 +12280,7 @@ aarch64_simd_make_constant (rtx vals)
       /* A CONST_VECTOR must contain only CONST_INTs and
 	 CONST_DOUBLEs, but CONSTANT_P allows more (e.g. SYMBOL_REF).
 	 Only store valid constants in a CONST_VECTOR.  */
+      int n_elts = XVECLEN (vals, 0);
       for (i = 0; i < n_elts; ++i)
 	{
 	  rtx x = XVECEXP (vals, 0, i);
@@ -12260,7 +12319,7 @@ aarch64_expand_vector_init (rtx target, rtx vals)
   machine_mode mode = GET_MODE (target);
   scalar_mode inner_mode = GET_MODE_INNER (mode);
   /* The number of vector elements.  */
-  int n_elts = GET_MODE_NUNITS (mode);
+  int n_elts = XVECLEN (vals, 0);
   /* The number of vector elements which are not constant.  */
   int n_var = 0;
   rtx any_const = NULL_RTX;
@@ -12400,7 +12459,9 @@ aarch64_shift_truncation_mask (machine_mode mode)
   return
     (!SHIFT_COUNT_TRUNCATED
      || aarch64_vector_mode_supported_p (mode)
-     || aarch64_vect_struct_mode_p (mode)) ? 0 : (GET_MODE_BITSIZE (mode) - 1);
+     || aarch64_vect_struct_mode_p (mode))
+    ? 0
+    : (GET_MODE_UNIT_BITSIZE (mode) - 1);
 }
 
 /* Select a format to encode pointers in exception handling data.  */
@@ -13801,15 +13862,13 @@ aarch64_evpc_tbl (struct expand_vec_perm_d *d)
     return false;
 
   for (i = 0; i < nelt; ++i)
-    {
-      int nunits = GET_MODE_NUNITS (vmode);
+    /* If big-endian and two vectors we end up with a weird mixed-endian
+       mode on NEON.  Reverse the index within each word but not the word
+       itself.  */
+    rperm[i] = GEN_INT (BYTES_BIG_ENDIAN
+			? d->perm[i] ^ (nelt - 1)
+			: d->perm[i]);
 
-      /* If big-endian and two vectors we end up with a weird mixed-endian
-	 mode on NEON.  Reverse the index within each word but not the word
-	 itself.  */
-      rperm[i] = GEN_INT (BYTES_BIG_ENDIAN ? d->perm[i] ^ (nunits - 1)
-					   : d->perm[i]);
-    }
   sel = gen_rtx_CONST_VECTOR (vmode, gen_rtvec_v (nelt, rperm));
   sel = force_reg (vmode, sel);
 
@@ -14006,7 +14065,7 @@ aarch64_modes_tieable_p (machine_mode mode1, machine_mode mode2)
    AMOUNT bytes.  */
 
 static rtx
-aarch64_move_pointer (rtx pointer, int amount)
+aarch64_move_pointer (rtx pointer, poly_int64 amount)
 {
   rtx next = plus_constant (Pmode, XEXP (pointer, 0), amount);
 
@@ -14020,9 +14079,7 @@ aarch64_move_pointer (rtx pointer, int amount)
 static rtx
 aarch64_progress_pointer (rtx pointer)
 {
-  HOST_WIDE_INT amount = GET_MODE_SIZE (GET_MODE (pointer));
-
-  return aarch64_move_pointer (pointer, amount);
+  return aarch64_move_pointer (pointer, GET_MODE_SIZE (GET_MODE (pointer)));
 }
 
 /* Copy one MODE sized block from SRC to DST, then progress SRC and DST by
@@ -14849,7 +14906,9 @@ aarch64_operands_ok_for_ldpstp (rtx *operands, bool load,
 
   offval_1 = INTVAL (offset_1);
   offval_2 = INTVAL (offset_2);
-  msize = GET_MODE_SIZE (mode);
+  /* We should only be trying this for fixed-sized modes.  There is no
+     SVE LDP/STP instruction.  */
+  msize = GET_MODE_SIZE (mode).to_constant ();
   /* Check if the offsets are consecutive.  */
   if (offval_1 != (offval_2 + msize) && offval_2 != (offval_1 + msize))
     return false;
