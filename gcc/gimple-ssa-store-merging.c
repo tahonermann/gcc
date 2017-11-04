@@ -1986,25 +1986,28 @@ mem_valid_for_store_merging (tree mem, unsigned HOST_WIDE_INT *pbitsize,
 			     unsigned HOST_WIDE_INT *pbitregion_start,
 			     unsigned HOST_WIDE_INT *pbitregion_end)
 {
-  HOST_WIDE_INT bitsize;
-  HOST_WIDE_INT bitpos;
-  unsigned HOST_WIDE_INT bitregion_start = 0;
-  unsigned HOST_WIDE_INT bitregion_end = 0;
+  poly_int64 var_bitsize, var_bitpos;
+  poly_uint64 var_bitregion_start = 0, var_bitregion_end = 0;
   machine_mode mode;
   int unsignedp = 0, reversep = 0, volatilep = 0;
   tree offset;
-  tree base_addr = get_inner_reference (mem, &bitsize, &bitpos, &offset, &mode,
-					&unsignedp, &reversep, &volatilep);
-  *pbitsize = bitsize;
-  if (bitsize == 0)
-    return NULL_TREE;
+  tree base_addr = get_inner_reference (mem, &var_bitsize, &var_bitpos,
+					&offset, &mode, &unsignedp, &reversep,
+					&volatilep);
+  if (must_eq (var_bitsize, 0))
+    {
+      *pbitsize = 0;
+      return NULL_TREE;
+    }
 
+  *pbitsize = -1;
   if (TREE_CODE (mem) == COMPONENT_REF
       && DECL_BIT_FIELD_TYPE (TREE_OPERAND (mem, 1)))
     {
-      get_bit_range (&bitregion_start, &bitregion_end, mem, &bitpos, &offset);
-      if (bitregion_end)
-	++bitregion_end;
+      get_bit_range (&var_bitregion_start, &var_bitregion_end, mem,
+		     &var_bitpos, &offset);
+      if (may_ne (var_bitregion_end, 0U))
+	var_bitregion_end += 1;
     }
 
   if (reversep)
@@ -2020,28 +2023,24 @@ mem_valid_for_store_merging (tree mem, unsigned HOST_WIDE_INT *pbitsize,
      PR 23684 and this way we can catch more chains.  */
   else if (TREE_CODE (base_addr) == MEM_REF)
     {
-      offset_int bit_off, byte_off = mem_ref_offset (base_addr);
-      bit_off = byte_off << LOG2_BITS_PER_UNIT;
-      bit_off += bitpos;
-      if (!wi::neg_p (bit_off) && wi::fits_shwi_p (bit_off))
+      poly_offset_int byte_off = mem_ref_offset (base_addr);
+      poly_offset_int bit_off = byte_off << LOG2_BITS_PER_UNIT;
+      bit_off += var_bitpos;
+      if (bit_off.to_shwi (&var_bitpos))
 	{
-	  bitpos = bit_off.to_shwi ();
-	  if (bitregion_end)
+	  if (may_ne (var_bitregion_end, 0U))
 	    {
 	      bit_off = byte_off << LOG2_BITS_PER_UNIT;
-	      bit_off += bitregion_start;
-	      if (wi::fits_uhwi_p (bit_off))
+	      bit_off += var_bitregion_start;
+	      if (bit_off.to_uhwi (&var_bitregion_start))
 		{
-		  bitregion_start = bit_off.to_uhwi ();
 		  bit_off = byte_off << LOG2_BITS_PER_UNIT;
-		  bit_off += bitregion_end;
-		  if (wi::fits_uhwi_p (bit_off))
-		    bitregion_end = bit_off.to_uhwi ();
-		  else
-		    bitregion_end = 0;
+		  bit_off += var_bitregion_end;
+		  if (!bit_off.to_uhwi (&var_bitregion_end))
+		    var_bitregion_end = 0;
 		}
 	      else
-		bitregion_end = 0;
+		var_bitregion_end = 0;
 	    }
 	}
       else
@@ -2052,10 +2051,20 @@ mem_valid_for_store_merging (tree mem, unsigned HOST_WIDE_INT *pbitsize,
      address now.  */
   else
     {
-      if (bitpos < 0)
+      if (may_lt (var_bitpos, 0))
 	return NULL_TREE;
       base_addr = build_fold_addr_expr (base_addr);
     }
+
+  HOST_WIDE_INT bitsize, bitpos;
+  if (!var_bitsize.is_constant (&bitsize)
+      || !var_bitpos.is_constant (&bitpos))
+    return NULL_TREE;
+
+  unsigned HOST_WIDE_INT bitregion_start, bitregion_end;
+  if (!var_bitregion_start.is_constant (&bitregion_start)
+      || !var_bitregion_end.is_constant (&bitregion_end))
+    return NULL_TREE;
 
   if (!bitregion_end)
     {
