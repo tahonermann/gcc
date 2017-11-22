@@ -178,6 +178,9 @@ enum rid
   /* C++11 */
   RID_CONSTEXPR, RID_DECLTYPE, RID_NOEXCEPT, RID_NULLPTR, RID_STATIC_ASSERT,
 
+  /* char8_t */
+  RID_CHAR8,
+
   /* C++ concepts */
   RID_CONCEPT, RID_REQUIRES,
 
@@ -422,8 +425,10 @@ extern machine_mode c_default_pointer_mode;
 #define D_CXXWARN	0x0200	/* In C warn with -Wcxx-compat.  */
 #define D_CXX_CONCEPTS  0x0400	/* In C++, only with concepts.  */
 #define D_TRANSMEM	0X0800	/* C++ transactional memory TS.  */
+#define D_CXX_CHAR8_T	0X1000	/* In C++, only with -fchar8_t.  */
 
 #define D_CXX_CONCEPTS_FLAGS D_CXXONLY | D_CXX_CONCEPTS
+#define D_CXX_CHAR8_T_FLAGS D_CXXONLY | D_CXX_CHAR8_T
 
 /* The reserved keyword table.  */
 extern const struct c_common_resword c_common_reswords[];

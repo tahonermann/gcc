@@ -448,6 +448,7 @@ const struct c_common_resword c_common_reswords[] =
   { "case",		RID_CASE,	0 },
   { "catch",		RID_CATCH,	D_CXX_OBJC | D_CXXWARN },
   { "char",		RID_CHAR,	0 },
+  { "char8_t",		RID_CHAR8,	D_CXX_CHAR8_T_FLAGS | D_CXXWARN },
   { "char16_t",		RID_CHAR16,	D_CXXONLY | D_CXX11 | D_CXXWARN },
   { "char32_t",		RID_CHAR32,	D_CXXONLY | D_CXX11 | D_CXXWARN },
   { "class",		RID_CLASS,	D_CXX_OBJC | D_CXXWARN },

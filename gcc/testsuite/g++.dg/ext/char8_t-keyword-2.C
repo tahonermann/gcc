@@ -3,6 +3,4 @@
 // { dg-options "-fchar8_t" }
 
 int char8_t; /* { dg-error "multiple types in one declaration|declaration does not declare anything" "char8_t" { xfail *-*-* } } */
-
-// FIXME: Add support for -fchar8_t.
-// { dg-bogus "unrecognized command line option .-fchar8_t." "char8_t" { xfail *-*-* } 0 }
+/* { dg-bogus "expected unqualified-id before .char8_t." "char8_t" { xfail *-*-* } 5 } */
