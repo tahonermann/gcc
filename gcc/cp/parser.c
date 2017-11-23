@@ -963,6 +963,7 @@ cp_keyword_starts_decl_specifier_p (enum rid keyword)
     case RID_TYPENAME:
       /* Simple type specifiers.  */
     case RID_CHAR:
+    case RID_CHAR8:
     case RID_CHAR16:
     case RID_CHAR32:
     case RID_WCHAR:
@@ -16976,6 +16977,9 @@ cp_parser_simple_type_specifier (cp_parser* parser,
 	decl_specs->explicit_char_p = true;
       type = char_type_node;
       break;
+    case RID_CHAR8:
+      type = char8_type_node;
+      break;
     case RID_CHAR16:
       type = char16_type_node;
       break;
@@ -28149,14 +28153,15 @@ cp_parser_set_decl_spec_type (cp_decl_specifier_seq *decl_specs,
 {
   decl_specs->any_specifiers_p = true;
 
-  /* If the user tries to redeclare bool, char16_t, char32_t, or wchar_t
-     (with, for example, in "typedef int wchar_t;") we remember that
+  /* If the user tries to redeclare bool, char8_t, char16_t, char32_t, or
+     wchar_t (with, for example, in "typedef int wchar_t;") we remember that
      this is what happened.  In system headers, we ignore these
      declarations so that G++ can work with system headers that are not
      C++-safe.  */
   if (decl_spec_seq_has_spec_p (decl_specs, ds_typedef)
       && !type_definition_p
       && (type_spec == boolean_type_node
+	  || type_spec == char8_type_node
 	  || type_spec == char16_type_node
 	  || type_spec == char32_type_node
 	  || type_spec == wchar_type_node)

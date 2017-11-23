@@ -2,5 +2,4 @@
 // { dg-do compile }
 // { dg-options "-fchar8_t" }
 
-char8_t c8; /* { dg-bogus ".char8_t. does not name a type" } */
-/* { dg-bogus "expected unqualified-id before .char8_t." "char8_t" { xfail *-*-* } 5 } */
+char8_t c8;

@@ -3615,6 +3615,7 @@ char_type_p (tree type)
   return (type == char_type_node
 	  || type == unsigned_char_type_node
 	  || type == signed_char_type_node
+	  || type == char8_type_node
 	  || type == char16_type_node
 	  || type == char32_type_node);
 }

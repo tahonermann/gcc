@@ -2275,6 +2275,16 @@ CXXABI_1.3.11 {
 
 } CXXABI_1.3.10;
 
+CXXABI_1.3.12 {
+
+    # FIXME: Acquire official mangling for char8_t.
+    # typeinfo for char8_t
+    _ZTIu7char8_t;
+    _ZTIPu7char8_t;
+    _ZTIPKu7char8_t;
+
+} CXXABI_1.3.11;
+
 # Symbols in the support library (libsupc++) supporting transactional memory.
 CXXABI_TM_1 {
 

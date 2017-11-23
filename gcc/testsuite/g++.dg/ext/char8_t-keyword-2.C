@@ -2,5 +2,4 @@
 // { dg-do compile }
 // { dg-options "-fchar8_t" }
 
-int char8_t; /* { dg-error "multiple types in one declaration|declaration does not declare anything" "char8_t" { xfail *-*-* } } */
-/* { dg-bogus "expected unqualified-id before .char8_t." "char8_t" { xfail *-*-* } 5 } */
+int char8_t; /* { dg-error "multiple types in one declaration|declaration does not declare anything" "char8_t" } */

@@ -78,6 +78,7 @@ machine_mode c_default_pointer_mode = VOIDmode;
 	tree signed_char_type_node;
 	tree wchar_type_node;
 
+	tree char8_type_node;
 	tree char16_type_node;
 	tree char32_type_node;
 
@@ -126,6 +127,11 @@ machine_mode c_default_pointer_mode = VOIDmode;
    Used when a wide string literal is created.
 
 	tree wchar_array_type_node;
+
+   Type `char8_t[SOMENUMBER]' or something like it.
+   Used when a UTF-8 string literal is created.
+
+	tree char8_array_type_node;
 
    Type `char16_t[SOMENUMBER]' or something like it.
    Used when a UTF-16 string literal is created.
@@ -745,6 +751,11 @@ fix_string_type (tree value)
       nchars = length;
       e_type = char_type_node;
     }
+  else if (TREE_TYPE (value) == char8_array_type_node)
+    {
+      nchars = length / (TYPE_PRECISION (char8_type_node) / BITS_PER_UNIT);
+      e_type = char8_type_node;
+    }
   else if (TREE_TYPE (value) == char16_array_type_node)
     {
       nchars = length / (TYPE_PRECISION (char16_type_node) / BITS_PER_UNIT);
@@ -812,7 +823,8 @@ fix_string_type (tree value)
    CPP_STRING16, or CPP_STRING32.  Return CPP_OTHER in case of error.
    This may not be exactly the string token type that initially created
    the string, since CPP_WSTRING is indistinguishable from the 16/32 bit
-   string type at this point.
+   string type, and CPP_UTF8STRING is indistinguishable from CPP_STRING
+   at this point.
 
    This effectively reverses part of the logic in lex_string and
    fix_string_type.  */
@@ -3957,6 +3969,7 @@ c_get_ident (const char *id)
 void
 c_common_nodes_and_builtins (void)
 {
+  int char8_type_size;
   int char16_type_size;
   int char32_type_size;
   int wchar_type_size;
@@ -4247,6 +4260,22 @@ c_common_nodes_and_builtins (void)
   /* This is for wide string constants.  */
   wchar_array_type_node
     = build_array_type (wchar_type_node, array_domain_type);
+
+  /* Define 'char8_t'.  */
+  char8_type_node = get_identifier (CHAR8_TYPE);
+  char8_type_node = TREE_TYPE (identifier_global_value (char8_type_node));
+  char8_type_size = TYPE_PRECISION (char8_type_node);
+  if (c_dialect_cxx () && flag_char8_t)
+    {
+      char8_type_node = make_unsigned_type (char8_type_size);
+
+      if (flag_char8_t)
+        record_builtin_type (RID_CHAR8, "char8_t", char8_type_node);
+    }
+
+  /* This is for UTF-8 string constants.  */
+  char8_array_type_node
+    = build_array_type (char8_type_node, array_domain_type);
 
   /* Define 'char16_t'.  */
   char16_type_node = get_identifier (CHAR16_TYPE);
@@ -7465,6 +7494,7 @@ keyword_begins_type_specifier (enum rid keyword)
     case RID_ACCUM:
     case RID_BOOL:
     case RID_WCHAR:
+    case RID_CHAR8:
     case RID_CHAR16:
     case RID_CHAR32:
     case RID_SAT:
