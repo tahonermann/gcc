@@ -7316,10 +7316,11 @@ digest_init (location_t init_loc, tree type, tree init, tree origtype,
 			 || typ1 == signed_char_type_node
 			 || typ1 == unsigned_char_type_node);
       bool wchar_array = !!comptypes (typ1, wchar_type_node);
+      bool char8_array = !!comptypes (typ1, char8_type_node);
       bool char16_array = !!comptypes (typ1, char16_type_node);
       bool char32_array = !!comptypes (typ1, char32_type_node);
 
-      if (char_array || wchar_array || char16_array || char32_array)
+      if (char_array || wchar_array || char8_array || char16_array || char32_array)
 	{
 	  struct c_expr expr;
 	  tree typ2 = TYPE_MAIN_VARIANT (TREE_TYPE (TREE_TYPE (inside_init)));

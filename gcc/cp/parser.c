@@ -4160,8 +4160,13 @@ cp_parser_string_literal (cp_parser *parser, bool translate, bool wide_ok,
 	{
 	default:
 	case CPP_STRING:
-	case CPP_UTF8STRING:
 	  TREE_TYPE (value) = char_array_type_node;
+	  break;
+	case CPP_UTF8STRING:
+	  if (flag_char8_t)
+	    TREE_TYPE (value) = char8_array_type_node;
+	  else
+	    TREE_TYPE (value) = char_array_type_node;
 	  break;
 	case CPP_STRING16:
 	  TREE_TYPE (value) = char16_array_type_node;

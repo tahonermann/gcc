@@ -9,4 +9,4 @@ template<typename T>
   struct is_same<T, T>
   { static const bool value = true; };
 
-static_assert(is_same<decltype(u8""), const char8_t(&)[1]>::value, "Error"); // { dg-bogus "static assertion failed: Error" "char8_t" { xfail *-*-* } }
+static_assert(is_same<decltype(u8""), const char8_t(&)[1]>::value, "Error");
