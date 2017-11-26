@@ -1042,7 +1042,8 @@ digest_init_r (tree type, tree init, bool nested, int flags,
 	{
 	  tree char_type = TYPE_MAIN_VARIANT (TREE_TYPE (TREE_TYPE (init)));
 
-	  if (TYPE_PRECISION (typ1) == BITS_PER_UNIT)
+	  if (TYPE_PRECISION (typ1) == BITS_PER_UNIT
+	      && (typ1 == char_type_node || !flag_char8_t))
 	    {
 	      if (char_type != char_type_node)
 		{
