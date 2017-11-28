@@ -4,5 +4,5 @@
 
 extern long l;
 char8_t* f() {
-  return (char8_t*)&l; // { dg-warning "dereferencing type-punned pointer might break strict-aliasing rules" "char8_t" { xfail *-*-* } }
+  return (char8_t*)&l; // { dg-warning "dereferencing type-punned pointer might break strict-aliasing rules" "char8_t" }
 }
