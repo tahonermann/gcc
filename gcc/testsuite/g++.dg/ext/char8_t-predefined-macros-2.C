@@ -8,5 +8,5 @@
 #endif
 
 #if !defined(__GCC_ATOMIC_CHAR8_T_LOCK_FREE)
-#error __GCC_ATOMIC_CHAR8_T_LOCK_FREE is not defined! // { dg-bogus "#error __GCC_ATOMIC_CHAR8_T_LOCK_FREE is not defined!" "char8_t" { xfail *-*-* } }
+#error __GCC_ATOMIC_CHAR8_T_LOCK_FREE is not defined!
 #endif

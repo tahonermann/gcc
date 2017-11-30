@@ -703,6 +703,11 @@ cpp_atomic_builtins (cpp_reader *pfile)
 			(have_swap[SWAP_INDEX (boolean_type_node)]? 2 : 1));
   builtin_define_with_int_value ("__GCC_ATOMIC_CHAR_LOCK_FREE", 
 			(have_swap[SWAP_INDEX (signed_char_type_node)]? 2 : 1));
+  if (flag_char8_t)
+    {
+      builtin_define_with_int_value ("__GCC_ATOMIC_CHAR8_T_LOCK_FREE",
+			(have_swap[SWAP_INDEX (char8_type_node)]? 2 : 1));
+    }
   builtin_define_with_int_value ("__GCC_ATOMIC_CHAR16_T_LOCK_FREE", 
 			(have_swap[SWAP_INDEX (char16_type_node)]? 2 : 1));
   builtin_define_with_int_value ("__GCC_ATOMIC_CHAR32_T_LOCK_FREE", 
