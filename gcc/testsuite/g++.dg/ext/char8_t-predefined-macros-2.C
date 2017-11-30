@@ -4,5 +4,5 @@
 // { dg-options "-fchar8_t" }
 
 #if !defined(__CHAR8_TYPE__)
-#error __CHAR8_TYPE__ is not defined! // { dg-bogus "#error __CHAR8_TYPE__ is not defined!" "char8_t" { xfail *-*-* } }
+#error __CHAR8_TYPE__ is not defined!
 #endif
