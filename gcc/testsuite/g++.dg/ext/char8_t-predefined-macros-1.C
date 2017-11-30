@@ -6,3 +6,7 @@
 #if defined(__CHAR8_TYPE__)
 #error __CHAR8_TYPE__ is defined!
 #endif
+
+#if defined(__GCC_ATOMIC_CHAR8_T_LOCK_FREE)
+#error __GCC_ATOMIC_CHAR8_T_LOCK_FREE is defined!
+#endif
