@@ -1,4 +1,5 @@
 // { dg-do compile { target c++11 } }
+// { dg-options "-fchar8_t" }
 
 // Copyright (C) 2008-2017 Free Software Foundation, Inc.
 //
@@ -45,6 +46,7 @@ void test01()
   using std::atomic_llong;
   using std::atomic_ullong;
   using std::atomic_wchar_t;
+  using std::atomic_char8_t;
   using std::atomic_char16_t;
   using std::atomic_char32_t;
 
