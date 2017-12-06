@@ -374,6 +374,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // Now there follow 16 explicit specializations.  Yes, 16.  Make sure
   // you get the count right. (18 in C++11 mode, with char16_t and char32_t.)
+  // (+1 if char8_t is enabled.)
 
   // _GLIBCXX_RESOLVE_LIB_DEFECTS
   // 184. numeric_limits<bool> wording problems
@@ -724,6 +725,69 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       static _GLIBCXX_USE_CONSTEXPR float_round_style round_style
        = round_toward_zero;
     };
+
+#if _GLIBCXX_USE_CHAR8_T
+  /// numeric_limits<char8_t> specialization.
+  template<>
+    struct numeric_limits<char8_t>
+    {
+      static constexpr bool is_specialized = true;
+
+      static constexpr char8_t
+      min() noexcept { return __glibcxx_min (char8_t); }
+
+      static constexpr char8_t
+      max() noexcept { return __glibcxx_max (char8_t); }
+
+      static constexpr char8_t
+      lowest() noexcept { return min(); }
+
+      static constexpr int digits = __glibcxx_digits (char8_t);
+      static constexpr int digits10 = __glibcxx_digits10 (char8_t);
+      static constexpr int max_digits10 = 0;
+      static constexpr bool is_signed = __glibcxx_signed (char8_t);
+      static constexpr bool is_integer = true;
+      static constexpr bool is_exact = true;
+      static constexpr int radix = 2;
+
+      static constexpr char8_t
+      epsilon() noexcept { return 0; }
+
+      static constexpr char8_t
+      round_error() noexcept { return 0; }
+
+      static constexpr int min_exponent = 0;
+      static constexpr int min_exponent10 = 0;
+      static constexpr int max_exponent = 0;
+      static constexpr int max_exponent10 = 0;
+
+      static constexpr bool has_infinity = false;
+      static constexpr bool has_quiet_NaN = false;
+      static constexpr bool has_signaling_NaN = false;
+      static constexpr float_denorm_style has_denorm = denorm_absent;
+      static constexpr bool has_denorm_loss = false;
+
+      static constexpr char8_t
+      infinity() noexcept { return char8_t(); }
+
+      static constexpr char8_t
+      quiet_NaN() noexcept { return char8_t(); }
+
+      static constexpr char8_t
+      signaling_NaN() noexcept { return char8_t(); }
+
+      static constexpr char8_t
+      denorm_min() noexcept { return char8_t(); }
+
+      static constexpr bool is_iec559 = false;
+      static constexpr bool is_bounded = true;
+      static constexpr bool is_modulo = !is_signed;
+
+      static constexpr bool traps = __glibcxx_integral_traps;
+      static constexpr bool tinyness_before = false;
+      static constexpr float_round_style round_style = round_toward_zero;
+    };
+#endif
 
 #if __cplusplus >= 201103L
   /// numeric_limits<char16_t> specialization.
