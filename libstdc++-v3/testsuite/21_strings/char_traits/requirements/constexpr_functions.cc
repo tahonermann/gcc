@@ -1,4 +1,5 @@
 // { dg-do compile { target c++11 } }
+// { dg-options "-fchar8_t" }
 
 // Copyright (C) 2010-2017 Free Software Foundation, Inc.
 //
@@ -66,6 +67,9 @@ int main()
   test.operator()<std::char_traits<char>>();
 #ifdef _GLIBCXX_USE_WCHAR_T
   test.operator()<std::char_traits<wchar_t>>();
+#endif
+#ifdef _GLIBCXX_USE_CHAR8_T
+  test.operator()<std::char_traits<char8_t>>();
 #endif
   test.operator()<std::char_traits<char16_t>>();
   test.operator()<std::char_traits<char32_t>>();

@@ -58,6 +58,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<> struct char_traits<wchar_t>;
 #endif
 
+#ifdef _GLIBCXX_USE_CHAR8_T
+  template<> struct char_traits<char8_t>;
+#endif
+
 #if ((__cplusplus >= 201103L) \
      && defined(_GLIBCXX_USE_C99_STDINT_TR1))
   template<> struct char_traits<char16_t>;
