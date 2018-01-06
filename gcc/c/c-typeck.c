@@ -3615,7 +3615,7 @@ char_type_p (tree type)
   return (type == char_type_node
 	  || type == unsigned_char_type_node
 	  || type == signed_char_type_node
-	  || type == char8_type_node
+	  || (flag_char8_t && type == char8_type_node)
 	  || type == char16_type_node
 	  || type == char32_type_node);
 }
@@ -7316,7 +7316,7 @@ digest_init (location_t init_loc, tree type, tree init, tree origtype,
 			 || typ1 == signed_char_type_node
 			 || typ1 == unsigned_char_type_node);
       bool wchar_array = !!comptypes (typ1, wchar_type_node);
-      bool char8_array = !!comptypes (typ1, char8_type_node);
+      bool char8_array = (flag_char8_t && !!comptypes (typ1, char8_type_node));
       bool char16_array = !!comptypes (typ1, char16_type_node);
       bool char32_array = !!comptypes (typ1, char32_type_node);
 

@@ -10391,7 +10391,8 @@ grokdeclarator (const cp_declarator *declarator,
 	error ("%<long%> or %<short%> specified with char for %qs", name);
       else if (long_p && short_p)
 	error ("%<long%> and %<short%> specified together for %qs", name);
-      else if (type == char8_type_node || type == char16_type_node || type == char32_type_node)
+      else if ((flag_char8_t && type == char8_type_node) ||
+               type == char16_type_node || type == char32_type_node)
 	{
 	  if (signed_p || unsigned_p)
 	    error ("%<signed%> or %<unsigned%> invalid for %qs", name);

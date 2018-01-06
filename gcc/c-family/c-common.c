@@ -751,7 +751,7 @@ fix_string_type (tree value)
       nchars = length;
       e_type = char_type_node;
     }
-  else if (TREE_TYPE (value) == char8_array_type_node)
+  else if (flag_char8_t && TREE_TYPE (value) == char8_array_type_node)
     {
       nchars = length / (TYPE_PRECISION (char8_type_node) / BITS_PER_UNIT);
       e_type = char8_type_node;
@@ -4269,7 +4269,7 @@ c_common_nodes_and_builtins (void)
   char8_type_node = get_identifier (CHAR8_TYPE);
   char8_type_node = TREE_TYPE (identifier_global_value (char8_type_node));
   char8_type_size = TYPE_PRECISION (char8_type_node);
-  if (c_dialect_cxx () && flag_char8_t)
+  if (c_dialect_cxx ())
     {
       char8_type_node = make_unsigned_type (char8_type_size);
 
