@@ -1698,6 +1698,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     { };
 #endif
 
+#if defined(_GLIBCXX_USE_CHAR8_T)
+  template<>
+    struct __make_signed<char8_t> : __make_signed<unsigned char>
+    { };
+#endif
+
 #ifdef _GLIBCXX_USE_C99_STDINT_TR1
   template<>
     struct __make_signed<char16_t> : __make_signed<uint_least16_t>

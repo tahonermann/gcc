@@ -1,5 +1,6 @@
 // { dg-do compile { target c++11 } }
 // { dg-require-cstdint "" }
+// { dg-options "-fchar8_t" }
 
 // Copyright (C) 2014-2017 Free Software Foundation, Inc.
 //
@@ -27,6 +28,9 @@ using namespace std;
 using wchar_signed = make_signed<wchar_t>::type;
 using wchar_unsigned = make_unsigned<wchar_t>::type;
 static_assert( !is_same<wchar_signed, wchar_unsigned>::value, "wchar_t" );
+#endif
+#ifdef _GLIBCXX_USE_CHAR8_T
+static_assert( is_signed<make_signed<char8_t>::type>::value, "char8_t");
 #endif
 static_assert( is_signed<make_signed<char16_t>::type>::value, "char16_t");
 static_assert( is_signed<make_signed<char32_t>::type>::value, "char32_t");
