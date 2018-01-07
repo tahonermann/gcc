@@ -610,6 +610,21 @@ inline namespace fundamentals_v1
     { };
 #endif
 
+#ifdef _GLIBCXX_USE_CHAR8_T
+  template<>
+    struct hash<experimental::u8string_view>
+    : public __hash_base<size_t, experimental::u8string_view>
+    {
+      size_t
+      operator()(const experimental::u8string_view& __s) const noexcept
+      { return std::_Hash_impl::hash(__s.data(), __s.length()); }
+    };
+
+  template<>
+    struct __is_fast_hash<hash<experimental::u8string_view>> : std::false_type
+    { };
+#endif
+
 #ifdef _GLIBCXX_USE_C99_STDINT_TR1
   template<>
     struct hash<experimental::u16string_view>

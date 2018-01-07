@@ -595,6 +595,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     { };
 #endif
 
+#ifdef _GLIBCXX_USE_CHAR8_T
+  template<>
+    struct hash<u8string_view>
+    : public __hash_base<size_t, u8string_view>
+    {
+      size_t
+      operator()(const u8string_view& __str) const noexcept
+      { return std::_Hash_impl::hash(__str.data(), __str.length()); }
+    };
+
+  template<>
+    struct __is_fast_hash<hash<u8string_view>> : std::false_type
+    { };
+#endif
+
 #ifdef _GLIBCXX_USE_C99_STDINT_TR1
   template<>
     struct hash<u16string_view>
