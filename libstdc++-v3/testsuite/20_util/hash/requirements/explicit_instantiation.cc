@@ -1,4 +1,5 @@
 // { dg-do compile { target c++11 } }
+// { dg-options "-fchar8_t" }
 
 // Copyright (C) 2007-2017 Free Software Foundation, Inc.
 //
@@ -26,6 +27,9 @@ template class std::hash<bool>;
 template class std::hash<char>;
 template class std::hash<signed char>;
 template class std::hash<unsigned char>;
+#ifdef _GLIBCXX_USE_CHAR8_T
+template class std::hash<char8_t>;
+#endif
 template class std::hash<char16_t>;
 template class std::hash<char32_t>;
 template class std::hash<short>;
