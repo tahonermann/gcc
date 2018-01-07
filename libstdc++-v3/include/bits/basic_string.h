@@ -6677,6 +6677,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     { return basic_string<wchar_t>{__str, __len}; }
 #endif
 
+#ifdef _GLIBCXX_USE_CHAR8_T
+    _GLIBCXX_DEFAULT_ABI_TAG
+    inline basic_string<char8_t>
+    operator""s(const char8_t* __str, size_t __len)
+    { return basic_string<char8_t>{__str, __len}; }
+#endif
+
 #ifdef _GLIBCXX_USE_C99_STDINT_TR1
     _GLIBCXX_DEFAULT_ABI_TAG
     inline basic_string<char16_t>
