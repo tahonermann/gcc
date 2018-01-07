@@ -15,7 +15,7 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++17" }
+// { dg-options "-std=gnu++17 -fchar8_t" }
 // { dg-do compile { target c++17 } }
 
 #include <string>
@@ -117,4 +117,23 @@ test04()
 
   std::basic_string s4((char32_t)1, U'a', std::allocator<char32_t>());
   check_type<std::u32string>(s4);
+}
+
+void
+test05()
+{
+  char8_t a[1] = {};
+  input_iterator_seq<char8_t> seq(a);
+
+  std::basic_string s1(seq.begin(), seq.end());
+  check_type<std::u8string>(s1);
+
+  std::basic_string s2(seq.begin(), seq.end(), std::allocator<char8_t>());
+  check_type<std::u8string>(s2);
+
+  std::basic_string s3((char8_t)1, u8'a');
+  check_type<std::u8string>(s3);
+
+  std::basic_string s4((char8_t)1, u8'a', std::allocator<char8_t>());
+  check_type<std::u8string>(s4);
 }

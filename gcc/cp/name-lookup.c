@@ -5458,6 +5458,7 @@ get_std_name_hint (const char *name)
     /* <string>.  */
     {"string", "<string>"},
     {"wstring", "<string>"},
+    {"u8string", "<string>"},
     {"u16string", "<string>"},
     {"u32string", "<string>"},
     /* <unordered_map>.  */

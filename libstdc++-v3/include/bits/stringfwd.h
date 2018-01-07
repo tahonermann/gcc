@@ -82,6 +82,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
   typedef basic_string<wchar_t> wstring;   
 #endif
 
+#ifdef _GLIBCXX_USE_CHAR8_T
+  /// A string of @c char8_t
+  typedef basic_string<char8_t> u8string;
+#endif
+
 #if ((__cplusplus >= 201103L) \
      && defined(_GLIBCXX_USE_C99_STDINT_TR1))
   /// A string of @c char16_t

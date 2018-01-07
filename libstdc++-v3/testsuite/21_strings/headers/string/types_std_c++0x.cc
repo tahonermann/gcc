@@ -1,4 +1,5 @@
 // { dg-do compile { target c++11 } }
+// { dg-options "-fchar8_t" }
 // { dg-require-cstdint "" }
 
 // Copyright (C) 2008-2017 Free Software Foundation, Inc.
@@ -22,6 +23,9 @@
 
 namespace gnu
 {
+#ifdef _GLIBCXX_USE_CHAR8_T
+  typedef std::u8string t2;
+#endif
   typedef std::u16string t3;
   typedef std::u32string t4;
 }
