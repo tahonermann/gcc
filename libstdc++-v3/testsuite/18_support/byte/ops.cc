@@ -15,7 +15,7 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++17" }
+// { dg-options "-std=gnu++17 -fchar8_t" }
 // { dg-do compile { target c++17 } }
 
 #include <cstddef>
@@ -218,7 +218,13 @@ constexpr bool test_to_integer(unsigned char c)
 
 static_assert( test_to_integer<int>(0) );
 static_assert( test_to_integer<int>(255) );
+static_assert( test_to_integer<signed char>(0) );
 static_assert( test_to_integer<signed char>(255) );
 static_assert( test_to_integer<unsigned>(0) );
 static_assert( test_to_integer<unsigned>(255) );
-
+static_assert( test_to_integer<char8_t>(0) );
+static_assert( test_to_integer<char8_t>(255) );
+static_assert( test_to_integer<char16_t>(0) );
+static_assert( test_to_integer<char16_t>(255) );
+static_assert( test_to_integer<char32_t>(0) );
+static_assert( test_to_integer<char32_t>(255) );
