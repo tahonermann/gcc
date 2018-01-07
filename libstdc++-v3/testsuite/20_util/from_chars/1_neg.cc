@@ -15,7 +15,7 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++17" }
+// { dg-options "-std=gnu++17 -fchar8_t" }
 // { dg-do compile { target c++17 } }
 
 #include <charconv>
@@ -27,6 +27,12 @@ test01(const char* first, const char* last)
   wchar_t wc;
   std::from_chars(first, last, wc); // { dg-error "no matching" }
   std::from_chars(first, last, wc, 10); // { dg-error "no matching" }
+#endif
+
+#ifdef _GLIBCXX_USE_CHAR8_T
+  char8_t c8;
+  std::from_chars(first, last, c8); // { dg-error "no matching" }
+  std::from_chars(first, last, c8, 10); // { dg-error "no matching" }
 #endif
 
   char16_t c16;
