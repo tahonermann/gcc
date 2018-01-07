@@ -1,5 +1,6 @@
 // { dg-do run { target c++11 } }
 // { dg-add-options ieee }
+// { dg-options "-fchar8_t" }
 
 // 2010-02-25  Ed Smith-Rowland
 
@@ -54,6 +55,9 @@ void test01()
   do_test<unsigned char>();
 #ifdef _GLIBCXX_USE_WCHAR_T
   do_test<wchar_t>();
+#endif
+#ifdef _GLIBCXX_USE_CHAR8_T
+  do_test<char8_t>();
 #endif
   do_test<char16_t>();
   do_test<char32_t>();
