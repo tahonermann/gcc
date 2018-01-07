@@ -1,5 +1,6 @@
 // { dg-do run { target c++11 } }
 // { dg-require-effective-target dfp }
+// { dg-options "-fchar8_t" }
 
 // 2011-02-23  Benjamin Kosnik  <bkoz@redhat.com>
 //
@@ -50,6 +51,9 @@ int main()
   gen_type_info<long long>();
   gen_type_info<unsigned long long>();
   gen_type_info<wchar_t>();
+#ifdef _GLIBCXX_USE_CHAR8_T
+  gen_type_info<char8_t>();
+#endif
   gen_type_info<char16_t>();
   gen_type_info<char32_t>();
 
