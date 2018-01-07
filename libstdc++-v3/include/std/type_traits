@@ -241,6 +241,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     : public true_type { };
 #endif
 
+#ifdef _GLIBCXX_USE_CHAR8_T
+  template<>
+    struct __is_integral_helper<char8_t>
+    : public true_type { };
+#endif
+
   template<>
     struct __is_integral_helper<char16_t>
     : public true_type { };
