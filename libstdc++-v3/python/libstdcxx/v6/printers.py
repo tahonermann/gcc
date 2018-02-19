@@ -1408,8 +1408,10 @@ def register_type_printers(obj):
     # it shares the same underlying type as std::streampos.
     add_one_type_printer(obj, 'fpos', 'streampos')
 
+    add_one_type_printer(obj, 'basic_string', 'u8string')
     add_one_type_printer(obj, 'basic_string', 'u16string')
     add_one_type_printer(obj, 'basic_string', 'u32string')
+    add_one_type_printer(obj, 'basic_string_view', 'u8string_view')
     add_one_type_printer(obj, 'basic_string_view', 'u16string_view')
     add_one_type_printer(obj, 'basic_string_view', 'u32string_view')
 

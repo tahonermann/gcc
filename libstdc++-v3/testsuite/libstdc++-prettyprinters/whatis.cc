@@ -1,5 +1,5 @@
 // { dg-do run { target c++11 } }
-// { dg-options "-g -O0" }
+// { dg-options "-g -O0 -fchar8_t" }
 // { dg-skip-if "" { *-*-* } { "-D_GLIBCXX_PROFILE" } }
 
 // Copyright (C) 2011-2017 Free Software Foundation, Inc.
@@ -131,6 +131,9 @@ holder<std::cregex_token_iterator> cregex_token_iterator_holder;
 std::sregex_token_iterator *sregex_token_iterator_ptr;
 holder<std::sregex_token_iterator> sregex_token_iterator_holder;
 // { dg-final { whatis-test sregex_token_iterator_holder "holder<std::sregex_token_iterator>" } }
+std::u8string *u8string_ptr;
+holder<std::u8string> u8string_holder;
+// { dg-final { whatis-test u8string_holder "holder<std::u8string>" } }
 std::u16string *u16string_ptr;
 holder<std::u16string> u16string_holder;
 // { dg-final { whatis-test u16string_holder "holder<std::u16string>" } }
@@ -249,6 +252,8 @@ main()
   placeholder(&cregex_token_iterator_holder);
   placeholder(&sregex_token_iterator_ptr);
   placeholder(&sregex_token_iterator_holder);
+  placeholder(&u8string_ptr);
+  placeholder(&u8string_holder);
   placeholder(&u16string_ptr);
   placeholder(&u16string_holder);
   placeholder(&u32string_ptr);
