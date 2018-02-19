@@ -1304,12 +1304,6 @@ GLIBCXX_3.4.11 {
 
     _ZSt20__throw_system_errori;
 
-    # char8_t
-    _ZNSt14numeric_limitsIu7char8_tE[5-9]*;
-    _ZNSt14numeric_limitsIu7char8_tE1[0-7][hirt]*;
-    _ZNSt14numeric_limitsIu7char8_tE1[0-7]mi*;
-    _ZNSt14numeric_limitsIu7char8_tE1[0-7]max_e*;
-
     # char16_t and char32_t
     _ZNSt14numeric_limitsIDiE[5-9]*;
     _ZNSt14numeric_limitsIDsE[5-9]*;
@@ -1985,6 +1979,13 @@ GLIBCXX_3.4.25 {
 
     # std::random_device::_M_getentropy() const
     _ZNKSt13random_device13_M_getentropyEv;
+
+    # numeric_limits<char8_t>
+    # FIXME: Acquire an official mangling for char8_t.
+    _ZNSt14numeric_limitsIu7char8_tE[5-9]*;
+    _ZNSt14numeric_limitsIu7char8_tE1[0-7][hirt]*;
+    _ZNSt14numeric_limitsIu7char8_tE1[0-7]mi*;
+    _ZNSt14numeric_limitsIu7char8_tE1[0-7]max_e*;
 
 } GLIBCXX_3.4.24;
 
