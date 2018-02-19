@@ -1,5 +1,5 @@
 /* Diagnostic routines shared by all languages that are variants of C.
-   Copyright (C) 1992-2017 Free Software Foundation, Inc.
+   Copyright (C) 1992-2018 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -179,6 +179,9 @@ warn_logical_operator (location_t location, enum tree_code code, tree type,
   int in0_p, in1_p, in_p;
   tree low0, low1, low, high0, high1, high, lhs, rhs, tem;
   bool strict_overflow_p = false;
+
+  if (!warn_logical_op)
+    return;
 
   if (code != TRUTH_ANDIF_EXPR
       && code != TRUTH_AND_EXPR
@@ -596,17 +599,21 @@ warn_if_unused_value (const_tree exp, location_t locus)
     }
 }
 
-/* Print a warning about casts that might indicate violation
-   of strict aliasing rules if -Wstrict-aliasing is used and
-   strict aliasing mode is in effect. OTYPE is the original
-   TREE_TYPE of EXPR, and TYPE the type we're casting to. */
+/* Print a warning about casts that might indicate violation of strict
+   aliasing rules if -Wstrict-aliasing is used and strict aliasing
+   mode is in effect.  LOC is the location of the expression being
+   cast, EXPR might be from inside it.  TYPE is the type we're casting
+   to.  */
 
 bool
-strict_aliasing_warning (tree otype, tree type, tree expr)
+strict_aliasing_warning (location_t loc, tree type, tree expr)
 {
+  if (loc == UNKNOWN_LOCATION)
+    loc = input_location;
+
   /* Strip pointer conversion chains and get to the correct original type.  */
   STRIP_NOPS (expr);
-  otype = TREE_TYPE (expr);
+  tree otype = TREE_TYPE (expr);
 
   if (!(flag_strict_aliasing
 	&& POINTER_TYPE_P (type)
@@ -625,8 +632,9 @@ strict_aliasing_warning (tree otype, tree type, tree expr)
 	 if the cast breaks type based aliasing.  */
       if (!COMPLETE_TYPE_P (TREE_TYPE (type)) && warn_strict_aliasing == 2)
 	{
-	  warning (OPT_Wstrict_aliasing, "type-punning to incomplete type "
-		   "might break strict-aliasing rules");
+	  warning_at (loc, OPT_Wstrict_aliasing,
+		      "type-punning to incomplete type "
+		      "might break strict-aliasing rules");
 	  return true;
 	}
       else
@@ -642,15 +650,17 @@ strict_aliasing_warning (tree otype, tree type, tree expr)
 	      && !alias_set_subset_of (set2, set1)
 	      && !alias_sets_conflict_p (set1, set2))
 	    {
-	      warning (OPT_Wstrict_aliasing, "dereferencing type-punned "
-		       "pointer will break strict-aliasing rules");
+	      warning_at (loc, OPT_Wstrict_aliasing,
+			  "dereferencing type-punned "
+			  "pointer will break strict-aliasing rules");
 	      return true;
 	    }
 	  else if (warn_strict_aliasing == 2
 		   && !alias_sets_must_conflict_p (set1, set2))
 	    {
-	      warning (OPT_Wstrict_aliasing, "dereferencing type-punned "
-		       "pointer might break strict-aliasing rules");
+	      warning_at (loc, OPT_Wstrict_aliasing,
+			  "dereferencing type-punned "
+			  "pointer might break strict-aliasing rules");
 	      return true;
 	    }
 	}
@@ -666,8 +676,9 @@ strict_aliasing_warning (tree otype, tree type, tree expr)
       if (!COMPLETE_TYPE_P (type)
 	  || !alias_sets_must_conflict_p (set1, set2))
 	{
-	  warning (OPT_Wstrict_aliasing, "dereferencing type-punned "
-		   "pointer might break strict-aliasing rules");
+	  warning_at (loc, OPT_Wstrict_aliasing,
+		      "dereferencing type-punned "
+		      "pointer might break strict-aliasing rules");
 	  return true;
 	}
     }
@@ -1865,6 +1876,9 @@ void
 warn_for_memset (location_t loc, tree arg0, tree arg2,
 		 int literal_zero_mask)
 {
+  arg0 = fold_for_warn (arg0);
+  arg2 = fold_for_warn (arg2);
+
   if (warn_memset_transposed_args
       && integer_zerop (arg2)
       && (literal_zero_mask & (1 << 2)) != 0
@@ -2230,36 +2244,19 @@ diagnose_mismatched_attributes (tree olddecl, tree newdecl)
 		       newdecl);
 
   /* Diagnose inline __attribute__ ((noinline)) which is silly.  */
+  const char *noinline = "noinline";
+
   if (DECL_DECLARED_INLINE_P (newdecl)
       && DECL_UNINLINABLE (olddecl)
-      && lookup_attribute ("noinline", DECL_ATTRIBUTES (olddecl)))
+      && lookup_attribute (noinline, DECL_ATTRIBUTES (olddecl)))
     warned |= warning (OPT_Wattributes, "inline declaration of %qD follows "
-		       "declaration with attribute noinline", newdecl);
+		       "declaration with attribute %qs", newdecl, noinline);
   else if (DECL_DECLARED_INLINE_P (olddecl)
 	   && DECL_UNINLINABLE (newdecl)
 	   && lookup_attribute ("noinline", DECL_ATTRIBUTES (newdecl)))
     warned |= warning (OPT_Wattributes, "declaration of %q+D with attribute "
-		       "noinline follows inline declaration ", newdecl);
-  else if (lookup_attribute ("noinline", DECL_ATTRIBUTES (newdecl))
-	   && lookup_attribute ("always_inline", DECL_ATTRIBUTES (olddecl)))
-    warned |= warning (OPT_Wattributes, "declaration of %q+D with attribute "
-		       "%qs follows declaration with attribute %qs",
-		       newdecl, "noinline", "always_inline");
-  else if (lookup_attribute ("always_inline", DECL_ATTRIBUTES (newdecl))
-	   && lookup_attribute ("noinline", DECL_ATTRIBUTES (olddecl)))
-    warned |= warning (OPT_Wattributes, "declaration of %q+D with attribute "
-		       "%qs follows declaration with attribute %qs",
-		       newdecl, "always_inline", "noinline");
-  else if (lookup_attribute ("cold", DECL_ATTRIBUTES (newdecl))
-	   && lookup_attribute ("hot", DECL_ATTRIBUTES (olddecl)))
-    warned |= warning (OPT_Wattributes, "declaration of %q+D with attribute "
-		       "%qs follows declaration with attribute %qs",
-		       newdecl, "cold", "hot");
-  else if (lookup_attribute ("hot", DECL_ATTRIBUTES (newdecl))
-	   && lookup_attribute ("cold", DECL_ATTRIBUTES (olddecl)))
-    warned |= warning (OPT_Wattributes, "declaration of %q+D with attribute "
-		       "%qs follows declaration with attribute %qs",
-		       newdecl, "hot", "cold");
+		       "%qs follows inline declaration ", newdecl, noinline);
+
   return warned;
 }
 

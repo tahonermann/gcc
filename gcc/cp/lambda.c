@@ -3,7 +3,7 @@
    building RTL.  These routines are used both during actual parsing
    and during the instantiation of template functions.
 
-   Copyright (C) 1998-2017 Free Software Foundation, Inc.
+   Copyright (C) 1998-2018 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -30,7 +30,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-iterator.h"
 #include "toplev.h"
 #include "gimplify.h"
-#include "cp-cilkplus.h"
 
 /* Constructor for a lambda expression.  */
 
@@ -262,6 +261,7 @@ is_capture_proxy (tree decl)
   return (VAR_P (decl)
 	  && DECL_HAS_VALUE_EXPR_P (decl)
 	  && !DECL_ANON_UNION_VAR_P (decl)
+	  && !DECL_DECOMPOSITION_P (decl)
 	  && LAMBDA_FUNCTION_P (DECL_CONTEXT (decl)));
 }
 
@@ -291,13 +291,24 @@ is_normal_capture_proxy (tree decl)
   return DECL_NORMAL_CAPTURE_P (val);
 }
 
+/* Returns true iff DECL is a capture proxy for which we can use
+   DECL_CAPTURED_VARIABLE.  In effect, this is a normal proxy other than a
+   nested capture of a function parameter pack.  */
+
+bool
+is_capture_proxy_with_ref (tree var)
+{
+  return (is_normal_capture_proxy (var) && DECL_LANG_SPECIFIC (var)
+	  && DECL_CAPTURED_VARIABLE (var));
+}
+
 /* VAR is a capture proxy created by build_capture_proxy; add it to the
    current function, which is the operator() for the appropriate lambda.  */
 
 void
 insert_capture_proxy (tree var)
 {
-  if (is_normal_capture_proxy (var))
+  if (is_capture_proxy_with_ref (var))
     {
       tree cap = DECL_CAPTURED_VARIABLE (var);
       if (CHECKING_P)
@@ -440,10 +451,11 @@ build_capture_proxy (tree member, tree init)
 	{
 	  if (PACK_EXPANSION_P (init))
 	    init = PACK_EXPANSION_PATTERN (init);
-	  if (TREE_CODE (init) == INDIRECT_REF)
+	  if (INDIRECT_REF_P (init))
 	    init = TREE_OPERAND (init, 0);
 	  STRIP_NOPS (init);
 	}
+
       gcc_assert (VAR_P (init) || TREE_CODE (init) == PARM_DECL);
       while (is_normal_capture_proxy (init))
 	init = DECL_CAPTURED_VARIABLE (init);
@@ -921,7 +933,7 @@ nonlambda_method_basetype (void)
     return NULL_TREE;
 
   type = current_class_type;
-  if (!LAMBDA_TYPE_P (type))
+  if (!type || !LAMBDA_TYPE_P (type))
     return type;
 
   /* Find the nearest enclosing non-lambda function.  */

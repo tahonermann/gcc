@@ -1,5 +1,5 @@
 /* Vector API for GNU compiler.
-   Copyright (C) 2004-2017 Free Software Foundation, Inc.
+   Copyright (C) 2004-2018 Free Software Foundation, Inc.
    Contributed by Nathan Sidwell <nathan@codesourcery.com>
    Re-implemented in C++ by Diego Novillo <dnovillo@google.com>
 
@@ -453,8 +453,8 @@ debug_helper (vec<T, va_gc> &ref)
    functions for a type T.  */
 
 #define DEFINE_DEBUG_VEC(T) \
-  template static void debug_helper (vec<T> &);		\
-  template static void debug_helper (vec<T, va_gc> &);	\
+  template void debug_helper (vec<T> &);		\
+  template void debug_helper (vec<T, va_gc> &);		\
   /* Define the vec<T> debug functions.  */		\
   DEBUG_FUNCTION void					\
   debug (vec<T> &ref)					\
@@ -490,8 +490,12 @@ template <typename T>
 inline void
 vec_default_construct (T *dst, unsigned n)
 {
+#ifndef BROKEN_VALUE_INITIALIZATION
   for ( ; n; ++dst, --n)
     ::new (static_cast<void*>(dst)) T ();
+#else
+  memset (dst, '\0', sizeof (T) * n);
+#endif
 }
 
 /* Copy-construct N elements in DST from *SRC.  */

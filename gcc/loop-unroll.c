@@ -1,5 +1,5 @@
 /* Loop unrolling.
-   Copyright (C) 2002-2017 Free Software Foundation, Inc.
+   Copyright (C) 2002-2018 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -395,7 +395,7 @@ decide_unroll_constant_iterations (struct loop *loop, int flags)
     }
 
   /* Check for an explicit unrolling factor.  */
-  if (loop->unroll)
+  if (loop->unroll > 0 && loop->unroll < USHRT_MAX)
     {
       /* However we cannot unroll completely at the RTL level a loop with
 	 constant number of iterations; it should have been peeled instead.  */
@@ -498,7 +498,7 @@ unroll_loop_constant_iterations (struct loop *loop)
 
   exit_mod = niter % (max_unroll + 1);
 
-  auto_sbitmap wont_exit (max_unroll + 1);
+  auto_sbitmap wont_exit (max_unroll + 2);
   bitmap_ones (wont_exit);
 
   auto_vec<edge> remove_edges;
@@ -693,7 +693,7 @@ decide_unroll_runtime_iterations (struct loop *loop, int flags)
   if (targetm.loop_unroll_adjust)
     nunroll = targetm.loop_unroll_adjust (nunroll, loop);
 
-  if (loop->unroll)
+  if (loop->unroll > 0 && loop->unroll < USHRT_MAX)
     nunroll = loop->unroll;
 
   /* Skip big loops.  */
@@ -1177,7 +1177,7 @@ decide_unroll_stupid (struct loop *loop, int flags)
   if (targetm.loop_unroll_adjust)
     nunroll = targetm.loop_unroll_adjust (nunroll, loop);
 
-  if (loop->unroll)
+  if (loop->unroll > 0 && loop->unroll < USHRT_MAX)
     nunroll = loop->unroll;
 
   /* Skip big loops.  */
@@ -2037,12 +2037,14 @@ apply_opt_in_copies (struct opt_info *opt_info,
       FOR_BB_INSNS_SAFE (bb, insn, next)
         {
 	  if (!INSN_P (insn)
-	      || (DEBUG_INSN_P (insn)
+	      || (DEBUG_BIND_INSN_P (insn)
+		  && INSN_VAR_LOCATION_DECL (insn)
 		  && TREE_CODE (INSN_VAR_LOCATION_DECL (insn)) == LABEL_DECL))
             continue;
 
 	  while (!INSN_P (orig_insn)
-		 || (DEBUG_INSN_P (orig_insn)
+		 || (DEBUG_BIND_INSN_P (orig_insn)
+		     && INSN_VAR_LOCATION_DECL (orig_insn)
 		     && (TREE_CODE (INSN_VAR_LOCATION_DECL (orig_insn))
 			 == LABEL_DECL)))
             orig_insn = NEXT_INSN (orig_insn);
