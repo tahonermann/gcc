@@ -319,7 +319,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 #if _GLIBCXX_USE_WCHAR_T
     std::wstring   wstring() const;
 #endif
+#ifdef _GLIBCXX_USE_CHAR8_T
+    std::u8string  u8string() const;
+#else
     std::string    u8string() const;
+#endif // _GLIBCXX_USE_CHAR8_T
     std::u16string u16string() const;
     std::u32string u32string() const;
 
@@ -333,7 +337,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 #if _GLIBCXX_USE_WCHAR_T
     std::wstring   generic_wstring() const;
 #endif
+#ifdef _GLIBCXX_USE_CHAR8_T
+    std::u8string  generic_u8string() const;
+#else
     std::string    generic_u8string() const;
+#endif // _GLIBCXX_USE_CHAR8_T
     std::u16string generic_u16string() const;
     std::u32string generic_u32string() const;
 
@@ -598,6 +606,12 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     struct path::__is_encoded_char<wchar_t> : std::true_type
     { using value_type = wchar_t; };
 
+#ifdef _GLIBCXX_USE_CHAR8_T
+  template<>
+    struct path::__is_encoded_char<char8_t> : std::true_type
+    { using value_type = char8_t; };
+#endif
+
   template<>
     struct path::__is_encoded_char<char16_t> : std::true_type
     { using value_type = char16_t; };
@@ -674,10 +688,22 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       static string_type
       _S_convert(const _CharT* __f, const _CharT* __l)
       {
-	std::codecvt_utf8<_CharT> __cvt;
-	std::string __str;
-	if (__str_codecvt_out(__f, __l, __str, __cvt))
-	  return __str;
+#ifdef _GLIBCXX_USE_CHAR8_T
+	if constexpr (is_same<_CharT, char8_t>::value)
+	  {
+	    string_type __str(__f, __l);
+	    return __str;
+	  }
+	else
+	  {
+#endif
+	    std::codecvt_utf8<_CharT> __cvt;
+	    std::string __str;
+	    if (__str_codecvt_out(__f, __l, __str, __cvt))
+	      return __str;
+#ifdef _GLIBCXX_USE_CHAR8_T
+	  }
+#endif
 	_GLIBCXX_THROW_OR_ABORT(filesystem_error(
 	      "Cannot convert character sequence",
 	      std::make_error_code(errc::illegal_byte_sequence)));
@@ -867,12 +893,23 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	    _WString*
 	    operator()(const _String& __from, _WString& __to, false_type)
 	    {
-	      // use codecvt_utf8<_CharT> to convert UTF-8 to wide string
-	      codecvt_utf8<_CharT> __cvt;
-	      const char* __f = __from.data();
-	      const char* __l = __f + __from.size();
-	      if (__str_codecvt_in(__f, __l, __to, __cvt))
-		return std::__addressof(__to);
+#ifdef _GLIBCXX_USE_CHAR8_T
+	      if constexpr (is_same<_CharT, char8_t>::value)
+	        {
+	          FIXME
+	        }
+	      else
+	        {
+#endif
+	          // use codecvt_utf8<_CharT> to convert UTF-8 to wide string
+	          codecvt_utf8<_CharT> __cvt;
+	          const char* __f = __from.data();
+	          const char* __l = __f + __from.size();
+	          if (__str_codecvt_in(__f, __l, __to, __cvt))
+		    return std::__addressof(__to);
+#ifdef _GLIBCXX_USE_CHAR8_T
+	        }
+#endif
 	      return nullptr;
 	    }
 	  } __dispatch;
@@ -881,10 +918,22 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	    return *__p;
 	}
 #else
-      codecvt_utf8<_CharT> __cvt;
-      basic_string<_CharT, _Traits, _Allocator> __wstr{__a};
-      if (__str_codecvt_in(__first, __last, __wstr, __cvt))
-	return __wstr;
+#ifdef _GLIBCXX_USE_CHAR8_T
+      if constexpr (is_same<_CharT, char8_t>::value)
+        {
+          basic_string<_CharT, _Traits, _Allocator> __wstr{__first, __last, __a};
+          return __wstr;
+        }
+      else
+        {
+#endif
+          codecvt_utf8<_CharT> __cvt;
+          basic_string<_CharT, _Traits, _Allocator> __wstr{__a};
+          if (__str_codecvt_in(__first, __last, __wstr, __cvt))
+	    return __wstr;
+#ifdef _GLIBCXX_USE_CHAR8_T
+        }
+#endif
 #endif
       _GLIBCXX_THROW_OR_ABORT(filesystem_error(
 	    "Cannot convert character sequence",
@@ -899,6 +948,10 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
   path::wstring() const { return string<wchar_t>(); }
 #endif
 
+#ifdef _GLIBCXX_USE_CHAR8_T
+  inline std::u8string
+  path::u8string() const { return string<char8_t>(); }
+#else
   inline std::string
   path::u8string() const
   {
@@ -917,6 +970,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     return _M_pathname;
 #endif
   }
+#endif // _GLIBCXX_USE_CHAR8_T
 
   inline std::u16string
   path::u16string() const { return string<char16_t>(); }
@@ -938,8 +992,13 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
   path::generic_wstring() const { return wstring(); }
 #endif
 
+#ifdef _GLIBCXX_USE_CHAR8_T
+  inline std::u8string
+  path::generic_u8string() const { return u8string(); }
+#else
   inline std::string
   path::generic_u8string() const { return u8string(); }
+#endif
 
   inline std::u16string
   path::generic_u16string() const { return u16string(); }
