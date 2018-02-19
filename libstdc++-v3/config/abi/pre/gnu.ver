@@ -1987,6 +1987,12 @@ GLIBCXX_3.4.25 {
     _ZNSt14numeric_limitsIu7char8_tE1[0-7]mi*;
     _ZNSt14numeric_limitsIu7char8_tE1[0-7]max_e*;
 
+    # codecvt<char16_t, char8_t, mbstate_t>, codecvt<char32_t, char8_t, mbstate_t>
+    # FIXME: Acquire an official mangling for char8_t.
+    _ZNKSt7codecvtID[is]u7char8_t*;
+    _ZNSt7codecvtID[is]u7char8_t*;
+    _ZT[ISV]St7codecvtID[is]u7char8_t*E;
+
 } GLIBCXX_3.4.24;
 
 # Symbols in the support library (libsupc++) have their own tag.

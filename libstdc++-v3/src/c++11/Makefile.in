@@ -749,6 +749,17 @@ hashtable_c++0x.lo: hashtable_c++0x.cc
 hashtable_c++0x.o: hashtable_c++0x.cc
 	$(CXXCOMPILE) -fimplicit-templates -c $<
 
+# Use special rules for source files that require -fchar8_t.
+codecvt.lo: codecvt.cc
+	$(LTCXXCOMPILE) -fchar8_t -c $<
+codecvt.o: codecvt.cc
+	$(CXXCOMPILE) -fchar8_t -c $<
+limits.lo: limits.cc
+	$(LTCXXCOMPILE) -fchar8_t -c $<
+limits.o: limits.cc
+	$(CXXCOMPILE) -fchar8_t -c $<
+
+
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

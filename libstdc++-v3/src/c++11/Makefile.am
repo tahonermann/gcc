@@ -126,6 +126,17 @@ hashtable_c++0x.lo: hashtable_c++0x.cc
 hashtable_c++0x.o: hashtable_c++0x.cc
 	$(CXXCOMPILE) -fimplicit-templates -c $<
 
+# Use special rules for source files that require -fchar8_t.
+codecvt.lo: codecvt.cc
+	$(LTCXXCOMPILE) -fchar8_t -c $<
+codecvt.o: codecvt.cc
+	$(CXXCOMPILE) -fchar8_t -c $<
+limits.lo: limits.cc
+	$(LTCXXCOMPILE) -fchar8_t -c $<
+limits.o: limits.cc
+	$(CXXCOMPILE) -fchar8_t -c $<
+
+
 # AM_CXXFLAGS needs to be in each subdirectory so that it can be
 # modified in a per-library or per-sub-library way.  Need to manually
 # set this option because CONFIG_CXXFLAGS has to be after
