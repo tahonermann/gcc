@@ -616,5 +616,8 @@ namespace std
 #  define _GLIBCXX_USE_CHAR8_T 1
 # endif
 #endif
+#ifdef _GLIBCXX_USE_CHAR8_T
+# define __cpp_lib_char8_t 201803
+#endif
 
 // End of prewritten config; the settings discovered at configure time follow.

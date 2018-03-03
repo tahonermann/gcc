@@ -4,5 +4,7 @@
 // { dg-options "-fchar8_t" }
 
 #if !defined(__cpp_char8_t)
-#error __cpp_char8_t is not defined!
+#  error __cpp_char8_t is not defined!
+#elif __cpp_char8_t != 201803
+#  error __cpp_char8_t != 201803
 #endif
