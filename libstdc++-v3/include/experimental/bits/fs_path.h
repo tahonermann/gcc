@@ -896,7 +896,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 #ifdef _GLIBCXX_USE_CHAR8_T
 	      if constexpr (is_same<_CharT, char8_t>::value)
 	        {
-	          FIXME
+	          __to.assign(__from.begin(), __from.end());
+	          return std::__addressof(__to);
 	        }
 	      else
 	        {
