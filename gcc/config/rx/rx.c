@@ -2843,12 +2843,18 @@ rx_option_override (void)
   rx_override_options_after_change ();
 
   /* These values are bytes, not log.  */
-  if (align_jumps == 0 && ! optimize_size)
-    align_jumps = ((rx_cpu_type == RX100 || rx_cpu_type == RX200) ? 4 : 8);
-  if (align_loops == 0 && ! optimize_size)
-    align_loops = ((rx_cpu_type == RX100 || rx_cpu_type == RX200) ? 4 : 8);
-  if (align_labels == 0 && ! optimize_size)
-    align_labels = ((rx_cpu_type == RX100 || rx_cpu_type == RX200) ? 4 : 8);
+  if (! optimize_size)
+    {
+      if (flag_align_jumps && !str_align_jumps)
+	str_align_jumps = ((rx_cpu_type == RX100
+			    || rx_cpu_type == RX200) ? "4" : "8");
+      if (flag_align_loops && !str_align_loops)
+	str_align_loops = ((rx_cpu_type == RX100
+			    || rx_cpu_type == RX200) ? "4" : "8");
+      if (flag_align_labels && !str_align_labels)
+	str_align_labels = ((rx_cpu_type == RX100
+			     || rx_cpu_type == RX200) ? "4" : "8");
+    }
 }
 
 
@@ -2990,6 +2996,62 @@ rx_address_cost (rtx addr, machine_mode mode ATTRIBUTE_UNUSED,
     return COSTS_N_INSNS (2);
     
   return COSTS_N_INSNS (1);
+}
+
+static bool
+rx_rtx_costs (rtx x, machine_mode mode, int outer_code ATTRIBUTE_UNUSED,
+	      int opno ATTRIBUTE_UNUSED, int* total, bool speed)
+{
+  if (x == const0_rtx)
+    {
+      *total = 0;
+      return true;
+    }
+
+  switch (GET_CODE (x))
+    {
+    case MULT:
+      if (mode == DImode)
+	{
+	  *total = COSTS_N_INSNS (2);
+	  return true;
+	}
+      /* fall through */
+
+    case PLUS:
+    case MINUS:
+    case AND:
+    case COMPARE:
+    case IOR:
+    case XOR:
+      *total = COSTS_N_INSNS (1);
+      return true;
+
+    case DIV:
+      if (speed)
+	/* This is the worst case for a division.  Pessimize divisions when
+	   not optimizing for size and allow reciprocal optimizations which
+	   produce bigger code.  */
+	*total = COSTS_N_INSNS (20);
+      else
+	*total = COSTS_N_INSNS (3);
+      return true;
+
+    case UDIV:
+      if (speed)
+	/* This is the worst case for a division.  Pessimize divisions when
+	   not optimizing for size and allow reciprocal optimizations which
+	   produce bigger code.  */
+	*total = COSTS_N_INSNS (18);
+      else
+	*total = COSTS_N_INSNS (3);
+      return true;
+
+    default:
+      break;
+    }
+
+  return false;
 }
 
 static bool
@@ -3246,23 +3308,6 @@ rx_match_ccmode (rtx insn, machine_mode cc_mode)
   return true;
 }
 
-int
-rx_align_for_label (rtx lab, int uses_threshold)
-{
-  /* This is a simple heuristic to guess when an alignment would not be useful
-     because the delay due to the inserted NOPs would be greater than the delay
-     due to the misaligned branch.  If uses_threshold is zero then the alignment
-     is always useful.  */
-  if (LABEL_P (lab) && LABEL_NUSES (lab) < uses_threshold)
-    return 0;
-
-  if (optimize_size)
-    return 0;
-  /* These values are log, not bytes.  */
-  if (rx_cpu_type == RX100 || rx_cpu_type == RX200)
-    return 2; /* 4 bytes */
-  return 3;   /* 8 bytes */
-}
 
 static int
 rx_max_skip_for_label (rtx_insn *lab)
@@ -3288,8 +3333,39 @@ rx_max_skip_for_label (rtx_insn *lab)
 
   opsize = get_attr_length (op);
   if (opsize >= 0 && opsize < 8)
-    return opsize - 1;
+    return MAX (0, opsize - 1);
   return 0;
+}
+
+static int
+rx_align_log_for_label (rtx_insn *lab, int uses_threshold)
+{
+  /* This is a simple heuristic to guess when an alignment would not be useful
+     because the delay due to the inserted NOPs would be greater than the delay
+     due to the misaligned branch.  If uses_threshold is zero then the alignment
+     is always useful.  */
+  if (LABEL_P (lab) && LABEL_NUSES (lab) < uses_threshold)
+    return 0;
+
+  if (optimize_size)
+    return 0;
+
+  /* Return zero if max_skip not a positive number.  */
+  int max_skip = rx_max_skip_for_label (lab);
+  if (max_skip <= 0)
+    return 0;
+
+  /* These values are log, not bytes.  */
+  if (rx_cpu_type == RX100 || rx_cpu_type == RX200)
+    return 2; /* 4 bytes */
+  return 3;   /* 8 bytes */
+}
+
+align_flags
+rx_align_for_label (rtx_insn *lab, int uses_threshold)
+{
+  return align_flags (rx_align_log_for_label (lab, uses_threshold),
+		      rx_max_skip_for_label (lab));
 }
 
 /* Compute the real length of the extending load-and-op instructions.  */
@@ -3571,15 +3647,6 @@ rx_modes_tieable_p (machine_mode mode1, machine_mode mode2)
 #undef  TARGET_CAN_INLINE_P
 #define TARGET_CAN_INLINE_P			rx_ok_to_inline
 
-#undef  TARGET_ASM_JUMP_ALIGN_MAX_SKIP
-#define TARGET_ASM_JUMP_ALIGN_MAX_SKIP			rx_max_skip_for_label
-#undef  TARGET_ASM_LOOP_ALIGN_MAX_SKIP
-#define TARGET_ASM_LOOP_ALIGN_MAX_SKIP			rx_max_skip_for_label
-#undef  TARGET_LABEL_ALIGN_AFTER_BARRIER_MAX_SKIP
-#define TARGET_LABEL_ALIGN_AFTER_BARRIER_MAX_SKIP	rx_max_skip_for_label
-#undef  TARGET_ASM_LABEL_ALIGN_MAX_SKIP
-#define TARGET_ASM_LABEL_ALIGN_MAX_SKIP			rx_max_skip_for_label
-
 #undef  TARGET_FUNCTION_VALUE
 #define TARGET_FUNCTION_VALUE		rx_function_value
 
@@ -3725,6 +3792,12 @@ rx_modes_tieable_p (machine_mode mode1, machine_mode mode2)
 
 #undef  TARGET_MODES_TIEABLE_P
 #define TARGET_MODES_TIEABLE_P			rx_modes_tieable_p
+
+#undef  TARGET_RTX_COSTS
+#define TARGET_RTX_COSTS rx_rtx_costs
+
+#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
+#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

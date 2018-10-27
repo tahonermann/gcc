@@ -79,6 +79,8 @@ init_flow (struct function *the_fun)
     = EXIT_BLOCK_PTR_FOR_FN (the_fun);
   EXIT_BLOCK_PTR_FOR_FN (the_fun)->prev_bb
     = ENTRY_BLOCK_PTR_FOR_FN (the_fun);
+  the_fun->cfg->edge_flags_allocated = EDGE_ALL_FLAGS;
+  the_fun->cfg->bb_flags_allocated = BB_ALL_FLAGS;
 }
 
 /* Helper function for remove_edge and clear_edges.  Frees edge structure
@@ -386,9 +388,13 @@ void
 clear_bb_flags (void)
 {
   basic_block bb;
+  int flags_to_preserve = BB_FLAGS_TO_PRESERVE;
+  if (current_loops
+      && loops_state_satisfies_p (cfun, LOOPS_HAVE_MARKED_IRREDUCIBLE_REGIONS))
+    flags_to_preserve |= BB_IRREDUCIBLE_LOOP;
 
   FOR_ALL_BB_FN (bb, cfun)
-    bb->flags &= BB_FLAGS_TO_PRESERVE;
+    bb->flags &= flags_to_preserve;
 }
 
 /* Check the consistency of profile information.  We can't do that
@@ -541,8 +547,8 @@ DEBUG_FUNCTION void
 debug (edge_def &ref)
 {
   /* FIXME (crowl): Is this desireable?  */
-  dump_edge_info (stderr, &ref, 0, false);
-  dump_edge_info (stderr, &ref, 0, true);
+  dump_edge_info (stderr, &ref, TDF_NONE, false);
+  dump_edge_info (stderr, &ref, TDF_NONE, true);
 }
 
 DEBUG_FUNCTION void

@@ -721,7 +721,7 @@ split_constant_offset_1 (tree type, tree op0, enum tree_code code, tree op1,
 		if (TREE_CODE (tmp_var) != SSA_NAME)
 		  return false;
 		wide_int var_min, var_max;
-		value_range_type vr_type = get_range_info (tmp_var, &var_min,
+		value_range_kind vr_type = get_range_info (tmp_var, &var_min,
 							   &var_max);
 		wide_int var_nonzero = get_nonzero_bits (tmp_var);
 		signop sgn = TYPE_SIGN (itype);
@@ -734,12 +734,12 @@ split_constant_offset_1 (tree type, tree op0, enum tree_code code, tree op1,
 		   is known to be [A + TMP_OFF, B + TMP_OFF], with all
 		   operations done in ITYPE.  The addition must overflow
 		   at both ends of the range or at neither.  */
-		bool overflow[2];
+		wi::overflow_type overflow[2];
 		unsigned int prec = TYPE_PRECISION (itype);
 		wide_int woff = wi::to_wide (tmp_off, prec);
 		wide_int op0_min = wi::add (var_min, woff, sgn, &overflow[0]);
 		wi::add (var_max, woff, sgn, &overflow[1]);
-		if (overflow[0] != overflow[1])
+		if ((overflow[0] != wi::OVF_NONE) != (overflow[1] != wi::OVF_NONE))
 		  return false;
 
 		/* Calculate (ssizetype) OP0 - (ssizetype) TMP_VAR.  */
@@ -807,7 +807,8 @@ canonicalize_base_object_address (tree addr)
   return build_fold_addr_expr (TREE_OPERAND (addr, 0));
 }
 
-/* Analyze the behavior of memory reference REF.  There are two modes:
+/* Analyze the behavior of memory reference REF within STMT.
+   There are two modes:
 
    - BB analysis.  In this case we simply split the address into base,
      init and offset components, without reference to any containing loop.
@@ -827,9 +828,9 @@ canonicalize_base_object_address (tree addr)
    Return true if the analysis succeeded and store the results in DRB if so.
    BB analysis can only fail for bitfield or reversed-storage accesses.  */
 
-bool
+opt_result
 dr_analyze_innermost (innermost_loop_behavior *drb, tree ref,
-		      struct loop *loop)
+		      struct loop *loop, const gimple *stmt)
 {
   poly_int64 pbitsize, pbitpos;
   tree base, poffset;
@@ -848,18 +849,12 @@ dr_analyze_innermost (innermost_loop_behavior *drb, tree ref,
 
   poly_int64 pbytepos;
   if (!multiple_p (pbitpos, BITS_PER_UNIT, &pbytepos))
-    {
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	fprintf (dump_file, "failed: bit offset alignment.\n");
-      return false;
-    }
+    return opt_result::failure_at (stmt,
+				   "failed: bit offset alignment.\n");
 
   if (preversep)
-    {
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	fprintf (dump_file, "failed: reverse storage order.\n");
-      return false;
-    }
+    return opt_result::failure_at (stmt,
+				   "failed: reverse storage order.\n");
 
   /* Calculate the alignment and misalignment for the inner reference.  */
   unsigned int HOST_WIDE_INT bit_base_misalignment;
@@ -895,11 +890,8 @@ dr_analyze_innermost (innermost_loop_behavior *drb, tree ref,
   if (in_loop)
     {
       if (!simple_iv (loop, loop, base, &base_iv, true))
-        {
-	  if (dump_file && (dump_flags & TDF_DETAILS))
-	    fprintf (dump_file, "failed: evolution of base is not affine.\n");
-	  return false;
-        }
+	return opt_result::failure_at
+	  (stmt, "failed: evolution of base is not affine.\n");
     }
   else
     {
@@ -921,11 +913,8 @@ dr_analyze_innermost (innermost_loop_behavior *drb, tree ref,
           offset_iv.step = ssize_int (0);
         }
       else if (!simple_iv (loop, loop, poffset, &offset_iv, true))
-        {
-	  if (dump_file && (dump_flags & TDF_DETAILS))
-	    fprintf (dump_file, "failed: evolution of offset is not affine.\n");
-	  return false;
-        }
+	return opt_result::failure_at
+	  (stmt, "failed: evolution of offset is not affine.\n");
     }
 
   init = ssize_int (pbytepos);
@@ -981,7 +970,7 @@ dr_analyze_innermost (innermost_loop_behavior *drb, tree ref,
   if (dump_file && (dump_flags & TDF_DETAILS))
     fprintf (dump_file, "success.\n");
 
-  return true;
+  return opt_result::success ();
 }
 
 /* Return true if OP is a valid component reference for a DR access
@@ -1205,7 +1194,7 @@ create_data_ref (edge nest, loop_p loop, tree memref, gimple *stmt,
   DR_IS_CONDITIONAL_IN_STMT (dr) = is_conditional_in_stmt;
 
   dr_analyze_innermost (&DR_INNERMOST (dr), memref,
-			nest != NULL ? loop : NULL);
+			nest != NULL ? loop : NULL, stmt);
   dr_analyze_indices (dr, nest, loop);
   dr_analyze_alias (dr);
 
@@ -1318,38 +1307,27 @@ data_ref_compare_tree (tree t1, tree t2)
 /* Return TRUE it's possible to resolve data dependence DDR by runtime alias
    check.  */
 
-bool
+opt_result
 runtime_alias_check_p (ddr_p ddr, struct loop *loop, bool speed_p)
 {
   if (dump_enabled_p ())
-    {
-      dump_printf (MSG_NOTE, "consider run-time aliasing test between ");
-      dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (DDR_A (ddr)));
-      dump_printf (MSG_NOTE,  " and ");
-      dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (DDR_B (ddr)));
-      dump_printf (MSG_NOTE, "\n");
-    }
+    dump_printf (MSG_NOTE,
+		 "consider run-time aliasing test between %T and %T\n",
+		 DR_REF (DDR_A (ddr)), DR_REF (DDR_B (ddr)));
 
   if (!speed_p)
-    {
-      if (dump_enabled_p ())
-	dump_printf (MSG_MISSED_OPTIMIZATION,
-		     "runtime alias check not supported when optimizing "
-		     "for size.\n");
-      return false;
-    }
+    return opt_result::failure_at (DR_STMT (DDR_A (ddr)),
+				   "runtime alias check not supported when"
+				   " optimizing for size.\n");
 
   /* FORNOW: We don't support versioning with outer-loop in either
      vectorization or loop distribution.  */
   if (loop != NULL && loop->inner != NULL)
-    {
-      if (dump_enabled_p ())
-	dump_printf (MSG_MISSED_OPTIMIZATION,
-		     "runtime alias check not supported for outer loop.\n");
-      return false;
-    }
+    return opt_result::failure_at (DR_STMT (DDR_A (ddr)),
+				   "runtime alias check not supported for"
+				   " outer loop.\n");
 
-  return true;
+  return opt_result::success ();
 }
 
 /* Operator == between two dr_with_seg_len objects.
@@ -1469,17 +1447,9 @@ prune_runtime_alias_test_list (vec<dr_with_seg_len_pair_t> *alias_pairs,
       if (*dr_a1 == *dr_a2 && *dr_b1 == *dr_b2)
 	{
 	  if (dump_enabled_p ())
-	    {
-	      dump_printf (MSG_NOTE, "found equal ranges ");
-	      dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (dr_a1->dr));
-	      dump_printf (MSG_NOTE,  ", ");
-	      dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (dr_b1->dr));
-	      dump_printf (MSG_NOTE,  " and ");
-	      dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (dr_a2->dr));
-	      dump_printf (MSG_NOTE,  ", ");
-	      dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (dr_b2->dr));
-	      dump_printf (MSG_NOTE, "\n");
-	    }
+	    dump_printf (MSG_NOTE, "found equal ranges %T, %T and %T, %T\n",
+			 DR_REF (dr_a1->dr), DR_REF (dr_b1->dr),
+			 DR_REF (dr_a2->dr), DR_REF (dr_b2->dr));
 	  alias_pairs->ordered_remove (i--);
 	  continue;
 	}
@@ -1576,17 +1546,9 @@ prune_runtime_alias_test_list (vec<dr_with_seg_len_pair_t> *alias_pairs,
 	      dr_a1->align = MIN (dr_a1->align, new_align);
 	    }
 	  if (dump_enabled_p ())
-	    {
-	      dump_printf (MSG_NOTE, "merging ranges for ");
-	      dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (dr_a1->dr));
-	      dump_printf (MSG_NOTE,  ", ");
-	      dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (dr_b1->dr));
-	      dump_printf (MSG_NOTE,  " and ");
-	      dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (dr_a2->dr));
-	      dump_printf (MSG_NOTE,  ", ");
-	      dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (dr_b2->dr));
-	      dump_printf (MSG_NOTE, "\n");
-	    }
+	    dump_printf (MSG_NOTE, "merging ranges for %T, %T and %T, %T\n",
+			 DR_REF (dr_a1->dr), DR_REF (dr_b1->dr),
+			 DR_REF (dr_a2->dr), DR_REF (dr_b2->dr));
 	  alias_pairs->ordered_remove (i);
 	  i--;
 	}
@@ -1918,19 +1880,16 @@ create_runtime_alias_checks (struct loop *loop,
 {
   tree part_cond_expr;
 
+  fold_defer_overflow_warnings ();
   for (size_t i = 0, s = alias_pairs->length (); i < s; ++i)
     {
       const dr_with_seg_len& dr_a = (*alias_pairs)[i].first;
       const dr_with_seg_len& dr_b = (*alias_pairs)[i].second;
 
       if (dump_enabled_p ())
-	{
-	  dump_printf (MSG_NOTE, "create runtime check for data references ");
-	  dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (dr_a.dr));
-	  dump_printf (MSG_NOTE, " and ");
-	  dump_generic_expr (MSG_NOTE, TDF_SLIM, DR_REF (dr_b.dr));
-	  dump_printf (MSG_NOTE, "\n");
-	}
+	dump_printf (MSG_NOTE,
+		     "create runtime check for data references %T and %T\n",
+		     DR_REF (dr_a.dr), DR_REF (dr_b.dr));
 
       /* Create condition expression for each pair data references.  */
       create_intersect_range_checks (loop, &part_cond_expr, dr_a, dr_b);
@@ -1940,6 +1899,7 @@ create_runtime_alias_checks (struct loop *loop,
       else
 	*cond_expr = part_cond_expr;
     }
+  fold_undefer_and_ignore_overflow_warnings ();
 }
 
 /* Check if OFFSET1 and OFFSET2 (DR_OFFSETs of some data-refs) are identical
@@ -3015,7 +2975,8 @@ analyze_siv_subscript_cst_affine (tree chrec_a,
     {
       if (value0 == false)
 	{
-	  if (!chrec_is_positive (CHREC_RIGHT (chrec_b), &value1))
+	  if (TREE_CODE (chrec_b) != POLYNOMIAL_CHREC
+	      || !chrec_is_positive (CHREC_RIGHT (chrec_b), &value1))
 	    {
 	      if (dump_file && (dump_flags & TDF_DETAILS))
 		fprintf (dump_file, "siv test failed: chrec not positive.\n");
@@ -3096,7 +3057,8 @@ analyze_siv_subscript_cst_affine (tree chrec_a,
 	}
       else
 	{
-	  if (!chrec_is_positive (CHREC_RIGHT (chrec_b), &value2))
+	  if (TREE_CODE (chrec_b) != POLYNOMIAL_CHREC
+	      || !chrec_is_positive (CHREC_RIGHT (chrec_b), &value2))
 	    {
 	      if (dump_file && (dump_flags & TDF_DETAILS))
 		fprintf (dump_file, "siv test failed: chrec not positive.\n");
@@ -5063,18 +5025,18 @@ loop_nest_has_data_refs (loop_p loop)
    reference, returns false, otherwise returns true.  NEST is the outermost
    loop of the loop nest in which the references should be analyzed.  */
 
-bool
+opt_result
 find_data_references_in_stmt (struct loop *nest, gimple *stmt,
 			      vec<data_reference_p> *datarefs)
 {
   unsigned i;
   auto_vec<data_ref_loc, 2> references;
   data_ref_loc *ref;
-  bool ret = true;
   data_reference_p dr;
 
   if (get_references_in_stmt (stmt, &references))
-    return false;
+    return opt_result::failure_at (stmt, "statement clobbers memory: %G",
+				   stmt);
 
   FOR_EACH_VEC_ELT (references, i, ref)
     {
@@ -5085,7 +5047,7 @@ find_data_references_in_stmt (struct loop *nest, gimple *stmt,
       datarefs->safe_push (dr);
     }
 
-  return ret;
+  return opt_result::success ();
 }
 
 /* Stores the data references in STMT to DATAREFS.  If there is an
@@ -5198,6 +5160,81 @@ dr_alignment (innermost_loop_behavior *drb)
     alignment = MIN (alignment, drb->step_alignment);
 
   return alignment;
+}
+
+/* If BASE is a pointer-typed SSA name, try to find the object that it
+   is based on.  Return this object X on success and store the alignment
+   in bytes of BASE - &X in *ALIGNMENT_OUT.  */
+
+static tree
+get_base_for_alignment_1 (tree base, unsigned int *alignment_out)
+{
+  if (TREE_CODE (base) != SSA_NAME || !POINTER_TYPE_P (TREE_TYPE (base)))
+    return NULL_TREE;
+
+  gimple *def = SSA_NAME_DEF_STMT (base);
+  base = analyze_scalar_evolution (loop_containing_stmt (def), base);
+
+  /* Peel chrecs and record the minimum alignment preserved by
+     all steps.  */
+  unsigned int alignment = MAX_OFILE_ALIGNMENT / BITS_PER_UNIT;
+  while (TREE_CODE (base) == POLYNOMIAL_CHREC)
+    {
+      unsigned int step_alignment = highest_pow2_factor (CHREC_RIGHT (base));
+      alignment = MIN (alignment, step_alignment);
+      base = CHREC_LEFT (base);
+    }
+
+  /* Punt if the expression is too complicated to handle.  */
+  if (tree_contains_chrecs (base, NULL) || !POINTER_TYPE_P (TREE_TYPE (base)))
+    return NULL_TREE;
+
+  /* The only useful cases are those for which a dereference folds to something
+     other than an INDIRECT_REF.  */
+  tree ref_type = TREE_TYPE (TREE_TYPE (base));
+  tree ref = fold_indirect_ref_1 (UNKNOWN_LOCATION, ref_type, base);
+  if (!ref)
+    return NULL_TREE;
+
+  /* Analyze the base to which the steps we peeled were applied.  */
+  poly_int64 bitsize, bitpos, bytepos;
+  machine_mode mode;
+  int unsignedp, reversep, volatilep;
+  tree offset;
+  base = get_inner_reference (ref, &bitsize, &bitpos, &offset, &mode,
+			      &unsignedp, &reversep, &volatilep);
+  if (!base || !multiple_p (bitpos, BITS_PER_UNIT, &bytepos))
+    return NULL_TREE;
+
+  /* Restrict the alignment to that guaranteed by the offsets.  */
+  unsigned int bytepos_alignment = known_alignment (bytepos);
+  if (bytepos_alignment != 0)
+    alignment = MIN (alignment, bytepos_alignment);
+  if (offset)
+    {
+      unsigned int offset_alignment = highest_pow2_factor (offset);
+      alignment = MIN (alignment, offset_alignment);
+    }
+
+  *alignment_out = alignment;
+  return base;
+}
+
+/* Return the object whose alignment would need to be changed in order
+   to increase the alignment of ADDR.  Store the maximum achievable
+   alignment in *MAX_ALIGNMENT.  */
+
+tree
+get_base_for_alignment (tree addr, unsigned int *max_alignment)
+{
+  tree base = get_base_for_alignment_1 (addr, max_alignment);
+  if (base)
+    return base;
+
+  if (TREE_CODE (addr) == ADDR_EXPR)
+    addr = TREE_OPERAND (addr, 0);
+  *max_alignment = MAX_OFILE_ALIGNMENT / BITS_PER_UNIT;
+  return addr;
 }
 
 /* Recursive helper function.  */
@@ -5375,6 +5412,8 @@ static tree
 dr_step_indicator (struct data_reference *dr, int useful_min)
 {
   tree step = DR_STEP (dr);
+  if (!step)
+    return NULL_TREE;
   STRIP_NOPS (step);
   /* Look for cases where the step is scaled by a positive constant
      integer, which will often be the access size.  If the multiplication

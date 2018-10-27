@@ -1,4 +1,4 @@
-## Makefile for the C++03 sources of the GNU C++ Standard library.
+## Makefile for the C++11 sources of the GNU C++ Standard library.
 ##
 ## Copyright (C) 1997-2018 Free Software Foundation, Inc.
 ##
@@ -136,6 +136,25 @@ limits.lo: limits.cc
 limits.o: limits.cc
 	$(CXXCOMPILE) -fchar8_t -c $<
 
+if ENABLE_DUAL_ABI
+# Rewrite the type info for __ios_failure.
+rewrite_ios_failure_typeinfo = sed -e '/^_*_ZTISt13__ios_failure:/,/_ZTVN10__cxxabiv120__si_class_type_infoE/s/_ZTVN10__cxxabiv120__si_class_type_infoE/_ZTVSt19__iosfail_type_info/'
+
+cxx11-ios_failure-lt.s: cxx11-ios_failure.cc
+	$(LTCXXCOMPILE) -S $< -o tmp-cxx11-ios_failure-lt.s
+	-test -f tmp-cxx11-ios_failure-lt.o && mv -f tmp-cxx11-ios_failure-lt.o tmp-cxx11-ios_failure-lt.s
+	$(rewrite_ios_failure_typeinfo) tmp-$@ > $@
+	-rm -f tmp-$@
+cxx11-ios_failure.s: cxx11-ios_failure.cc
+	$(CXXCOMPILE) -S $< -o tmp-$@
+	$(rewrite_ios_failure_typeinfo) tmp-$@ > $@
+	-rm -f tmp-$@
+
+cxx11-ios_failure.lo: cxx11-ios_failure-lt.s
+	$(LTCXXCOMPILE) -g0 -c $< -o $@
+cxx11-ios_failure.o: cxx11-ios_failure.s
+	$(CXXCOMPILE) -g0 -c $<
+endif
 
 # AM_CXXFLAGS needs to be in each subdirectory so that it can be
 # modified in a per-library or per-sub-library way.  Need to manually

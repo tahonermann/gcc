@@ -55,8 +55,9 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Function summary where the parameter infos are actually stored. */
 ipa_node_params_t *ipa_node_params_sum = NULL;
-/* Vector of IPA-CP transformation data for each clone.  */
-vec<ipcp_transformation_summary, va_gc> *ipcp_transformations;
+
+function_summary <ipcp_transformation *> *ipcp_transformation_sum = NULL;
+
 /* Edge summary for IPA-CP edge information.  */
 ipa_edge_args_sum_t *ipa_edge_args_sum;
 
@@ -111,16 +112,17 @@ struct ipa_vr_ggc_hash_traits : public ggc_cache_remove <value_range *>
   typedef value_range *compare_type;
   static hashval_t
   hash (const value_range *p)
-  {
-    gcc_checking_assert (!p->equiv);
-    hashval_t t = (hashval_t) p->type;
-    t = iterative_hash_expr (p->min, t);
-    return iterative_hash_expr (p->max, t);
-  }
+    {
+      gcc_checking_assert (!p->equiv ());
+      inchash::hash hstate (p->kind ());
+      inchash::add_expr (p->min (), hstate);
+      inchash::add_expr (p->max (), hstate);
+      return hstate.end ();
+    }
   static bool
   equal (const value_range *a, const value_range *b)
     {
-      return a->type == b->type && a->min == b->min && a->max == b->max;
+      return a->ignore_equivs_equal_p (*b);
     }
   static void
   mark_empty (value_range *&p)
@@ -396,10 +398,10 @@ ipa_print_node_jump_functions_for_edge (FILE *f, struct cgraph_edge *cs)
 	{
 	  fprintf (f, "         VR  ");
 	  fprintf (f, "%s[",
-		   (jump_func->m_vr->type == VR_ANTI_RANGE) ? "~" : "");
-	  print_decs (wi::to_wide (jump_func->m_vr->min), f);
+		   (jump_func->m_vr->kind () == VR_ANTI_RANGE) ? "~" : "");
+	  print_decs (wi::to_wide (jump_func->m_vr->min ()), f);
 	  fprintf (f, ", ");
-	  print_decs (wi::to_wide (jump_func->m_vr->max), f);
+	  print_decs (wi::to_wide (jump_func->m_vr->max ()), f);
 	  fprintf (f, "]\n");
 	}
       else
@@ -1787,13 +1789,9 @@ ipa_get_value_range (value_range *tmp)
    value_ranges.  */
 
 static value_range *
-ipa_get_value_range (enum value_range_type type, tree min, tree max)
+ipa_get_value_range (enum value_range_kind type, tree min, tree max)
 {
-  value_range tmp;
-  tmp.type = type;
-  tmp.min = min;
-  tmp.max = max;
-  tmp.equiv = NULL;
+  value_range tmp (type, min, max);
   return ipa_get_value_range (&tmp);
 }
 
@@ -1802,7 +1800,7 @@ ipa_get_value_range (enum value_range_type type, tree min, tree max)
    same value_range structures.  */
 
 static void
-ipa_set_jfunc_vr (ipa_jump_func *jf, enum value_range_type type,
+ipa_set_jfunc_vr (ipa_jump_func *jf, enum value_range_kind type,
 		  tree min, tree max)
 {
   jf->m_vr = ipa_get_value_range (type, min, max);
@@ -1882,22 +1880,19 @@ ipa_compute_jump_functions_for_edge (struct ipa_func_body_info *fbi,
       else
 	{
 	  wide_int min, max;
-	  value_range_type type;
+	  value_range_kind type;
 	  if (TREE_CODE (arg) == SSA_NAME
 	      && param_type
 	      && (type = get_range_info (arg, &min, &max))
 	      && (type == VR_RANGE || type == VR_ANTI_RANGE))
 	    {
-	      value_range tmpvr,resvr;
-
-	      tmpvr.type = type;
-	      tmpvr.min = wide_int_to_tree (TREE_TYPE (arg), min);
-	      tmpvr.max = wide_int_to_tree (TREE_TYPE (arg), max);
-	      tmpvr.equiv = NULL;
-	      memset (&resvr, 0, sizeof (resvr));
+	      value_range resvr;
+	      value_range tmpvr (type,
+				 wide_int_to_tree (TREE_TYPE (arg), min),
+				 wide_int_to_tree (TREE_TYPE (arg), max));
 	      extract_range_from_unary_expr (&resvr, NOP_EXPR, param_type,
 					     &tmpvr, TREE_TYPE (arg));
-	      if (resvr.type == VR_RANGE || resvr.type == VR_ANTI_RANGE)
+	      if (!resvr.undefined_p () && !resvr.varying_p ())
 		ipa_set_jfunc_vr (jfunc, &resvr);
 	      else
 		gcc_assert (!jfunc->m_vr);
@@ -2817,7 +2812,6 @@ ipa_make_edge_direct_to_target (struct cgraph_edge *ie, tree target,
 				bool speculative)
 {
   struct cgraph_node *callee;
-  struct ipa_call_summary *es = ipa_call_summaries->get (ie);
   bool unreachable = false;
 
   if (TREE_CODE (target) == ADDR_EXPR)
@@ -2841,8 +2835,7 @@ ipa_make_edge_direct_to_target (struct cgraph_edge *ie, tree target,
 	    {
 	      if (dump_enabled_p ())
 		{
-		  location_t loc = gimple_location_safe (ie->call_stmt);
-		  dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, loc,
+		  dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, ie->call_stmt,
 				   "discovered direct call non-invariant %s\n",
 				   ie->caller->dump_name ());
 		}
@@ -2852,8 +2845,7 @@ ipa_make_edge_direct_to_target (struct cgraph_edge *ie, tree target,
 
           if (dump_enabled_p ())
 	    {
-	      location_t loc = gimple_location_safe (ie->call_stmt);
-	      dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, loc,
+	      dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, ie->call_stmt,
 			       "discovered direct call to non-function in %s, "
 			       "making it __builtin_unreachable\n",
 			       ie->caller->dump_name ());
@@ -2941,9 +2933,7 @@ ipa_make_edge_direct_to_target (struct cgraph_edge *ie, tree target,
      }
   if (dump_enabled_p ())
     {
-      location_t loc = gimple_location_safe (ie->call_stmt);
-
-      dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, loc,
+      dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, ie->call_stmt,
 		       "converting indirect call in %s to direct call to %s\n",
 		       ie->caller->name (), callee->name ());
     }
@@ -2955,7 +2945,7 @@ ipa_make_edge_direct_to_target (struct cgraph_edge *ie, tree target,
 	 for direct call (adjusted by inline_edge_duplication_hook).  */
       if (ie == orig)
 	{
-	  es = ipa_call_summaries->get (ie);
+	  ipa_call_summary *es = ipa_call_summaries->get (ie);
 	  es->call_stmt_size -= (eni_size_weights.indirect_call_cost
 				 - eni_size_weights.call_cost);
 	  es->call_stmt_time -= (eni_time_weights.indirect_call_cost
@@ -3707,16 +3697,6 @@ ipa_check_create_edge_args (void)
     ipa_vr_hash_table = hash_table<ipa_vr_ggc_hash_traits>::create_ggc (37);
 }
 
-/* Frees all dynamically allocated structures that the argument info points
-   to.  */
-
-void
-ipa_free_edge_args_substructures (struct ipa_edge_args *args)
-{
-  vec_free (args->jump_functions);
-  *args = ipa_edge_args ();
-}
-
 /* Free all ipa_edge structures.  */
 
 void
@@ -3738,19 +3718,18 @@ ipa_free_all_node_params (void)
   ipa_node_params_sum = NULL;
 }
 
-/* Grow ipcp_transformations if necessary.  Also allocate any necessary hash
+/* Initialize IPA CP transformation summary and also allocate any necessary hash
    tables if they do not already exist.  */
 
 void
-ipcp_grow_transformations_if_necessary (void)
+ipcp_transformation_initialize (void)
 {
-  if (vec_safe_length (ipcp_transformations)
-      <= (unsigned) symtab->cgraph_max_uid)
-    vec_safe_grow_cleared (ipcp_transformations, symtab->cgraph_max_uid + 1);
   if (!ipa_bits_hash_table)
     ipa_bits_hash_table = hash_table<ipa_bit_ggc_hash_traits>::create_ggc (37);
   if (!ipa_vr_hash_table)
     ipa_vr_hash_table = hash_table<ipa_vr_ggc_hash_traits>::create_ggc (37);
+  if (ipcp_transformation_sum == NULL)
+    ipcp_transformation_sum = ipcp_transformation_t::create_ggc (symtab);
 }
 
 /* Set the aggregate replacements of NODE to be AGGVALS.  */
@@ -3759,8 +3738,9 @@ void
 ipa_set_node_agg_value_chain (struct cgraph_node *node,
 			      struct ipa_agg_replacement_value *aggvals)
 {
-  ipcp_grow_transformations_if_necessary ();
-  (*ipcp_transformations)[node->uid].agg_values = aggvals;
+  ipcp_transformation_initialize ();
+  ipcp_transformation *s = ipcp_transformation_sum->get_create (node);
+  s->agg_values = aggvals;
 }
 
 /* Hook that is called by cgraph.c when an edge is removed.  Adjust reference
@@ -3924,15 +3904,14 @@ ipa_node_params_t::duplicate(cgraph_node *src, cgraph_node *dst,
       ipa_set_node_agg_value_chain (dst, new_av);
     }
 
-  ipcp_transformation_summary *src_trans
-    = ipcp_get_transformation_summary (src);
+  ipcp_transformation *src_trans = ipcp_get_transformation_summary (src);
 
   if (src_trans)
     {
-      ipcp_grow_transformations_if_necessary ();
-      src_trans = ipcp_get_transformation_summary (src);
-      ipcp_transformation_summary *dst_trans
-	= ipcp_get_transformation_summary (dst);
+      ipcp_transformation_initialize ();
+      src_trans = ipcp_transformation_sum->get_create (src);
+      ipcp_transformation *dst_trans
+	= ipcp_transformation_sum->get_create (dst);
 
       dst_trans->bits = vec_safe_copy (src_trans->bits);
 
@@ -4140,9 +4119,9 @@ ipa_write_jump_function (struct output_block *ob,
   if (jump_func->m_vr)
     {
       streamer_write_enum (ob->main_stream, value_rang_type,
-			   VR_LAST, jump_func->m_vr->type);
-      stream_write_tree (ob, jump_func->m_vr->min, true);
-      stream_write_tree (ob, jump_func->m_vr->max, true);
+			   VR_LAST, jump_func->m_vr->kind ());
+      stream_write_tree (ob, jump_func->m_vr->min (), true);
+      stream_write_tree (ob, jump_func->m_vr->max (), true);
     }
 }
 
@@ -4230,7 +4209,7 @@ ipa_read_jump_function (struct lto_input_block *ib,
   bool vr_known = bp_unpack_value (&vr_bp, 1);
   if (vr_known)
     {
-      enum value_range_type type = streamer_read_enum (ib, value_range_type,
+      enum value_range_kind type = streamer_read_enum (ib, value_range_kind,
 						       VR_LAST);
       tree min = stream_read_tree (ib, data_in);
       tree max = stream_read_tree (ib, data_in);
@@ -4574,7 +4553,7 @@ write_ipcp_transformation_info (output_block *ob, cgraph_node *node)
       streamer_write_bitpack (&bp);
     }
 
-  ipcp_transformation_summary *ts = ipcp_get_transformation_summary (node);
+  ipcp_transformation *ts = ipcp_get_transformation_summary (node);
   if (ts && vec_safe_length (ts->m_vr) > 0)
     {
       count = ts->m_vr->length ();
@@ -4649,9 +4628,8 @@ read_ipcp_transformation_info (lto_input_block *ib, cgraph_node *node,
   count = streamer_read_uhwi (ib);
   if (count > 0)
     {
-      ipcp_grow_transformations_if_necessary ();
-
-      ipcp_transformation_summary *ts = ipcp_get_transformation_summary (node);
+      ipcp_transformation_initialize ();
+      ipcp_transformation *ts = ipcp_transformation_sum->get_create (node);
       vec_safe_grow_cleared (ts->m_vr, count);
       for (i = 0; i < count; i++)
 	{
@@ -4662,7 +4640,7 @@ read_ipcp_transformation_info (lto_input_block *ib, cgraph_node *node,
 	  parm_vr->known = bp_unpack_value (&bp, 1);
 	  if (parm_vr->known)
 	    {
-	      parm_vr->type = streamer_read_enum (ib, value_range_type,
+	      parm_vr->type = streamer_read_enum (ib, value_range_kind,
 						  VR_LAST);
 	      parm_vr->min = streamer_read_wide_int (ib);
 	      parm_vr->max = streamer_read_wide_int (ib);
@@ -4672,9 +4650,8 @@ read_ipcp_transformation_info (lto_input_block *ib, cgraph_node *node,
   count = streamer_read_uhwi (ib);
   if (count > 0)
     {
-      ipcp_grow_transformations_if_necessary ();
-
-      ipcp_transformation_summary *ts = ipcp_get_transformation_summary (node);
+      ipcp_transformation_initialize ();
+      ipcp_transformation *ts = ipcp_transformation_sum->get_create (node);
       vec_safe_grow_cleared (ts->bits, count);
 
       for (i = 0; i < count; i++)
@@ -4941,14 +4918,14 @@ ipcp_modif_dom_walker::before_dom_children (basic_block bb)
 }
 
 /* Update bits info of formal parameters as described in
-   ipcp_transformation_summary.  */
+   ipcp_transformation.  */
 
 static void
 ipcp_update_bits (struct cgraph_node *node)
 {
   tree parm = DECL_ARGUMENTS (node->decl);
   tree next_parm = parm;
-  ipcp_transformation_summary *ts = ipcp_get_transformation_summary (node);
+  ipcp_transformation *ts = ipcp_get_transformation_summary (node);
 
   if (!ts || vec_safe_length (ts->bits) == 0)
     return;
@@ -5033,7 +5010,7 @@ ipcp_update_bits (struct cgraph_node *node)
 }
 
 /* Update value range of formal parameters as described in
-   ipcp_transformation_summary.  */
+   ipcp_transformation.  */
 
 static void
 ipcp_update_vr (struct cgraph_node *node)
@@ -5041,7 +5018,7 @@ ipcp_update_vr (struct cgraph_node *node)
   tree fndecl = node->decl;
   tree parm = DECL_ARGUMENTS (fndecl);
   tree next_parm = parm;
-  ipcp_transformation_summary *ts = ipcp_get_transformation_summary (node);
+  ipcp_transformation *ts = ipcp_get_transformation_summary (node);
   if (!ts || vec_safe_length (ts->m_vr) == 0)
     return;
   const vec<ipa_vr, va_gc> &vr = *ts->m_vr;
@@ -5144,9 +5121,11 @@ ipcp_transform_function (struct cgraph_node *node)
     free_ipa_bb_info (bi);
   fbi.bb_infos.release ();
   free_dominance_info (CDI_DOMINATORS);
-  (*ipcp_transformations)[node->uid].agg_values = NULL;
-  (*ipcp_transformations)[node->uid].bits = NULL;
-  (*ipcp_transformations)[node->uid].m_vr = NULL;
+
+  ipcp_transformation *s = ipcp_transformation_sum->get (node);
+  s->agg_values = NULL;
+  s->bits = NULL;
+  s->m_vr = NULL;
 
   vec_free (descriptors);
 

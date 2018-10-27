@@ -88,6 +88,10 @@ extern long double __strtold (const char *, char **);
 #include <sys/types.h>
 #endif
 
+#ifdef HAVE_SYS_UIO_H
+#include <sys/uio.h>
+#endif
+
 #ifdef __MINGW32__
 typedef off64_t gfc_offset;
 #else
@@ -439,11 +443,6 @@ typedef GFC_FULL_ARRAY_DESCRIPTOR (GFC_MAX_DIMENSIONS, GFC_INTEGER_4) gfc_full_a
 /* Macros to set size and type information.  */
 
 #define GFC_DTYPE_COPY(a,b) do { (a)->dtype = (b)->dtype; } while(0)
-#define GFC_DTYPE_COPY_SETRANK(a,b,n) \
-  do { \
-  (a)->dtype.rank = ((b)->dtype.rank | n ); \
-  } while (0)
-
 #define GFC_DTYPE_IS_UNSET(a) (unlikely((a)->dtype.elem_len == 0))
 #define GFC_DTYPE_CLEAR(a) do { (a)->dtype.elem_len = 0; \
 				(a)->dtype.version = 0; \
@@ -706,8 +705,15 @@ internal_proto(exit_error);
 extern ssize_t estr_write (const char *);
 internal_proto(estr_write);
 
-extern int st_vprintf (const char *, va_list);
-internal_proto(st_vprintf);
+#if !defined(HAVE_WRITEV) && !defined(HAVE_SYS_UIO_H)
+struct iovec {
+  void  *iov_base;    /* Starting address */
+  size_t iov_len;     /* Number of bytes to transfer */
+};
+#endif
+
+extern ssize_t estr_writev (const struct iovec *iov, int iovcnt);
+internal_proto(estr_writev);
 
 extern int st_printf (const char *, ...)
   __attribute__((format (gfc_printf, 1, 2)));
@@ -742,6 +748,9 @@ internal_proto(translate_error);
 
 extern void generate_error (st_parameter_common *, int, const char *);
 iexport_proto(generate_error);
+
+extern bool generate_error_common (st_parameter_common *, int, const char *);
+iexport_proto(generate_error_common);
 
 extern void generate_warning (st_parameter_common *, const char *);
 internal_proto(generate_warning);
@@ -888,7 +897,7 @@ internal_proto(filename_from_unit);
 
 /* stop.c */
 
-extern _Noreturn void stop_string (const char *, GFC_INTEGER_4);
+extern _Noreturn void stop_string (const char *, size_t, bool);
 export_proto(stop_string);
 
 /* reshape_packed.c */
@@ -1748,5 +1757,7 @@ void cshift1_16_c16 (gfc_array_c16 * const restrict,
 internal_proto(cshift1_16_c16);
 #endif
 
+/* Define this if we support asynchronous I/O on this platform.  This
+   currently requires weak symbols.  */
 
 #endif  /* LIBGFOR_H  */

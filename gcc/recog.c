@@ -1600,6 +1600,7 @@ decode_asm_operands (rtx body, rtx *operands, rtx **operand_locs,
 	      {
 		if (GET_CODE (XVECEXP (body, 0, i)) == CLOBBER)
 		  break;		/* Past last SET */
+		gcc_assert (GET_CODE (XVECEXP (body, 0, i)) == SET);
 		if (operands)
 		  operands[i] = SET_DEST (XVECEXP (body, 0, i));
 		if (operand_locs)
@@ -1825,7 +1826,7 @@ asm_operand_ok (rtx op, const char *constraint, const char **constraints)
       len = CONSTRAINT_LEN (c, constraint);
       do
 	constraint++;
-      while (--len && *constraint);
+      while (--len && *constraint && *constraint != ',');
       if (len)
 	return 0;
     }
@@ -2331,15 +2332,20 @@ extract_insn (rtx_insn *insn)
   which_alternative = -1;
 }
 
-/* Fill in OP_ALT_BASE for an instruction that has N_OPERANDS operands,
-   N_ALTERNATIVES alternatives and constraint strings CONSTRAINTS.
-   OP_ALT_BASE has N_ALTERNATIVES * N_OPERANDS entries and CONSTRAINTS
-   has N_OPERANDS entries.  */
+/* Fill in OP_ALT_BASE for an instruction that has N_OPERANDS
+   operands, N_ALTERNATIVES alternatives and constraint strings
+   CONSTRAINTS.  OP_ALT_BASE has N_ALTERNATIVES * N_OPERANDS entries
+   and CONSTRAINTS has N_OPERANDS entries.  OPLOC should be passed in
+   if the insn is an asm statement and preprocessing should take the
+   asm operands into account, e.g. to determine whether they could be
+   addresses in constraints that require addresses; it should then
+   point to an array of pointers to each operand.  */
 
 void
 preprocess_constraints (int n_operands, int n_alternatives,
 			const char **constraints,
-			operand_alternative *op_alt_base)
+			operand_alternative *op_alt_base,
+			rtx **oploc)
 {
   for (int i = 0; i < n_operands; i++)
     {
@@ -2426,6 +2432,9 @@ preprocess_constraints (int n_operands, int n_alternatives,
 		      break;
 
 		    case CT_ADDRESS:
+		      if (oploc && !address_operand (*oploc[i], VOIDmode))
+			break;
+
 		      op_alt[i].is_address = 1;
 		      op_alt[i].cl
 			= (reg_class_subunion
@@ -2470,7 +2479,8 @@ preprocess_insn_constraints (unsigned int icode)
 
   for (int i = 0; i < n_operands; ++i)
     constraints[i] = insn_data[icode].operand[i].constraint;
-  preprocess_constraints (n_operands, n_alternatives, constraints, op_alt);
+  preprocess_constraints (n_operands, n_alternatives, constraints, op_alt,
+			  NULL);
 
   this_target_recog->x_op_alt[icode] = op_alt;
   return op_alt;
@@ -2493,7 +2503,8 @@ preprocess_constraints (rtx_insn *insn)
       int n_entries = n_operands * n_alternatives;
       memset (asm_op_alt, 0, n_entries * sizeof (operand_alternative));
       preprocess_constraints (n_operands, n_alternatives,
-			      recog_data.constraints, asm_op_alt);
+			      recog_data.constraints, asm_op_alt,
+			      NULL);
       recog_op_alt = asm_op_alt;
     }
 }
@@ -3705,7 +3716,8 @@ store_data_bypass_p_1 (rtx_insn *out_insn, rtx in_set)
     {
       rtx out_exp = XVECEXP (out_pat, 0, i);
 
-      if (GET_CODE (out_exp) == CLOBBER || GET_CODE (out_exp) == USE)
+      if (GET_CODE (out_exp) == CLOBBER || GET_CODE (out_exp) == USE
+	  || GET_CODE (out_exp) == CLOBBER_HIGH)
 	continue;
 
       gcc_assert (GET_CODE (out_exp) == SET);
@@ -3736,7 +3748,8 @@ store_data_bypass_p (rtx_insn *out_insn, rtx_insn *in_insn)
     {
       rtx in_exp = XVECEXP (in_pat, 0, i);
 
-      if (GET_CODE (in_exp) == CLOBBER || GET_CODE (in_exp) == USE)
+      if (GET_CODE (in_exp) == CLOBBER || GET_CODE (in_exp) == USE
+	  || GET_CODE (in_exp) == CLOBBER_HIGH)
 	continue;
 
       gcc_assert (GET_CODE (in_exp) == SET);
@@ -3788,7 +3801,7 @@ if_test_bypass_p (rtx_insn *out_insn, rtx_insn *in_insn)
 	{
 	  rtx exp = XVECEXP (out_pat, 0, i);
 
-	  if (GET_CODE (exp) == CLOBBER)
+	  if (GET_CODE (exp) == CLOBBER  || GET_CODE (exp) == CLOBBER_HIGH)
 	    continue;
 
 	  gcc_assert (GET_CODE (exp) == SET);

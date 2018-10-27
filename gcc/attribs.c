@@ -430,9 +430,9 @@ diag_attr_exclusions (tree last_decl, tree node, tree attrname,
 
 	  /* Print a note?  */
 	  bool note = last_decl != NULL_TREE;
-
+	  auto_diagnostic_group d;
 	  if (TREE_CODE (node) == FUNCTION_DECL
-	      && DECL_BUILT_IN (node))
+	      && fndecl_built_in_p (node))
 	    note &= warning (OPT_Wattributes,
 			     "ignoring attribute %qE in declaration of "
 			     "a built-in function %qD because it conflicts "
@@ -587,6 +587,7 @@ decl_attributes (tree *node, tree attributes, int flags,
 	  /* This is a c++11 attribute that appertains to a
 	     type-specifier, outside of the definition of, a class
 	     type.  Ignore it.  */
+	  auto_diagnostic_group d;
 	  if (warning (OPT_Wattributes, "attribute ignored"))
 	    inform (input_location,
 		    "an attribute that appertains to a type-specifier "
@@ -672,6 +673,35 @@ decl_attributes (tree *node, tree attributes, int flags,
 
       bool no_add_attrs = false;
 
+      /* Check for exclusions with other attributes on the current
+	 declation as well as the last declaration of the same
+	 symbol already processed (if one exists).  Detect and
+	 reject incompatible attributes.  */
+      bool built_in = flags & ATTR_FLAG_BUILT_IN;
+      if (spec->exclude
+	  && (flag_checking || !built_in))
+	{
+	  /* Always check attributes on user-defined functions.
+	     Check them on built-ins only when -fchecking is set.
+	     Ignore __builtin_unreachable -- it's both const and
+	     noreturn.  */
+
+	  if (!built_in
+	      || !DECL_P (*anode)
+	      || (DECL_FUNCTION_CODE (*anode) != BUILT_IN_UNREACHABLE
+		  && (DECL_FUNCTION_CODE (*anode)
+		      != BUILT_IN_UBSAN_HANDLE_BUILTIN_UNREACHABLE)))
+	    {
+	      bool no_add = diag_attr_exclusions (last_decl, *anode, name, spec);
+	      if (!no_add && anode != node)
+		no_add = diag_attr_exclusions (last_decl, *node, name, spec);
+	      no_add_attrs |= no_add;
+	    }
+	}
+
+      if (no_add_attrs)
+	continue;
+
       if (spec->handler != NULL)
 	{
 	  int cxx11_flag =
@@ -693,33 +723,6 @@ decl_attributes (tree *node, tree attributes, int flags,
 	    }
 	  else
 	    returned_attrs = chainon (ret, returned_attrs);
-	}
-
-      /* If the attribute was successfully handled on its own and is
-	 about to be added check for exclusions with other attributes
-	 on the current declation as well as the last declaration of
-	 the same symbol already processed (if one exists).  */
-      bool built_in = flags & ATTR_FLAG_BUILT_IN;
-      if (spec->exclude
-	  && !no_add_attrs
-	  && (flag_checking || !built_in))
-	{
-	  /* Always check attributes on user-defined functions.
-	     Check them on built-ins only when -fchecking is set.
-	     Ignore __builtin_unreachable -- it's both const and
-	     noreturn.  */
-
-	  if (!built_in
-	      || !DECL_P (*anode)
-	      || (DECL_FUNCTION_CODE (*anode) != BUILT_IN_UNREACHABLE
-		  && (DECL_FUNCTION_CODE (*anode)
-		      != BUILT_IN_UBSAN_HANDLE_BUILTIN_UNREACHABLE)))
-	    {
-	      bool no_add = diag_attr_exclusions (last_decl, *anode, name, spec);
-	      if (!no_add && anode != node)
-		no_add = diag_attr_exclusions (last_decl, *node, name, spec);
-	      no_add_attrs |= no_add;
-	    }
 	}
 
       /* Layout the decl in case anything changed.  */
@@ -1155,17 +1158,14 @@ build_type_attribute_qual_variant (tree otype, tree attribute, int quals)
 	   TYPE_CANONICAL.  */;
       else if (TYPE_STRUCTURAL_EQUALITY_P (ttype)
 	       || !comp_type_attributes (ntype, ttype))
-	{
-	  /* If the target-dependent attributes make NTYPE different from
-	     its canonical type, we will need to use structural equality
-	     checks for this type.
+	/* If the target-dependent attributes make NTYPE different from
+	   its canonical type, we will need to use structural equality
+	   checks for this type.
 
-	     But make sure we don't get here for stripping attributes from a
-	     type; the no-attribute type might not need structural comparison,
-	     and it should have been in the hash table already.  */
-	  gcc_assert (attribute);
-	  SET_TYPE_STRUCTURAL_EQUALITY (ntype);
-	}
+	   We shouldn't get here for stripping attributes from a type;
+	   the no-attribute type might not need structural comparison.  But
+	   we can if was discarded from type_hash_table.  */
+	SET_TYPE_STRUCTURAL_EQUALITY (ntype);
       else if (TYPE_CANONICAL (ntype) == ntype)
 	TYPE_CANONICAL (ntype) = TYPE_CANONICAL (ttype);
 

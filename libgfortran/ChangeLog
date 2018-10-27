@@ -1,3 +1,1068 @@
+2018-10-06  Janne Blomqvist  <jb@gcc.gnu.org>
+
+	* io/unix.c (compare_file_filename): Use gfc_charlen_type instead
+	of int for string length.
+	(inquire_sequential): Likewise.
+	(inquire_direct): Likewise.
+	(inquire_formatted): Likewise.
+	(inquire_unformatted): Likewise.
+	(inquire_access): Likewise.
+	(inquire_read): Likewise.
+	(inquire_write): Likewise.
+	(inquire_readwrite): Likewise.
+	* io/unix.h (compare_file_filename): Likewise.
+	(inquire_sequential): Likewise.
+	(inquire_direct): Likewise.
+	(inquire_formatted): Likewise.
+	(inquire_unformatted): Likewise.
+	(inquire_read): Likewise.
+	(inquire_write): Likewise.
+	(inquire_readwrite): Likewise.
+
+2018-10-02  Gerald Pfeifer  <gerald@pfeifer.com>
+
+	* io/close.c [!HAVE_UNLINK_OPEN_FILE]: Include <string.h>.
+
+2018-09-21  Janne Blomqvist  <jb@gcc.gnu.org>
+
+	* config.h.in: Regenerated.
+	* configure: Regenerated.
+	* configure.ac: Check for writev and sys/uio.h.
+	* libgfortran.h: Include sys/uio.h.
+	(st_vprintf): Remove prototype.
+	(struct iovec): Define if not available.
+	(estr_writev): New prototype.
+	* runtime/backtrace.c (error_callback): Use estr_writev.
+	* runtime/error.c (ST_VPRINTF_SIZE): Remove.
+	(estr_writev): New function.
+	(st_vprintf): Remove.
+	(gf_vsnprintf): New function.
+	(ST_ERRBUF_SIZE): New macro.
+	(st_printf): Use vsnprintf.
+	(os_error): Use estr_writev.
+	(runtime_error): Use vsnprintf and estr_writev.
+	(runtime_error_at): Likewise.
+	(runtime_warning_at): Likewise.
+	(internal_error): Use estr_writev.
+	(generate_error_common): Likewise.
+	(generate_warning): Likewise.
+	(notify_std): Likewise.
+	* runtime/pause.c (pause_string): Likewise.
+	* runtime/stop.c (report_exception): Likewise.
+	(stop_string): Likewise.
+	(error_stop_string): Likewise.
+
+2018-09-16  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	PR fortran/37802
+	* m4/matmul_internal.m4: Adjust error messages.
+        * generated/matmul_c10.c: Regenerated.
+        * generated/matmul_c16.c: Regenerated.
+        * generated/matmul_c4.c: Regenerated.
+        * generated/matmul_c8.c: Regenerated.
+        * generated/matmul_i1.c: Regenerated.
+        * generated/matmul_i16.c: Regenerated.
+        * generated/matmul_i2.c: Regenerated.
+        * generated/matmul_i4.c: Regenerated.
+        * generated/matmul_i8.c: Regenerated.
+        * generated/matmul_r10.c: Regenerated.
+        * generated/matmul_r16.c: Regenerated.
+        * generated/matmul_r4.c: Regenerated.
+        * generated/matmul_r8.c: Regenerated.
+        * generated/matmulavx128_c10.c: Regenerated.
+        * generated/matmulavx128_c16.c: Regenerated.
+        * generated/matmulavx128_c4.c: Regenerated.
+        * generated/matmulavx128_c8.c: Regenerated.
+        * generated/matmulavx128_i1.c: Regenerated.
+        * generated/matmulavx128_i16.c: Regenerated.
+        * generated/matmulavx128_i2.c: Regenerated.
+        * generated/matmulavx128_i4.c: Regenerated.
+        * generated/matmulavx128_i8.c: Regenerated.
+        * generated/matmulavx128_r10.c: Regenerated.
+        * generated/matmulavx128_r16.c: Regenerated.
+        * generated/matmulavx128_r4.c: Regenerated.
+        * generated/matmulavx128_r8.c: Regenerated.
+
+2018-09-14  Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
+
+	* io/unix.c (fallback_access): Avoid calling close on
+	uninitialized file descriptor.
+
+2018-09-12  Kwok Cheung Yeung  <kcy@codesourcery.com>
+
+	* runtime/minimal.c (estr_write): Define in terms of write.
+
+2018-09-12  Andrew Stubbs  <ams@codesourcery.com>
+
+	* runtime/minimal.c (exit): Only work around nvptx bugs on nvptx.
+
+2018-09-07  Janne Blomqvist  <jb@gcc.gnu.org>
+
+	* runtime/environ.c (init_unsigned_integer): Remove.
+
+2018-09-05  Hans-Peter Nilsson  <hp@axis.com>
+
+	* io/async.h: Use __gthread_mutex_t, not pthread_mutex_t.
+
+2018-09-01  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	* io/io.h: Change declaration of vlist type to
+	gfc_full_array_i4 to eliminate warning for mismatched type.
+	* io/format.c ((parse_format_list): Use gfc_full_array_i4.
+	* io/io.h: Use gfc_full_array_i4.
+
+2018-08-25  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	PR libfortran/86704
+	* m4/matmul_internal.m4: Correct calculation of needed buffer size
+	for arrays of shape (1,n).
+	* generated/matmul_c10.c: Regenerated
+	* generated/matmul_c16.c: Regenerated
+	* generated/matmul_c4.c: Regenerated
+	* generated/matmul_c8.c: Regenerated
+	* generated/matmul_i1.c: Regenerated
+	* generated/matmul_i16.c: Regenerated
+	* generated/matmul_i2.c: Regenerated
+	* generated/matmul_i4.c: Regenerated
+	* generated/matmul_i8.c: Regenerated
+	* generated/matmul_r10.c: Regenerated
+	* generated/matmul_r16.c: Regenerated
+	* generated/matmul_r4.c: Regenerated
+	* generated/matmul_r8.c: Regenerated
+	* generated/matmulavx128_c10.c: Regenerated
+	* generated/matmulavx128_c16.c: Regenerated
+	* generated/matmulavx128_c4.c: Regenerated
+	* generated/matmulavx128_c8.c: Regenerated
+	* generated/matmulavx128_i1.c: Regenerated
+	* generated/matmulavx128_i16.c: Regenerated
+	* generated/matmulavx128_i2.c: Regenerated
+	* generated/matmulavx128_i4.c: Regenerated
+	* generated/matmulavx128_i8.c: Regenerated
+	* generated/matmulavx128_r10.c: Regenerated
+	* generated/matmulavx128_r16.c: Regenerated
+	* generated/matmulavx128_r4.c: Regenerated
+	* generated/matmulavx128_r8.c: Regenerated
+
+2018-08-23  David Edelsohn  <dje.gcc@gmail.com>
+
+	* async.h (ASYNC_IO): Revert _AIX test.
+
+2018-08-22  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	* async.h: Set ASYNC_IO to zero if _AIX is defined.
+	(struct adv_cond): If ASYNC_IO is zero, the struct has no members.
+	(async_unit): If ASYNC_IO is zero, remove unneeded members.
+
+2018-08-21  Nicolas Koenig  <koenigni@gcc.gnu.org>
+	Thomas Koenig <tkoenig@gcc.gnu.org>
+
+	PR fortran/25829
+	* Makefile.am: Add async.c to gfor_io_src.
+	Add async.h to gfor_io_headers.
+	* Makefile.in: Regenerated.
+	* gfortran.map: Add _gfortran_st_wait_async.
+	* io/async.c: New file.
+	* io/async.h: New file.
+	* io/close.c: Include async.h.
+	(st_close): Call async_wait for an asynchronous unit.
+	* io/file_pos.c (st_backspace): Likewise.
+	(st_endfile): Likewise.
+	(st_rewind): Likewise.
+	(st_flush): Likewise.
+	* io/inquire.c: Add handling for asynchronous PENDING
+	and ID arguments.
+	* io/io.h (st_parameter_dt): Add async bit.
+	(st_parameter_wait): Correct.
+	(gfc_unit): Add au pointer.
+	(st_wait_async): Add prototype.
+	(transfer_array_inner): Likewise.
+	(st_write_done_worker): Likewise.
+	* io/open.c: Include async.h.
+	(new_unit): Initialize asynchronous unit.
+	* io/transfer.c (async_opt): New struct.
+	(wrap_scalar_transfer): New function.
+	(transfer_integer): Call wrap_scalar_transfer to do the work.
+	(transfer_real): Likewise.
+	(transfer_real_write): Likewise.
+	(transfer_character): Likewise.
+	(transfer_character_wide): Likewise.
+	(transfer_complex): Likewise.
+	(transfer_array_inner): New function.
+	(transfer_array): Call transfer_array_inner.
+	(transfer_derived): Call wrap_scalar_transfer.
+	(data_transfer_init): Check for asynchronous I/O.
+	Perform a wait operation on any pending asynchronous I/O
+	if the data transfer is synchronous. Copy PDT and enqueue
+	thread for data transfer.
+	(st_read_done_worker): New function.
+	(st_read_done): Enqueue transfer or call st_read_done_worker.
+	(st_write_done_worker): New function.
+	(st_write_done): Enqueue transfer or call st_read_done_worker.
+	(st_wait): Document as no-op for compatibility reasons.
+	(st_wait_async): New function.
+	* io/unit.c (insert_unit): Use macros LOCK, UNLOCK and TRYLOCK;
+	add NOTE where necessary.
+	(get_gfc_unit): Likewise.
+	(init_units): Likewise.
+	(close_unit_1): Likewise. Call async_close if asynchronous.
+	(close_unit): Use macros LOCK and UNLOCK.
+	(finish_last_advance_record): Likewise.
+	(newunit_alloc): Likewise.
+	* io/unix.c (find_file): Likewise.
+	(flush_all_units_1): Likewise.
+	(flush_all_units): Likewise.
+	* libgfortran.h (generate_error_common): Add prototype.
+	* runtime/error.c: Include io.h and async.h.
+	(generate_error_common): New function.
+
+2018-08-15  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* configure.ac: Check for <sys/random.h>.
+	* configure, config.h.in: Regenerate.
+	* intrinsics/random.c [HAVE_SYS_RANDOM_H]: Include <sys/random.h>.
+
+2018-08-13  Janne Blomqvist  <jb@gcc.gnu.org>
+
+	* configure.ac: Check for getentropy.
+	* intrinsics/random.c (getosrandom): Use getentropy if available.
+	* config.h.in: Regenerated.
+	* configure: Regenerated.
+
+2018-07-31  Andre Vieira  <andre.simoesdiasvieira@arm.com>
+
+	Revert 'AsyncI/O patch committed'
+	2018-07-25  Nicolas Koenig  <koenigni@gcc.gnu.org>
+		Thomas Koenig <tkoenig@gcc.gnu.org>
+
+	PR fortran/25829
+	* Makefile.am: Add async.c to gfor_io_src.
+	Add async.h to gfor_io_headers.
+	* Makefile.in: Regenerated.
+	* gfortran.map: Add _gfortran_st_wait_async.
+	* io/async.c: New file.
+	* io/async.h: New file.
+	* io/close.c: Include async.h.
+	(st_close): Call async_wait for an asynchronous unit.
+	* io/file_pos.c (st_backspace): Likewise.
+	(st_endfile): Likewise.
+	(st_rewind): Likewise.
+	(st_flush): Likewise.
+	* io/inquire.c: Add handling for asynchronous PENDING
+	and ID arguments.
+	* io/io.h (st_parameter_dt): Add async bit.
+	(st_parameter_wait): Correct.
+	(gfc_unit): Add au pointer.
+	(st_wait_async): Add prototype.
+	(transfer_array_inner): Likewise.
+	(st_write_done_worker): Likewise.
+	* io/open.c: Include async.h.
+	(new_unit): Initialize asynchronous unit.
+	* io/transfer.c (async_opt): New struct.
+	(wrap_scalar_transfer): New function.
+	(transfer_integer): Call wrap_scalar_transfer to do the work.
+	(transfer_real): Likewise.
+	(transfer_real_write): Likewise.
+	(transfer_character): Likewise.
+	(transfer_character_wide): Likewise.
+	(transfer_complex): Likewise.
+	(transfer_array_inner): New function.
+	(transfer_array): Call transfer_array_inner.
+	(transfer_derived): Call wrap_scalar_transfer.
+	(data_transfer_init): Check for asynchronous I/O.
+	Perform a wait operation on any pending asynchronous I/O
+	if the data transfer is synchronous. Copy PDT and enqueue
+	thread for data transfer.
+	(st_read_done_worker): New function.
+	(st_read_done): Enqueue transfer or call st_read_done_worker.
+	(st_write_done_worker): New function.
+	(st_write_done): Enqueue transfer or call st_read_done_worker.
+	(st_wait): Document as no-op for compatibility reasons.
+	(st_wait_async): New function.
+	* io/unit.c (insert_unit): Use macros LOCK, UNLOCK and TRYLOCK;
+	add NOTE where necessary.
+	(get_gfc_unit): Likewise.
+	(init_units): Likewise.
+	(close_unit_1): Likewise. Call async_close if asynchronous.
+	(close_unit): Use macros LOCK and UNLOCK.
+	(finish_last_advance_record): Likewise.
+	(newunit_alloc): Likewise.
+	* io/unix.c (find_file): Likewise.
+	(flush_all_units_1): Likewise.
+	(flush_all_units): Likewise.
+	* libgfortran.h (generate_error_common): Add prototype.
+	* runtime/error.c: Include io.h and async.h.
+	(generate_error_common): New function.
+
+2018-07-25  Nicolas Koenig  <koenigni@gcc.gnu.org>
+	Thomas Koenig <tkoenig@gcc.gnu.org>
+
+	PR fortran/25829
+	* Makefile.am: Add async.c to gfor_io_src.
+	Add async.h to gfor_io_headers.
+	* Makefile.in: Regenerated.
+	* gfortran.map: Add _gfortran_st_wait_async.
+	* io/async.c: New file.
+	* io/async.h: New file.
+	* io/close.c: Include async.h.
+	(st_close): Call async_wait for an asynchronous unit.
+	* io/file_pos.c (st_backspace): Likewise.
+	(st_endfile): Likewise.
+	(st_rewind): Likewise.
+	(st_flush): Likewise.
+	* io/inquire.c: Add handling for asynchronous PENDING
+	and ID arguments.
+	* io/io.h (st_parameter_dt): Add async bit.
+	(st_parameter_wait): Correct.
+	(gfc_unit): Add au pointer.
+	(st_wait_async): Add prototype.
+	(transfer_array_inner): Likewise.
+	(st_write_done_worker): Likewise.
+	* io/open.c: Include async.h.
+	(new_unit): Initialize asynchronous unit.
+	* io/transfer.c (async_opt): New struct.
+	(wrap_scalar_transfer): New function.
+	(transfer_integer): Call wrap_scalar_transfer to do the work.
+	(transfer_real): Likewise.
+	(transfer_real_write): Likewise.
+	(transfer_character): Likewise.
+	(transfer_character_wide): Likewise.
+	(transfer_complex): Likewise.
+	(transfer_array_inner): New function.
+	(transfer_array): Call transfer_array_inner.
+	(transfer_derived): Call wrap_scalar_transfer.
+	(data_transfer_init): Check for asynchronous I/O.
+	Perform a wait operation on any pending asynchronous I/O
+	if the data transfer is synchronous. Copy PDT and enqueue
+	thread for data transfer.
+	(st_read_done_worker): New function.
+	(st_read_done): Enqueue transfer or call st_read_done_worker.
+	(st_write_done_worker): New function.
+	(st_write_done): Enqueue transfer or call st_read_done_worker.
+	(st_wait): Document as no-op for compatibility reasons.
+	(st_wait_async): New function.
+	* io/unit.c (insert_unit): Use macros LOCK, UNLOCK and TRYLOCK;
+	add NOTE where necessary.
+	(get_gfc_unit): Likewise.
+	(init_units): Likewise.
+	(close_unit_1): Likewise. Call async_close if asynchronous.
+	(close_unit): Use macros LOCK and UNLOCK.
+	(finish_last_advance_record): Likewise.
+	(newunit_alloc): Likewise.
+	* io/unix.c (find_file): Likewise.
+	(flush_all_units_1): Likewise.
+	(flush_all_units): Likewise.
+	* libgfortran.h (generate_error_common): Add prototype.
+	* runtime/error.c: Include io.h and async.h.
+	(generate_error_common): New function.
+
+2018-06-09  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	PR libgfortran/86070
+	* io/write_float.def (build_float_string): Initialize *len.
+
+2018-06-01  Steven G. Kargl  <kargl@gcc.gnu.org>
+
+	PR fortran/85816
+	PR fortran/85975
+	* libgfortran.h: Remove the GFC_DTYPE_COPY_SETRANK macro.
+	* intrinsics/reshape_generic.c: Directly assign rank.
+	* intrinsics/spread_generic.c: Ditto.
+	* m4/iforeach-s.m4: Ditto.
+	* m4/iforeach.m4: Ditto.
+	* m4/ifunction-s.m4: Ditto.
+	* m4/ifunction-s2.m4: Ditto.
+	* m4/ifunction.m4: Ditto.
+	* m4/ifunction_logical.m4: Ditto.
+	* m4/reshape.m4: Ditto.
+	* m4/spread.m4: Ditto.
+	* generated/all_l1.c: Regenerated from m4 files.
+	* generated/all_l16.c: Ditto.
+	* generated/all_l2.c: Ditto.
+	* generated/all_l4.c: Ditto.
+	* generated/all_l8.c: Ditto.
+	* generated/any_l1.c: Ditto.
+	* generated/any_l16.c: Ditto.
+	* generated/any_l2.c: Ditto.
+	* generated/any_l4.c: Ditto.
+	* generated/any_l8.c: Ditto.
+	* generated/count_16_l.c: Ditto.
+	* generated/count_1_l.c: Ditto.
+	* generated/count_2_l.c: Ditto.
+	* generated/count_4_l.c: Ditto.
+	* generated/count_8_l.c: Ditto.
+	* generated/iall_i1.c: Ditto.
+	* generated/iall_i16.c: Ditto.
+	* generated/iall_i2.c: Ditto.
+	* generated/iall_i4.c: Ditto.
+	* generated/iall_i8.c: Ditto.
+	* generated/iany_i1.c: Ditto.
+	* generated/iany_i16.c: Ditto.
+	* generated/iany_i2.c: Ditto.
+	* generated/iany_i4.c: Ditto.
+	* generated/iany_i8.c: Ditto.
+	* generated/iparity_i1.c: Ditto.
+	* generated/iparity_i16.c: Ditto.
+	* generated/iparity_i2.c: Ditto.
+	* generated/iparity_i4.c: Ditto.
+	* generated/iparity_i8.c: Ditto.
+	* generated/maxloc0_16_i1.c: Ditto.
+	* generated/maxloc0_16_i16.c: Ditto.
+	* generated/maxloc0_16_i2.c: Ditto.
+	* generated/maxloc0_16_i4.c: Ditto.
+	* generated/maxloc0_16_i8.c: Ditto.
+	* generated/maxloc0_16_r10.c: Ditto.
+	* generated/maxloc0_16_r16.c: Ditto.
+	* generated/maxloc0_16_r4.c: Ditto.
+	* generated/maxloc0_16_r8.c: Ditto.
+	* generated/maxloc0_16_s1.c: Ditto.
+	* generated/maxloc0_16_s4.c: Ditto.
+	* generated/maxloc0_4_i1.c: Ditto.
+	* generated/maxloc0_4_i16.c: Ditto.
+	* generated/maxloc0_4_i2.c: Ditto.
+	* generated/maxloc0_4_i4.c: Ditto.
+	* generated/maxloc0_4_i8.c: Ditto.
+	* generated/maxloc0_4_r10.c: Ditto.
+	* generated/maxloc0_4_r16.c: Ditto.
+	* generated/maxloc0_4_r4.c: Ditto.
+	* generated/maxloc0_4_r8.c: Ditto.
+	* generated/maxloc0_4_s1.c: Ditto.
+	* generated/maxloc0_4_s4.c: Ditto.
+	* generated/maxloc0_8_i1.c: Ditto.
+	* generated/maxloc0_8_i16.c: Ditto.
+	* generated/maxloc0_8_i2.c: Ditto.
+	* generated/maxloc0_8_i4.c: Ditto.
+	* generated/maxloc0_8_i8.c: Ditto.
+	* generated/maxloc0_8_r10.c: Ditto.
+	* generated/maxloc0_8_r16.c: Ditto.
+	* generated/maxloc0_8_r4.c: Ditto.
+	* generated/maxloc0_8_r8.c: Ditto.
+	* generated/maxloc0_8_s1.c: Ditto.
+	* generated/maxloc0_8_s4.c: Ditto.
+	* generated/maxloc1_16_i1.c: Ditto.
+	* generated/maxloc1_16_i16.c: Ditto.
+	* generated/maxloc1_16_i2.c: Ditto.
+	* generated/maxloc1_16_i4.c: Ditto.
+	* generated/maxloc1_16_i8.c: Ditto.
+	* generated/maxloc1_16_r10.c: Ditto.
+	* generated/maxloc1_16_r16.c: Ditto.
+	* generated/maxloc1_16_r4.c: Ditto.
+	* generated/maxloc1_16_r8.c: Ditto.
+	* generated/maxloc1_16_s1.c: Ditto.
+	* generated/maxloc1_16_s4.c: Ditto.
+	* generated/maxloc1_4_i1.c: Ditto.
+	* generated/maxloc1_4_i16.c: Ditto.
+	* generated/maxloc1_4_i2.c: Ditto.
+	* generated/maxloc1_4_i4.c: Ditto.
+	* generated/maxloc1_4_i8.c: Ditto.
+	* generated/maxloc1_4_r10.c: Ditto.
+	* generated/maxloc1_4_r16.c: Ditto.
+	* generated/maxloc1_4_r4.c: Ditto.
+	* generated/maxloc1_4_r8.c: Ditto.
+	* generated/maxloc1_4_s1.c: Ditto.
+	* generated/maxloc1_4_s4.c: Ditto.
+	* generated/maxloc1_8_i1.c: Ditto.
+	* generated/maxloc1_8_i16.c: Ditto.
+	* generated/maxloc1_8_i2.c: Ditto.
+	* generated/maxloc1_8_i4.c: Ditto.
+	* generated/maxloc1_8_i8.c: Ditto.
+	* generated/maxloc1_8_r10.c: Ditto.
+	* generated/maxloc1_8_r16.c: Ditto.
+	* generated/maxloc1_8_r4.c: Ditto.
+	* generated/maxloc1_8_r8.c: Ditto.
+	* generated/maxloc1_8_s1.c: Ditto.
+	* generated/maxloc1_8_s4.c: Ditto.
+	* generated/maxval1_s1.c: Ditto.
+	* generated/maxval1_s4.c: Ditto.
+	* generated/maxval_i1.c: Ditto.
+	* generated/maxval_i16.c: Ditto.
+	* generated/maxval_i2.c: Ditto.
+	* generated/maxval_i4.c: Ditto.
+	* generated/maxval_i8.c: Ditto.
+	* generated/maxval_r10.c: Ditto.
+	* generated/maxval_r16.c: Ditto.
+	* generated/maxval_r4.c: Ditto.
+	* generated/maxval_r8.c: Ditto.
+	* generated/minloc0_16_i1.c: Ditto.
+	* generated/minloc0_16_i16.c: Ditto.
+	* generated/minloc0_16_i2.c: Ditto.
+	* generated/minloc0_16_i4.c: Ditto.
+	* generated/minloc0_16_i8.c: Ditto.
+	* generated/minloc0_16_r10.c: Ditto.
+	* generated/minloc0_16_r16.c: Ditto.
+	* generated/minloc0_16_r4.c: Ditto.
+	* generated/minloc0_16_r8.c: Ditto.
+	* generated/minloc0_16_s1.c: Ditto.
+	* generated/minloc0_16_s4.c: Ditto.
+	* generated/minloc0_4_i1.c: Ditto.
+	* generated/minloc0_4_i16.c: Ditto.
+	* generated/minloc0_4_i2.c: Ditto.
+	* generated/minloc0_4_i4.c: Ditto.
+	* generated/minloc0_4_i8.c: Ditto.
+	* generated/minloc0_4_r10.c: Ditto.
+	* generated/minloc0_4_r16.c: Ditto.
+	* generated/minloc0_4_r4.c: Ditto.
+	* generated/minloc0_4_r8.c: Ditto.
+	* generated/minloc0_4_s1.c: Ditto.
+	* generated/minloc0_4_s4.c: Ditto.
+	* generated/minloc0_8_i1.c: Ditto.
+	* generated/minloc0_8_i16.c: Ditto.
+	* generated/minloc0_8_i2.c: Ditto.
+	* generated/minloc0_8_i4.c: Ditto.
+	* generated/minloc0_8_i8.c: Ditto.
+	* generated/minloc0_8_r10.c: Ditto.
+	* generated/minloc0_8_r16.c: Ditto.
+	* generated/minloc0_8_r4.c: Ditto.
+	* generated/minloc0_8_r8.c: Ditto.
+	* generated/minloc0_8_s1.c: Ditto.
+	* generated/minloc0_8_s4.c: Ditto.
+	* generated/minloc1_16_i1.c: Ditto.
+	* generated/minloc1_16_i16.c: Ditto.
+	* generated/minloc1_16_i2.c: Ditto.
+	* generated/minloc1_16_i4.c: Ditto.
+	* generated/minloc1_16_i8.c: Ditto.
+	* generated/minloc1_16_r10.c: Ditto.
+	* generated/minloc1_16_r16.c: Ditto.
+	* generated/minloc1_16_r4.c: Ditto.
+	* generated/minloc1_16_r8.c: Ditto.
+	* generated/minloc1_16_s1.c: Ditto.
+	* generated/minloc1_16_s4.c: Ditto.
+	* generated/minloc1_4_i1.c: Ditto.
+	* generated/minloc1_4_i16.c: Ditto.
+	* generated/minloc1_4_i2.c: Ditto.
+	* generated/minloc1_4_i4.c: Ditto.
+	* generated/minloc1_4_i8.c: Ditto.
+	* generated/minloc1_4_r10.c: Ditto.
+	* generated/minloc1_4_r16.c: Ditto.
+	* generated/minloc1_4_r4.c: Ditto.
+	* generated/minloc1_4_r8.c: Ditto.
+	* generated/minloc1_4_s1.c: Ditto.
+	* generated/minloc1_4_s4.c: Ditto.
+	* generated/minloc1_8_i1.c: Ditto.
+	* generated/minloc1_8_i16.c: Ditto.
+	* generated/minloc1_8_i2.c: Ditto.
+	* generated/minloc1_8_i4.c: Ditto.
+	* generated/minloc1_8_i8.c: Ditto.
+	* generated/minloc1_8_r10.c: Ditto.
+	* generated/minloc1_8_r16.c: Ditto.
+	* generated/minloc1_8_r4.c: Ditto.
+	* generated/minloc1_8_r8.c: Ditto.
+	* generated/minloc1_8_s1.c: Ditto.
+	* generated/minloc1_8_s4.c: Ditto.
+	* generated/minval1_s1.c: Ditto.
+	* generated/minval1_s4.c: Ditto.
+	* generated/minval_i1.c: Ditto.
+	* generated/minval_i16.c: Ditto.
+	* generated/minval_i2.c: Ditto.
+	* generated/minval_i4.c: Ditto.
+	* generated/minval_i8.c: Ditto.
+	* generated/minval_r10.c: Ditto.
+	* generated/minval_r16.c: Ditto.
+	* generated/minval_r4.c: Ditto.
+	* generated/minval_r8.c: Ditto.
+	* generated/norm2_r10.c: Ditto.
+	* generated/norm2_r16.c: Ditto.
+	* generated/norm2_r4.c: Ditto.
+	* generated/norm2_r8.c: Ditto.
+	* generated/parity_l1.c: Ditto.
+	* generated/parity_l16.c: Ditto.
+	* generated/parity_l2.c: Ditto.
+	* generated/parity_l4.c: Ditto.
+	* generated/parity_l8.c: Ditto.
+	* generated/product_c10.c: Ditto.
+	* generated/product_c16.c: Ditto.
+	* generated/product_c4.c: Ditto.
+	* generated/product_c8.c: Ditto.
+	* generated/product_i1.c: Ditto.
+	* generated/product_i16.c: Ditto.
+	* generated/product_i2.c: Ditto.
+	* generated/product_i4.c: Ditto.
+	* generated/product_i8.c: Ditto.
+	* generated/product_r10.c: Ditto.
+	* generated/product_r16.c: Ditto.
+	* generated/product_r4.c: Ditto.
+	* generated/product_r8.c: Ditto.
+	* generated/reshape_c10.c: Ditto.
+	* generated/reshape_c16.c: Ditto.
+	* generated/reshape_c4.c: Ditto.
+	* generated/reshape_c8.c: Ditto.
+	* generated/reshape_i16.c: Ditto.
+	* generated/reshape_i4.c: Ditto.
+	* generated/reshape_i8.c: Ditto.
+	* generated/reshape_r10.c: Ditto.
+	* generated/reshape_r16.c: Ditto.
+	* generated/reshape_r4.c: Ditto.
+	* generated/reshape_r8.c: Ditto.
+	* generated/spread_c10.c: Ditto.
+	* generated/spread_c16.c: Ditto.
+	* generated/spread_c4.c: Ditto.
+	* generated/spread_c8.c: Ditto.
+	* generated/spread_i1.c: Ditto.
+	* generated/spread_i16.c: Ditto.
+	* generated/spread_i2.c: Ditto.
+	* generated/spread_i4.c: Ditto.
+	* generated/spread_i8.c: Ditto.
+	* generated/spread_r10.c: Ditto.
+	* generated/spread_r16.c: Ditto.
+	* generated/spread_r4.c: Ditto.
+	* generated/spread_r8.c: Ditto.
+	* generated/sum_c10.c: Ditto.
+	* generated/sum_c16.c: Ditto.
+	* generated/sum_c4.c: Ditto.
+	* generated/sum_c8.c: Ditto.
+	* generated/sum_i1.c: Ditto.
+	* generated/sum_i16.c: Ditto.
+	* generated/sum_i2.c: Ditto.
+	* generated/sum_i4.c: Ditto.
+	* generated/sum_i8.c: Ditto.
+	* generated/sum_r10.c: Ditto.
+	* generated/sum_r16.c: Ditto.
+	* generated/sum_r4.c: Ditto.
+	* generated/sum_r8.c: Ditto.
+
+2018-06-01  Steven G. Kargl  <kargl@gcc.gnu.org>
+
+	PR fortran/63570
+	* libgfortran/Makefile.am: Add random_init.f90 to build.
+	* libgfortran/Makefile.in: Regenerated.
+	* libgfortran/gfortran.map: Expose symbol for _gfortran_random_init.
+	* libgfortran/intrinsics/random_init.f90: Implementation.
+
+2018-05-28  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	PR libgfortran/85840
+	* io/write.c (write_real, write_real_g0, write_complex): Use
+	separate local variables for the float string length.
+
+2018-05-26  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	PR libgfortran/85906
+	* io/write.c (write_integer): Initialise the fnode format to
+	FMT_NONE, used for list directed write.
+	(BUF_STACK_SZ): Bump default buffer size up to avoid allocs on
+	small stuff.
+
+2018-05-26  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	PR libgfortran/85840
+	* io/write.c (write_float_0): Use separate local variable for
+	the float string length.
+
+2018-05-08  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	PR fortran/54613
+	* m4/iforeach-s.m4: Remove assertion that back is zero.
+	* m4/iforeach.m4: Likewise.  Remove leading 'do'
+	before implementation start.
+	* m4/ifunction-s.m4: Remove assertion that back is zero.
+	* m4/ifunction.m4: Likewise.  Remove for loop if HAVE_BACK_ARG
+	is defined.
+	* m4/maxloc0.m4: Reorganize loops. Split loops between >= and =,
+	depending if back is true.  Mark the condition of having
+	found a value which exceeds the limit as unlikely.
+	* m4/minloc0.m4: Likewise.
+	* m4/maxloc1.m4: Likewise.
+	* m4/minloc1.m4: Likewise.
+	* m4/maxloc1s.m4: Handle back argument.
+	* m4/minloc1s.m4: Likewise.
+	* m4/maxloc2s.m4: Remove assertion that back is zero.
+	Remove special handling of loop start. Handle back argument.
+	* m4/minloc2s.m4: Likewise.
+	* generated/iall_i1.c: Regenerated.
+	* generated/iall_i16.c: Regenerated.
+	* generated/iall_i2.c: Regenerated.
+	* generated/iall_i4.c: Regenerated.
+	* generated/iall_i8.c: Regenerated.
+	* generated/iany_i1.c: Regenerated.
+	* generated/iany_i16.c: Regenerated.
+	* generated/iany_i2.c: Regenerated.
+	* generated/iany_i4.c: Regenerated.
+	* generated/iany_i8.c: Regenerated.
+	* generated/iparity_i1.c: Regenerated.
+	* generated/iparity_i16.c: Regenerated.
+	* generated/iparity_i2.c: Regenerated.
+	* generated/iparity_i4.c: Regenerated.
+	* generated/iparity_i8.c: Regenerated.
+	* generated/maxloc0_16_i1.c: Regenerated.
+	* generated/maxloc0_16_i16.c: Regenerated.
+	* generated/maxloc0_16_i2.c: Regenerated.
+	* generated/maxloc0_16_i4.c: Regenerated.
+	* generated/maxloc0_16_i8.c: Regenerated.
+	* generated/maxloc0_16_r10.c: Regenerated.
+	* generated/maxloc0_16_r16.c: Regenerated.
+	* generated/maxloc0_16_r4.c: Regenerated.
+	* generated/maxloc0_16_r8.c: Regenerated.
+	* generated/maxloc0_16_s1.c: Regenerated.
+	* generated/maxloc0_16_s4.c: Regenerated.
+	* generated/maxloc0_4_i1.c: Regenerated.
+	* generated/maxloc0_4_i16.c: Regenerated.
+	* generated/maxloc0_4_i2.c: Regenerated.
+	* generated/maxloc0_4_i4.c: Regenerated.
+	* generated/maxloc0_4_i8.c: Regenerated.
+	* generated/maxloc0_4_r10.c: Regenerated.
+	* generated/maxloc0_4_r16.c: Regenerated.
+	* generated/maxloc0_4_r4.c: Regenerated.
+	* generated/maxloc0_4_r8.c: Regenerated.
+	* generated/maxloc0_4_s1.c: Regenerated.
+	* generated/maxloc0_4_s4.c: Regenerated.
+	* generated/maxloc0_8_i1.c: Regenerated.
+	* generated/maxloc0_8_i16.c: Regenerated.
+	* generated/maxloc0_8_i2.c: Regenerated.
+	* generated/maxloc0_8_i4.c: Regenerated.
+	* generated/maxloc0_8_i8.c: Regenerated.
+	* generated/maxloc0_8_r10.c: Regenerated.
+	* generated/maxloc0_8_r16.c: Regenerated.
+	* generated/maxloc0_8_r4.c: Regenerated.
+	* generated/maxloc0_8_r8.c: Regenerated.
+	* generated/maxloc0_8_s1.c: Regenerated.
+	* generated/maxloc0_8_s4.c: Regenerated.
+	* generated/maxloc1_16_i1.c: Regenerated.
+	* generated/maxloc1_16_i16.c: Regenerated.
+	* generated/maxloc1_16_i2.c: Regenerated.
+	* generated/maxloc1_16_i4.c: Regenerated.
+	* generated/maxloc1_16_i8.c: Regenerated.
+	* generated/maxloc1_16_r10.c: Regenerated.
+	* generated/maxloc1_16_r16.c: Regenerated.
+	* generated/maxloc1_16_r4.c: Regenerated.
+	* generated/maxloc1_16_r8.c: Regenerated.
+	* generated/maxloc1_16_s1.c: Regenerated.
+	* generated/maxloc1_16_s4.c: Regenerated.
+	* generated/maxloc1_4_i1.c: Regenerated.
+	* generated/maxloc1_4_i16.c: Regenerated.
+	* generated/maxloc1_4_i2.c: Regenerated.
+	* generated/maxloc1_4_i4.c: Regenerated.
+	* generated/maxloc1_4_i8.c: Regenerated.
+	* generated/maxloc1_4_r10.c: Regenerated.
+	* generated/maxloc1_4_r16.c: Regenerated.
+	* generated/maxloc1_4_r4.c: Regenerated.
+	* generated/maxloc1_4_r8.c: Regenerated.
+	* generated/maxloc1_4_s1.c: Regenerated.
+	* generated/maxloc1_4_s4.c: Regenerated.
+	* generated/maxloc1_8_i1.c: Regenerated.
+	* generated/maxloc1_8_i16.c: Regenerated.
+	* generated/maxloc1_8_i2.c: Regenerated.
+	* generated/maxloc1_8_i4.c: Regenerated.
+	* generated/maxloc1_8_i8.c: Regenerated.
+	* generated/maxloc1_8_r10.c: Regenerated.
+	* generated/maxloc1_8_r16.c: Regenerated.
+	* generated/maxloc1_8_r4.c: Regenerated.
+	* generated/maxloc1_8_r8.c: Regenerated.
+	* generated/maxloc1_8_s1.c: Regenerated.
+	* generated/maxloc1_8_s4.c: Regenerated.
+	* generated/maxloc2_16_s1.c: Regenerated.
+	* generated/maxloc2_16_s4.c: Regenerated.
+	* generated/maxloc2_4_s1.c: Regenerated.
+	* generated/maxloc2_4_s4.c: Regenerated.
+	* generated/maxloc2_8_s1.c: Regenerated.
+	* generated/maxloc2_8_s4.c: Regenerated.
+	* generated/maxval_i1.c: Regenerated.
+	* generated/maxval_i16.c: Regenerated.
+	* generated/maxval_i2.c: Regenerated.
+	* generated/maxval_i4.c: Regenerated.
+	* generated/maxval_i8.c: Regenerated.
+	* generated/maxval_r10.c: Regenerated.
+	* generated/maxval_r16.c: Regenerated.
+	* generated/maxval_r4.c: Regenerated.
+	* generated/maxval_r8.c: Regenerated.
+	* generated/minloc0_16_i1.c: Regenerated.
+	* generated/minloc0_16_i16.c: Regenerated.
+	* generated/minloc0_16_i2.c: Regenerated.
+	* generated/minloc0_16_i4.c: Regenerated.
+	* generated/minloc0_16_i8.c: Regenerated.
+	* generated/minloc0_16_r10.c: Regenerated.
+	* generated/minloc0_16_r16.c: Regenerated.
+	* generated/minloc0_16_r4.c: Regenerated.
+	* generated/minloc0_16_r8.c: Regenerated.
+	* generated/minloc0_16_s1.c: Regenerated.
+	* generated/minloc0_16_s4.c: Regenerated.
+	* generated/minloc0_4_i1.c: Regenerated.
+	* generated/minloc0_4_i16.c: Regenerated.
+	* generated/minloc0_4_i2.c: Regenerated.
+	* generated/minloc0_4_i4.c: Regenerated.
+	* generated/minloc0_4_i8.c: Regenerated.
+	* generated/minloc0_4_r10.c: Regenerated.
+	* generated/minloc0_4_r16.c: Regenerated.
+	* generated/minloc0_4_r4.c: Regenerated.
+	* generated/minloc0_4_r8.c: Regenerated.
+	* generated/minloc0_4_s1.c: Regenerated.
+	* generated/minloc0_4_s4.c: Regenerated.
+	* generated/minloc0_8_i1.c: Regenerated.
+	* generated/minloc0_8_i16.c: Regenerated.
+	* generated/minloc0_8_i2.c: Regenerated.
+	* generated/minloc0_8_i4.c: Regenerated.
+	* generated/minloc0_8_i8.c: Regenerated.
+	* generated/minloc0_8_r10.c: Regenerated.
+	* generated/minloc0_8_r16.c: Regenerated.
+	* generated/minloc0_8_r4.c: Regenerated.
+	* generated/minloc0_8_r8.c: Regenerated.
+	* generated/minloc0_8_s1.c: Regenerated.
+	* generated/minloc0_8_s4.c: Regenerated.
+	* generated/minloc1_16_i1.c: Regenerated.
+	* generated/minloc1_16_i16.c: Regenerated.
+	* generated/minloc1_16_i2.c: Regenerated.
+	* generated/minloc1_16_i4.c: Regenerated.
+	* generated/minloc1_16_i8.c: Regenerated.
+	* generated/minloc1_16_r10.c: Regenerated.
+	* generated/minloc1_16_r16.c: Regenerated.
+	* generated/minloc1_16_r4.c: Regenerated.
+	* generated/minloc1_16_r8.c: Regenerated.
+	* generated/minloc1_16_s1.c: Regenerated.
+	* generated/minloc1_16_s4.c: Regenerated.
+	* generated/minloc1_4_i1.c: Regenerated.
+	* generated/minloc1_4_i16.c: Regenerated.
+	* generated/minloc1_4_i2.c: Regenerated.
+	* generated/minloc1_4_i4.c: Regenerated.
+	* generated/minloc1_4_i8.c: Regenerated.
+	* generated/minloc1_4_r10.c: Regenerated.
+	* generated/minloc1_4_r16.c: Regenerated.
+	* generated/minloc1_4_r4.c: Regenerated.
+	* generated/minloc1_4_r8.c: Regenerated.
+	* generated/minloc1_4_s1.c: Regenerated.
+	* generated/minloc1_4_s4.c: Regenerated.
+	* generated/minloc1_8_i1.c: Regenerated.
+	* generated/minloc1_8_i16.c: Regenerated.
+	* generated/minloc1_8_i2.c: Regenerated.
+	* generated/minloc1_8_i4.c: Regenerated.
+	* generated/minloc1_8_i8.c: Regenerated.
+	* generated/minloc1_8_r10.c: Regenerated.
+	* generated/minloc1_8_r16.c: Regenerated.
+	* generated/minloc1_8_r4.c: Regenerated.
+	* generated/minloc1_8_r8.c: Regenerated.
+	* generated/minloc1_8_s1.c: Regenerated.
+	* generated/minloc1_8_s4.c: Regenerated.
+	* generated/minloc2_16_s1.c: Regenerated.
+	* generated/minloc2_16_s4.c: Regenerated.
+	* generated/minloc2_4_s1.c: Regenerated.
+	* generated/minloc2_4_s4.c: Regenerated.
+	* generated/minloc2_8_s1.c: Regenerated.
+	* generated/minloc2_8_s4.c: Regenerated.
+	* generated/minval_i1.c: Regenerated.
+	* generated/minval_i16.c: Regenerated.
+	* generated/minval_i2.c: Regenerated.
+	* generated/minval_i4.c: Regenerated.
+	* generated/minval_i8.c: Regenerated.
+	* generated/minval_r10.c: Regenerated.
+	* generated/minval_r16.c: Regenerated.
+	* generated/minval_r4.c: Regenerated.
+	* generated/minval_r8.c: Regenerated.
+	* generated/norm2_r10.c: Regenerated.
+	* generated/norm2_r16.c: Regenerated.
+	* generated/norm2_r4.c: Regenerated.
+	* generated/norm2_r8.c: Regenerated.
+	* generated/parity_l1.c: Regenerated.
+	* generated/parity_l16.c: Regenerated.
+	* generated/parity_l2.c: Regenerated.
+	* generated/parity_l4.c: Regenerated.
+	* generated/parity_l8.c: Regenerated.
+	* generated/product_c10.c: Regenerated.
+	* generated/product_c16.c: Regenerated.
+	* generated/product_c4.c: Regenerated.
+	* generated/product_c8.c: Regenerated.
+	* generated/product_i1.c: Regenerated.
+	* generated/product_i16.c: Regenerated.
+	* generated/product_i2.c: Regenerated.
+	* generated/product_i4.c: Regenerated.
+	* generated/product_i8.c: Regenerated.
+	* generated/product_r10.c: Regenerated.
+	* generated/product_r16.c: Regenerated.
+	* generated/product_r4.c: Regenerated.
+	* generated/product_r8.c: Regenerated.
+	* generated/sum_c10.c: Regenerated.
+	* generated/sum_c16.c: Regenerated.
+	* generated/sum_c4.c: Regenerated.
+	* generated/sum_c8.c: Regenerated.
+	* generated/sum_i1.c: Regenerated.
+	* generated/sum_i16.c: Regenerated.
+	* generated/sum_i2.c: Regenerated.
+	* generated/sum_i4.c: Regenerated.
+	* generated/sum_i8.c: Regenerated.
+	* generated/sum_r10.c: Regenerated.
+	* generated/sum_r16.c: Regenerated.
+	* generated/sum_r4.c: Regenerated.
+	* generated/sum_r8.c: Regenerated.
+
+2018-04-24  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* configure: Regenerated.
+
+2018-04-19  Thomas Schwinge  <thomas@codesourcery.com>
+
+	PR libfortran/85166
+	PR libgomp/85463
+	* runtime/minimal.c (stop_numeric): Reimplement.
+	(stop_string, error_stop_string, error_stop_numeric): New
+	functions.
+
+2018-04-19  Jakub Jelinek  <jakub@redhat.com>
+
+	* configure: Regenerated.
+
+2018-04-18  David Malcolm  <dmalcolm@redhat.com>
+
+	PR jit/85384
+	* configure: Regenerate.
+
+2018-04-06  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	PR libfortran/85253
+	* m4/matmul_internal.m4: If ycount == 1, add one more row to
+	the internal buffer.
+	* generated/matmul_c10.c: Regenerated.
+	* generated/matmul_c16.c: Regenerated.
+	* generated/matmul_c4.c: Regenerated.
+	* generated/matmul_c8.c: Regenerated.
+	* generated/matmul_i1.c: Regenerated.
+	* generated/matmul_i16.c: Regenerated.
+	* generated/matmul_i2.c: Regenerated.
+	* generated/matmul_i4.c: Regenerated.
+	* generated/matmul_i8.c: Regenerated.
+	* generated/matmul_r10.c: Regenerated.
+	* generated/matmul_r16.c: Regenerated.
+	* generated/matmul_r4.c: Regenerated.
+	* generated/matmul_r8.c: Regenerated.
+	* generated/matmulavx128_c10.c: Regenerated.
+	* generated/matmulavx128_c16.c: Regenerated.
+	* generated/matmulavx128_c4.c: Regenerated.
+	* generated/matmulavx128_c8.c: Regenerated.
+	* generated/matmulavx128_i1.c: Regenerated.
+	* generated/matmulavx128_i16.c: Regenerated.
+	* generated/matmulavx128_i2.c: Regenerated.
+	* generated/matmulavx128_i4.c: Regenerated.
+	* generated/matmulavx128_i8.c: Regenerated.
+	* generated/matmulavx128_r10.c: Regenerated.
+	* generated/matmulavx128_r16.c: Regenerated.
+	* generated/matmulavx128_r4.c: Regenerated.
+	* generated/matmulavx128_r8.c: Regenerated.
+
+2018-04-04  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	PR libfortran/85166
+	* runtime/minimal.c (stop_numeric): Add new function in order to
+	implement numeric stop on minimal targets.
+
+2018-03-28  Jakub Jelinek  <jakub@redhat.com>
+
+	* io/io.h (IOPARM_DT_DEFAULT_EXP): Rename to ...
+	(IOPARM_DT_DEC_EXT): ... this.
+	* io/list_read.c (parse_real): Adjust for IOPARM_DT_DEFAULT_EXP
+	renaming to IOPARM_DT_DEC_EXT.
+	(read_real): Likewise.
+	* io/read.c (read_f): Likewise.
+
+2018-03-15  Jakub Jelinek  <jakub@redhat.com>
+
+	PR libgfortran/84880
+	* intrinsics/kill.c (kill): Rename to...
+	(PREFIX (kill)): ... this.  Use export_proto_np instead of export_proto.
+
+2018-03-13  Steven G. Kargl  <kargl@gcc.gnu.org>
+
+	* libgfortran/gfortran.map: Remove _gfortran_kill_i4,
+	_gfortran_kill_i4_sub, _gfortran_kill_i8, and _gfortran_kill_i8_sub.
+	Add _gfortran_kill and _gfortran_kill_sub.
+	* libgfortran/intrinsics/kill.c: Eliminate _gfortran_kill_i4,
+	_gfortran_kill_i4_sub, _gfortran_kill_i8, and _gfortran_kill_i8_sub.
+	Add _gfortran_kill and _gfortran_kill_sub.
+
+2018-02-23  Janne Blomqvist  <jb@gcc.gnu.org>
+
+	PR fortran/84519
+	* caf/libcaf.h (_gfortran_caf_stop_numeric): Add bool argument.
+	(_gfortran_caf_stop_str): Likewise.
+	(_gfortran_caf_error_stop_str): Likewise.
+	(_gfortran_caf_error_stop): Likewise.
+	* caf/mpi.c (_gfortran_caf_error_stop_str): Handle new argument.
+	(_gfortran_caf_error_stop): Likewise.
+	* caf/single.c (_gfortran_caf_stop_numeric): Likewise.
+	(_gfortran_caf_stop_str): Likewise.
+	(_gfortran_caf_error_stop_str): Likewise.
+	(_gfortran_caf_error_stop): Likewise.
+	(_gfortran_caf_lock): Likewise.
+	(_gfortran_caf_unlock): Likewise.
+	* libgfortran.h (stop_string): Add bool argument.
+	* runtime/pause.c (do_pause): Add false argument.
+	* runtime/stop.c (stop_numeric): Handle new argument.
+	(stop_string): Likewise.
+	(error_stop_string): Likewise.
+	(error_stop_numeric): Likewise.
+
+2018-02-22  Janne Blomqvist  <jb@gcc.gnu.org>
+
+	PR 78534
+	PR 84509
+	* runtime/pause.c (pause_numeric): Modify to take GFC_INTEGER_8
+	argument.
+	(pause_string): Modify to take size_t character length argument.
+
+2018-02-22  Janne Blomqvist  <jb@gcc.gnu.org>
+
+	* libgfortran.h (stop_string): Use size_t for character length.
+	* runtime/stop.c (stop_string): Likewise.
+	(error_stop_string): Likewise.
+	(stop_numeric): Use int for exit code.
+	(error_stop_numeric): Likewise.
+	* caf/libcaf.h: Remove stdint.h include.
+	(_gfortran_caf_register): Use size_t for character length.
+	(_gfortran_caf_deregister): Likewise.
+	(_gfortran_caf_sync_all): Likewise.
+	(_gfortran_caf_sync_memory): Likewise.
+	(_gfortran_caf_sync_images): Likewise.
+	(_gfortran_caf_stop_numeric): Use int for exit code.
+	(_gfortran_caf_stop_str): Use size_t for character length.
+	(_gfortran_caf_error_stop_str): Likewise.
+	(_gfortran_caf_error_stop): Use int for exit code.
+	(_gfortran_caf_co_broadcast): Use size_t for character length.
+	(_gfortran_caf_co_sum): Likewise.
+	(_gfortran_caf_co_min): Likewise.
+	(_gfortran_caf_co_max): Likewise.
+	(_gfortran_caf_co_reduce): Likewise.
+	(_gfortran_caf_lock): Likewise.
+	(_gfortran_caf_unlock): Likewise.
+	(_gfortran_caf_event_post): Likewise.
+	(_gfortran_caf_event_wait): Likewise.
+	* caf/mpi.c (_gfortran_caf_register): Update implementation to
+	match prototype.
+	(_gfortran_caf_deregister): Likewise.
+	(_gfortran_caf_sync_all): Likewise.
+	(_gfortran_caf_sync_images): Likewise.
+	(_gfortran_caf_error_stop_str): Likewise.
+	(_gfortran_caf_error_stop): Likewise.
+	* caf/single.c (caf_internal_error): Likewise.
+	(_gfortran_caf_register): Likewise.
+	(_gfortran_caf_deregister): Likewise.
+	(_gfortran_caf_sync_all): Likewise.
+	(_gfortran_caf_sync_memory): Likewise.
+	(_gfortran_caf_sync_images): Likewise.
+	(_gfortran_caf_stop_numeric): Likewise.
+	(_gfortran_caf_stop_str): Likewise.
+	(_gfortran_caf_error_stop_str): Likewise.
+	(_gfortran_caf_error_stop): Likewise.
+	(_gfortran_caf_co_broadcast): Likewise.
+	(_gfortran_caf_co_sum): Likewise.
+	(_gfortran_caf_co_min): Likewise.
+	(_gfortran_caf_co_max): Likewise.
+	(_gfortran_caf_co_reduce): Likewise.
+	(_gfortran_caf_event_post): Likewise.
+	(_gfortran_caf_event_wait): Likewise.
+	(_gfortran_caf_lock): Likewise.
+	(_gfortran_caf_unlock): Likewise.
+
+2018-02-19  Andre Vehreschild  <vehre@gcc.gnu.org>
+
+	* caf/libcaf.h: Add type parameters to the caf_*_by_ref prototypes.
+	* caf/single.c (get_for_ref): Simplifications and now respecting
+	the type argument.
+	(_gfortran_caf_get_by_ref): Added source type handing to get_for_ref().
+	(send_by_ref): Simplifications and respecting the dst_type now.
+	(_gfortran_caf_send_by_ref): Added destination type hand over to
+	send_by_ref().
+	(_gfortran_caf_sendget_by_ref): Added general support and fixed stack
+	corruption.  The function is now really usable.
+
+2018-02-14  Igor Tsimbalist  <igor.v.tsimbalist@intel.com>
+
+	PR target/84148
+	* configure: Regenerate.
+
 2018-02-18  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
 
 	PR libgfortran/84412

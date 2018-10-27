@@ -62,6 +62,10 @@
 	(and (match_code "const_double")
 	     (match_test "aarch64_float_const_zero_rtx_p (op)"))))
 
+(define_predicate "aarch64_reg_zero_or_fp_zero"
+  (ior (match_operand 0 "aarch64_reg_or_fp_zero")
+       (match_operand 0 "aarch64_reg_or_zero")))
+
 (define_predicate "aarch64_reg_zero_or_m1_or_1"
   (and (match_code "reg,subreg,const_int")
        (ior (match_operand 0 "register_operand")
@@ -222,8 +226,9 @@
 ;; as a 128-bit vec_concat.
 (define_predicate "aarch64_mem_pair_lanes_operand"
   (and (match_code "mem")
-       (match_test "aarch64_legitimate_address_p (DFmode, XEXP (op, 0), 1,
-						  ADDR_QUERY_LDP_STP)")))
+       (match_test "aarch64_legitimate_address_p (GET_MODE (op), XEXP (op, 0),
+						  false,
+						  ADDR_QUERY_LDP_STP_N)")))
 
 (define_predicate "aarch64_prefetch_operand"
   (match_test "aarch64_address_valid_for_prefetch_p (op, false)"))
@@ -354,6 +359,36 @@
   (and (match_operand 0 "memory_operand")
        (match_code "reg" "0")))
 
+(define_predicate "aarch64_9bit_offset_memory_operand"
+  (and (match_operand 0 "memory_operand")
+       (ior (match_code "reg" "0")
+	    (and (match_code "plus" "0")
+		 (match_code "reg"  "00")
+		 (match_code "const_int" "01"))))
+{
+  rtx mem_op = XEXP (op, 0);
+
+  if (REG_P (mem_op))
+    return GET_MODE (mem_op) == DImode;
+
+  rtx plus_op0 = XEXP (mem_op, 0);
+  rtx plus_op1 = XEXP (mem_op, 1);
+
+  if (GET_MODE (plus_op0) != DImode)
+    return false;
+
+  poly_int64 offset;
+  if (!poly_int_rtx_p (plus_op1, &offset))
+    gcc_unreachable ();
+
+  return aarch64_offset_9bit_signed_unscaled_p (mode, offset);
+})
+
+(define_predicate "aarch64_rcpc_memory_operand"
+  (if_then_else (match_test "AARCH64_ISA_RCPC8_4")
+    (match_operand 0 "aarch64_9bit_offset_memory_operand")
+    (match_operand 0 "aarch64_sync_memory_operand")))
+
 ;; Predicates for parallel expanders based on mode.
 (define_special_predicate "vect_par_cnst_hi_half"
   (match_code "parallel")
@@ -395,7 +430,7 @@
   (and (match_code "reg,subreg,const_int,const_double,const,const_vector")
        (ior (match_operand 0 "register_operand")
 	    (match_test "op == const0_rtx")
-	    (match_operand 0 "aarch64_simd_imm_zero"))))
+	    (match_operand 0 "aarch64_simd_or_scalar_imm_zero"))))
 
 (define_predicate "aarch64_simd_struct_operand"
   (and (match_code "mem")
@@ -621,3 +656,6 @@
 ;; A special predicate that doesn't match a particular mode.
 (define_special_predicate "aarch64_any_register_operand"
   (match_code "reg"))
+
+(define_predicate "aarch64_sve_any_binary_operator"
+  (match_code "plus,minus,mult,div,udiv,smax,umax,smin,umin,and,ior,xor"))

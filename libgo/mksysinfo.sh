@@ -29,6 +29,7 @@ echo 'type _ unsafe.Pointer' >> ${OUT}
 # will all have a leading underscore.
 grep -v '^// ' gen-sysinfo.go | \
   grep -v '^func' | \
+  grep -v '^var' | \
   grep -v '^type _timeval ' | \
   grep -v '^type _timespec_t ' | \
   grep -v '^type _timespec ' | \
@@ -70,6 +71,11 @@ fi
 # The os package requires F_DUPFD_CLOEXEC to be defined.
 if ! grep '^const F_DUPFD_CLOEXEC' ${OUT} >/dev/null 2>&1; then
   echo "const F_DUPFD_CLOEXEC = 0" >> ${OUT}
+fi
+
+# The internal/poll package requires F_GETPIPE_SZ to be defined.
+if ! grep '^const F_GETPIPE_SZ' ${OUT} >/dev/null 2>&1; then
+  echo "const F_GETPIPE_SZ = 0" >> ${OUT}
 fi
 
 # AIX 7.1 is a 64 bits value for _FCLOEXEC (referenced by O_CLOEXEC)
@@ -130,6 +136,12 @@ if ! grep '^const SYS_GETDENTS ' ${OUT} >/dev/null 2>&1; then
 fi
 if ! grep '^const SYS_GETDENTS64 ' ${OUT} >/dev/null 2>&1; then
   echo "const SYS_GETDENTS64 = 0" >> ${OUT}
+fi
+
+# The syscall package wants the geteuid system call number.  It isn't
+# defined on Alpha, which only provides the getresuid system call.
+if ! grep '^const SYS_GETEUID ' ${OUT} >/dev/null 2>&1; then
+  echo "const SYS_GETEUID = 0" >> ${OUT}
 fi
 
 # Stat constants.
@@ -1142,7 +1154,7 @@ grep '^const _RLIM_' gen-sysinfo.go |
     sed -e 's/^\(const \)_\(RLIM_[^= ]*\)\(.*\)$/\1\2 = _\2/' >> ${OUT}
 if test "${rlimit}" = "_rlimit64" && grep '^const _RLIM64_INFINITY ' gen-sysinfo.go > /dev/null 2>&1; then
   echo 'const RLIM_INFINITY = _RLIM64_INFINITY' >> ${OUT}
-elif grep '^const _RLIM_INFINITY ' gen-sysinfo-go; then
+elif grep '^const _RLIM_INFINITY ' gen-sysinfo.go > /dev/null 2>&1; then
   echo 'const RLIM_INFINITY = _RLIM_INFINITY' >> ${OUT}
 fi
 
@@ -1162,20 +1174,6 @@ grep '^type _sysinfo ' gen-sysinfo.go | \
       -e 's/freehigh/Freehigh/' \
       -e 's/mem_unit/Unit/' \
     >> ${OUT}
-
-# The ustat struct.
-grep '^type _ustat ' gen-sysinfo.go | \
-    sed -e 's/_ustat/Ustat_t/' \
-      -e 's/f_tfree/Tfree/' \
-      -e 's/f_tinode/Tinoe/' \
-      -e 's/f_fname/Fname/' \
-      -e 's/f_fpack/Fpack/' \
-    >> ${OUT}
-# Force it to be defined, as on some older GNU/Linux systems the
-# header file fails when using with <linux/filter.h>.
-if ! grep 'type _ustat ' gen-sysinfo.go >/dev/null 2>&1; then
-  echo 'type Ustat_t struct { Tfree int32; Tinoe uint64; Fname [5+1]int8; Fpack [5+1]int8; }' >> ${OUT}
-fi
 
 # The utimbuf struct.
 grep '^type _utimbuf ' gen-sysinfo.go | \

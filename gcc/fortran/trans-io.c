@@ -438,10 +438,9 @@ gfc_build_io_library_fndecls (void)
 	get_identifier (PREFIX("st_iolength")), ".w",
 	void_type_node, 1, dt_parm_type);
 
-  /* TODO: Change when asynchronous I/O is implemented.  */
   parm_type = build_pointer_type (st_parameter[IOPARM_ptype_wait].type);
   iocall[IOCALL_WAIT] = gfc_build_library_function_decl_with_spec (
-	get_identifier (PREFIX("st_wait")), ".X",
+	get_identifier (PREFIX("st_wait_async")), ".w",
 	void_type_node, 1, parm_type);
 
   parm_type = build_pointer_type (st_parameter[IOPARM_ptype_filepos].type);
@@ -639,12 +638,12 @@ set_parameter_value_inquire (stmtblock_t *block, tree var,
       /* Don't evaluate the UNIT number multiple times.  */
       se.expr = gfc_evaluate_now (se.expr, &se.pre);
 
-      /* UNIT numbers should be greater than zero.  */
+      /* UNIT numbers should be greater than the min.  */
       i = gfc_validate_kind (BT_INTEGER, 4, false);
+      val = gfc_conv_mpz_to_tree (gfc_integer_kinds[i].pedantic_min_int, 4);
       cond1 = build2_loc (input_location, LT_EXPR, logical_type_node,
 			  se.expr,
-			  fold_convert (TREE_TYPE (se.expr),
-			  integer_zero_node));
+			  fold_convert (TREE_TYPE (se.expr), val));
       /* UNIT numbers should be less than the max.  */
       val = gfc_conv_mpz_to_tree (gfc_integer_kinds[i].huge, 4);
       cond2 = build2_loc (input_location, GT_EXPR, logical_type_node,
@@ -1527,7 +1526,7 @@ gfc_trans_wait (gfc_code * code)
     mask |= IOPARM_common_err;
 
   if (p->id)
-    mask |= set_parameter_value (&block, var, IOPARM_wait_id, p->id);
+    mask |= set_parameter_ref (&block, &post_block, var, IOPARM_wait_id, p->id);
 
   set_parameter_const (&block, var, IOPARM_common_flags, mask);
 
@@ -1958,8 +1957,8 @@ build_dt (tree function, gfc_code * code)
       if (dt->udtio)
 	mask |= IOPARM_dt_dtio;
 
-      if (dt->default_exp)
-	mask |= IOPARM_dt_default_exp;
+      if (dt->dec_ext)
+	mask |= IOPARM_dt_dec_ext;
 
       if (dt->namelist)
 	{
@@ -2284,6 +2283,16 @@ transfer_expr (gfc_se * se, gfc_typespec * ts, tree addr_expr,
   if ((ts->type == BT_DERIVED || ts->type == BT_INTEGER)
       && ts->u.derived != NULL
       && (ts->is_iso_c == 1 || ts->u.derived->ts.is_iso_c == 1))
+    {
+      ts->type = BT_INTEGER;
+      ts->kind = gfc_index_integer_kind;
+    }
+
+  /* gfortran reaches here for "print *, c_loc(xxx)".  */
+  if (ts->type == BT_VOID
+      && code->expr1 && code->expr1->ts.type == BT_VOID
+      && code->expr1->symtree
+      && strcmp (code->expr1->symtree->name, "c_loc") == 0)
     {
       ts->type = BT_INTEGER;
       ts->kind = gfc_index_integer_kind;

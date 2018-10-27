@@ -36,11 +36,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "alias.h"
 #include "tree.h"
 #include "basic-block.h"
-#include "cfg.h"
 #include "print-tree.h"
 #include "flags.h"
 #include "predict.h"
 #include "function.h"
+#include "cfg.h"
 #include "basic-block.h"
 #include "diagnostic.h"
 #include "tree-pretty-print.h"
@@ -264,7 +264,6 @@ rtx_writer::print_rtx_operand_code_0 (const_rtx in_rtx ATTRIBUTE_UNUSED,
 	  }
 
 	case NOTE_INSN_VAR_LOCATION:
-	case NOTE_INSN_CALL_ARG_LOCATION:
 	  fputc (' ', m_outfile);
 	  print_rtx (NOTE_VAR_LOCATION (in_rtx));
 	  break;
@@ -371,7 +370,20 @@ rtx_writer::print_rtx_operand_codes_E_and_V (const_rtx in_rtx, int idx)
 	m_sawclose = 1;
 
       for (int j = 0; j < XVECLEN (in_rtx, idx); j++)
-	print_rtx (XVECEXP (in_rtx, idx, j));
+	{
+	  int j1;
+
+	  print_rtx (XVECEXP (in_rtx, idx, j));
+	  for (j1 = j + 1; j1 < XVECLEN (in_rtx, idx); j1++)
+	    if (XVECEXP (in_rtx, idx, j) != XVECEXP (in_rtx, idx, j1))
+	      break;
+
+	  if (j1 != j + 1)
+	    {
+	      fprintf (m_outfile, " repeated x%i", j1 - j);
+	      j = j1 - 1;
+	    }
+	}
 
       m_indent -= 2;
     }
@@ -399,7 +411,8 @@ rtx_writer::print_rtx_operand_code_i (const_rtx in_rtx, int idx)
       if (INSN_HAS_LOCATION (in_insn))
 	{
 	  expanded_location xloc = insn_location (in_insn);
-	  fprintf (m_outfile, " \"%s\":%i", xloc.file, xloc.line);
+	  fprintf (m_outfile, " \"%s\":%i:%i", xloc.file, xloc.line,
+		   xloc.column);
 	}
 #endif
     }
@@ -1743,6 +1756,7 @@ print_pattern (pretty_printer *pp, const_rtx x, int verbose)
       print_exp (pp, x, verbose);
       break;
     case CLOBBER:
+    case CLOBBER_HIGH:
     case USE:
       pp_printf (pp, "%s ", GET_RTX_NAME (GET_CODE (x)));
       print_value (pp, XEXP (x, 0), verbose);
@@ -1970,7 +1984,6 @@ print_insn (pretty_printer *pp, const rtx_insn *x, int verbose)
 	    break;
 
 	  case NOTE_INSN_VAR_LOCATION:
-	  case NOTE_INSN_CALL_ARG_LOCATION:
 	    pp_left_brace (pp);
 	    print_pattern (pp, NOTE_VAR_LOCATION (x), verbose);
 	    pp_right_brace (pp);

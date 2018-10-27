@@ -480,10 +480,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     operator>=(nullptr_t, const shared_ptr<_Tp>& __a) noexcept
     { return !(nullptr < __a); }
 
-  template<typename _Tp>
-    struct less<shared_ptr<_Tp>> : public _Sp_less<shared_ptr<_Tp>>
-    { };
-
   // 20.7.2.2.8 shared_ptr specialized algorithms.
   template<typename _Tp>
     inline void
@@ -718,7 +714,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     inline shared_ptr<_Tp>
     make_shared(_Args&&... __args)
     {
-      typedef typename std::remove_const<_Tp>::type _Tp_nc;
+      typedef typename std::remove_cv<_Tp>::type _Tp_nc;
       return std::allocate_shared<_Tp>(std::allocator<_Tp_nc>(),
 				       std::forward<_Args>(__args)...);
     }

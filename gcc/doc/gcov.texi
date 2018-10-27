@@ -132,8 +132,10 @@ gcov [@option{-v}|@option{--version}] [@option{-h}|@option{--help}]
      [@option{-n}|@option{--no-output}]
      [@option{-o}|@option{--object-directory} @var{directory|file}]
      [@option{-p}|@option{--preserve-paths}]
+     [@option{-q}|@option{--use-hotness-colors}]
      [@option{-r}|@option{--relative-only}]
      [@option{-s}|@option{--source-prefix} @var{directory}]
+     [@option{-t}|@option{--stdout}]
      [@option{-u}|@option{--unconditional-branches}]
      [@option{-x}|@option{--hash-filenames}]
      @var{files}
@@ -189,6 +191,7 @@ one entry per line
 
 @smallexample
 version:@var{gcc_version}
+cwd:@var{working_directory}
 file:@var{source_file_name}
 function:@var{start_line_number},@var{end_line_number},@var{execution_count},@var{function_name}
 lcount:@var{line number},@var{execution_count},@var{has_unexecuted_block}
@@ -210,6 +213,7 @@ Here is a sample when @option{-i} is used in conjunction with @option{-b} option
 
 @smallexample
 version: 8.1.0 20180103
+cwd:/home/gcc/testcase
 file:tmp.cpp
 function:7,7,0,_ZN3FooIcEC2Ev
 function:7,7,1,_ZN3FooIiEC2Ev
@@ -252,7 +256,7 @@ lcount:36,1,0
 
 @item -j
 @itemx --human-readable
-Write counts in human readable format (like 24k).
+Write counts in human readable format (like 24.6k).
 
 @item -k
 @itemx --use-colors
@@ -260,7 +264,6 @@ Write counts in human readable format (like 24k).
 Use colors for lines of code that have zero coverage.  We use red color for
 non-exceptional lines and cyan for exceptional.  Same colors are used for
 basic blocks with @option{-a} option.
-
 
 @item -l
 @itemx --long-file-names
@@ -302,6 +305,12 @@ removed and unremoveable @file{..}
 components renamed to @samp{^}.  This is useful if sourcefiles are in several
 different directories.
 
+@item -q
+@itemx --use-hotness-colors
+
+Emit perf-like colored output for hot lines.  Legend of the color scale
+is printed at the very beginning of the output file.
+
 @item -r
 @itemx --relative-only
 Only output information about source files with a relative pathname
@@ -316,6 +325,10 @@ coverage files.  This option is useful when building in a separate
 directory, and the pathname to the source directory is not wanted when
 determining the output file names.  Note that this prefix detection is
 applied before determining whether the source file is absolute.
+
+@item -t
+@itemx --stdout
+Output to standard output instead of output files.
 
 @item -u
 @itemx --unconditional-branches
@@ -333,7 +346,7 @@ Print verbose informations related to basic blocks and arcs.
 
 @item -x
 @itemx --hash-filenames
-By default, gcov uses the full pathname of the source files to to create
+By default, gcov uses the full pathname of the source files to create
 an output filename.  This can lead to long filenames that can overflow
 filesystem limits.  This option creates names of the form
 @file{@var{source-file}##@var{md5}.gcov},
@@ -371,12 +384,12 @@ command line option.  The @var{execution_count} is @samp{-} for lines
 containing no code.  Unexecuted lines are marked @samp{#####} or
 @samp{=====}, depending on whether they are reachable by
 non-exceptional paths or only exceptional paths such as C++ exception
-handlers, respectively. Given @samp{-a} option, unexecuted blocks are
+handlers, respectively. Given the @samp{-a} option, unexecuted blocks are
 marked @samp{$$$$$} or @samp{%%%%%}, depending on whether a basic block
 is reachable via non-exceptional or exceptional paths.
 Executed basic blocks having a statement with zero @var{execution_count}
-end with @samp{*} character and are colored with magenta color with @option{-k}
-option.  The functionality is not supported in Ada.
+end with @samp{*} character and are colored with magenta color with
+the @option{-k} option.  This functionality is not supported in Ada.
 
 Note that GCC can completely remove the bodies of functions that are
 not needed -- for instance if they are inlined everywhere.  Such functions
@@ -441,6 +454,7 @@ Here is a sample:
 
 @smallexample
         -:    0:Source:tmp.cpp
+        -:    0:Working directory:/home/gcc/testcase
         -:    0:Graph:tmp.gcno
         -:    0:Data:tmp.gcda
         -:    0:Runs:1
@@ -508,6 +522,7 @@ counts, and the output looks like this:
 
 @smallexample
         -:    0:Source:tmp.cpp
+        -:    0:Working directory:/home/gcc/testcase
         -:    0:Graph:tmp.gcno
         -:    0:Data:tmp.gcda
         -:    0:Runs:1
@@ -596,6 +611,7 @@ When you use the @option{-b} option, your output looks like this:
 
 @smallexample
         -:    0:Source:tmp.cpp
+        -:    0:Working directory:/home/gcc/testcase
         -:    0:Graph:tmp.gcno
         -:    0:Data:tmp.gcda
         -:    0:Runs:1
@@ -791,6 +807,14 @@ as well as handlers registered with @code{atexit}.
 If an executable loads a dynamic shared object via dlopen functionality,
 @option{-Wl,--dynamic-list-data} is needed to dump all profile data.
 
+Profiling run-time library reports various errors related to profile
+manipulation and profile saving.  Errors are printed into standard error output
+or @samp{GCOV_ERROR_FILE} file, if environment variable is used.
+In order to terminate immediately after an errors occurs
+set @samp{GCOV_EXIT_AT_ERROR} environment variable.
+That can help users to find profile clashing which leads
+to a misleading profile.
+
 @c man end
 
 @node Gcov Data Files
@@ -816,9 +840,9 @@ A separate @file{.gcda} file is created for each object file compiled with
 this option.  It contains arc transition counts, value profile counts, and
 some summary information.
 
-The full details of the file format is specified in @file{gcov-io.h},
-and functions provided in that header file should be used to access the
-coverage files.
+It is not recommended to access the coverage files directly.
+Consumers should use the intermediate format that is provided
+by @command{gcov} tool via @option{--intermediate-format} option.
 
 @node Cross-profiling
 @section Data File Relocation to Support Cross-Profiling

@@ -917,17 +917,17 @@ add (const Ca &a, const poly_int_pod<N, Cb> &b)
 template<unsigned int N, typename Ca, typename Cb>
 inline poly_int<N, WI_BINARY_RESULT (Ca, Cb)>
 add (const poly_int_pod<N, Ca> &a, const poly_int_pod<N, Cb> &b,
-     signop sgn, bool *overflow)
+     signop sgn, wi::overflow_type *overflow)
 {
   typedef WI_BINARY_RESULT (Ca, Cb) C;
   poly_int<N, C> r;
   POLY_SET_COEFF (C, r, 0, wi::add (a.coeffs[0], b.coeffs[0], sgn, overflow));
   for (unsigned int i = 1; i < N; i++)
     {
-      bool suboverflow;
+      wi::overflow_type suboverflow;
       POLY_SET_COEFF (C, r, i, wi::add (a.coeffs[i], b.coeffs[i], sgn,
 					&suboverflow));
-      *overflow |= suboverflow;
+      wi::accumulate_overflow (*overflow, suboverflow);
     }
   return r;
 }
@@ -1016,17 +1016,17 @@ sub (const Ca &a, const poly_int_pod<N, Cb> &b)
 template<unsigned int N, typename Ca, typename Cb>
 inline poly_int<N, WI_BINARY_RESULT (Ca, Cb)>
 sub (const poly_int_pod<N, Ca> &a, const poly_int_pod<N, Cb> &b,
-     signop sgn, bool *overflow)
+     signop sgn, wi::overflow_type *overflow)
 {
   typedef WI_BINARY_RESULT (Ca, Cb) C;
   poly_int<N, C> r;
   POLY_SET_COEFF (C, r, 0, wi::sub (a.coeffs[0], b.coeffs[0], sgn, overflow));
   for (unsigned int i = 1; i < N; i++)
     {
-      bool suboverflow;
+      wi::overflow_type suboverflow;
       POLY_SET_COEFF (C, r, i, wi::sub (a.coeffs[i], b.coeffs[i], sgn,
 					&suboverflow));
-      *overflow |= suboverflow;
+      wi::accumulate_overflow (*overflow, suboverflow);
     }
   return r;
 }
@@ -1060,16 +1060,16 @@ neg (const poly_int_pod<N, Ca> &a)
 
 template<unsigned int N, typename Ca>
 inline poly_int<N, WI_UNARY_RESULT (Ca)>
-neg (const poly_int_pod<N, Ca> &a, bool *overflow)
+neg (const poly_int_pod<N, Ca> &a, wi::overflow_type *overflow)
 {
   typedef WI_UNARY_RESULT (Ca) C;
   poly_int<N, C> r;
   POLY_SET_COEFF (C, r, 0, wi::neg (a.coeffs[0], overflow));
   for (unsigned int i = 1; i < N; i++)
     {
-      bool suboverflow;
+      wi::overflow_type suboverflow;
       POLY_SET_COEFF (C, r, i, wi::neg (a.coeffs[i], &suboverflow));
-      *overflow |= suboverflow;
+      wi::accumulate_overflow (*overflow, suboverflow);
     }
   return r;
 }
@@ -1136,16 +1136,16 @@ mul (const Ca &a, const poly_int_pod<N, Cb> &b)
 template<unsigned int N, typename Ca, typename Cb>
 inline poly_int<N, WI_BINARY_RESULT (Ca, Cb)>
 mul (const poly_int_pod<N, Ca> &a, const Cb &b,
-     signop sgn, bool *overflow)
+     signop sgn, wi::overflow_type *overflow)
 {
   typedef WI_BINARY_RESULT (Ca, Cb) C;
   poly_int<N, C> r;
   POLY_SET_COEFF (C, r, 0, wi::mul (a.coeffs[0], b, sgn, overflow));
   for (unsigned int i = 1; i < N; i++)
     {
-      bool suboverflow;
+      wi::overflow_type suboverflow;
       POLY_SET_COEFF (C, r, i, wi::mul (a.coeffs[i], b, sgn, &suboverflow));
-      *overflow |= suboverflow;
+      wi::accumulate_overflow (*overflow, suboverflow);
     }
   return r;
 }
@@ -2346,6 +2346,27 @@ can_div_trunc_p (const poly_int_pod<N, Ca> &a, Cb b,
   return true;
 }
 
+/* Return true if we can compute A / B at compile time, rounding towards zero.
+   Store the result in QUOTIENT if so.
+
+   This handles cases in which either B is constant or the result is
+   constant.  */
+
+template<unsigned int N, typename Ca, typename Cb, typename Cq>
+inline bool
+can_div_trunc_p (const poly_int_pod<N, Ca> &a,
+		 const poly_int_pod<N, Cb> &b,
+		 poly_int_pod<N, Cq> *quotient)
+{
+  if (b.is_constant ())
+    return can_div_trunc_p (a, b.coeffs[0], quotient);
+  if (!can_div_trunc_p (a, b, &quotient->coeffs[0]))
+    return false;
+  for (unsigned int i = 1; i < N; ++i)
+    quotient->coeffs[i] = 0;
+  return true;
+}
+
 /* Return true if there is some constant Q and polynomial r such that:
 
      (1) a = b * Q + r
@@ -2399,30 +2420,53 @@ print_dec (const poly_int_pod<N, C> &value, FILE *file)
 	     poly_coeff_traits<C>::signedness ? SIGNED : UNSIGNED);
 }
 
-/* Helper for correctly comparing Pos - Start with Size in cases where
-   known_ge (Pos, Start), Pos and Start are potentially signed, and Size is
-   potentially unsigned.  Applying the cast function to the result of
-   Pos - Start gives the value that should be compared with the size.
+/* Use print_hex to print VALUE to FILE.  */
 
-   Try to avoid doing any unnecessary arithmetic or copying.  */
-template<typename Pos, typename Start, typename Size,
-	 typename Diff = POLY_BINARY_COEFF (Start, Pos),
-	 typename Res = POLY_BINARY_COEFF (Size, Diff)>
+template<unsigned int N, typename C>
+void
+print_hex (const poly_int_pod<N, C> &value, FILE *file)
+{
+  if (value.is_constant ())
+    print_hex (value.coeffs[0], file);
+  else
+    {
+      fprintf (file, "[");
+      for (unsigned int i = 0; i < N; ++i)
+	{
+	  print_hex (value.coeffs[i], file);
+	  fputc (i == N - 1 ? ']' : ',', file);
+	}
+    }
+}
+
+/* Helper for calculating the distance between two points P1 and P2,
+   in cases where known_le (P1, P2).  T1 and T2 are the types of the
+   two positions, in either order.  The coefficients of P2 - P1 have
+   type unsigned HOST_WIDE_INT if the coefficients of both T1 and T2
+   have C++ primitive type, otherwise P2 - P1 has its usual
+   wide-int-based type.
+
+   The actual subtraction should look something like this:
+
+     typedef poly_span_traits<T1, T2> span_traits;
+     span_traits::cast (P2) - span_traits::cast (P1)
+
+   Applying the cast before the subtraction avoids undefined overflow
+   for signed T1 and T2.
+
+   The implementation of the cast tries to avoid unnecessary arithmetic
+   or copying.  */
+template<typename T1, typename T2,
+	 typename Res = POLY_BINARY_COEFF (POLY_BINARY_COEFF (T1, T2),
+					   unsigned HOST_WIDE_INT)>
 struct poly_span_traits
 {
-  /* Assume no cast is needed.  We'll get a warning about signed vs.
-     unsigned comparisons if the assumption is wrong.  */
   template<typename T>
   static const T &cast (const T &x) { return x; }
 };
 
-/* The only case a change in type is needed is this one, in which the
-   subtraction would give a HOST_WIDE_INT-based result if done on poly_ints
-   and adding a zero size would give an unsigned HOST_WIDE_INT-based
-   result.  Since we know known_ge (Pos, Start), it is safe to treat
-   Pos - Start as an unsigned HOST_WIDE_INT.  */
-template<typename T1, typename T2, typename T3>
-struct poly_span_traits<T1, T2, T3, HOST_WIDE_INT, unsigned HOST_WIDE_INT>
+template<typename T1, typename T2>
+struct poly_span_traits<T1, T2, unsigned HOST_WIDE_INT>
 {
   template<typename T>
   static typename if_nonpoly<T, unsigned HOST_WIDE_INT>::type
@@ -2451,7 +2495,8 @@ template<typename T1, typename T2, typename T3>
 inline bool
 maybe_in_range_p (const T1 &val, const T2 &pos, const T3 &size)
 {
-  typedef poly_span_traits<T1, T2, T3> span;
+  typedef poly_span_traits<T1, T2> start_span;
+  typedef poly_span_traits<T3, T3> size_span;
   if (known_lt (val, pos))
     return false;
   if (!known_size_p (size))
@@ -2462,7 +2507,8 @@ maybe_in_range_p (const T1 &val, const T2 &pos, const T3 &size)
     /* In this case we don't know whether VAL >= POS is true at compile
        time, so we can't prove that VAL >= POS + SIZE.  */
     return true;
-  return maybe_lt (span::cast (val - pos), size);
+  return maybe_lt (start_span::cast (val) - start_span::cast (pos),
+		   size_span::cast (size));
 }
 
 /* Return true if range [POS, POS + SIZE) is known to include VAL.
@@ -2473,10 +2519,12 @@ template<typename T1, typename T2, typename T3>
 inline bool
 known_in_range_p (const T1 &val, const T2 &pos, const T3 &size)
 {
-  typedef poly_span_traits<T1, T2, T3> span;
+  typedef poly_span_traits<T1, T2> start_span;
+  typedef poly_span_traits<T3, T3> size_span;
   return (known_size_p (size)
 	  && known_ge (val, pos)
-	  && known_lt (span::cast (val - pos), size));
+	  && known_lt (start_span::cast (val) - start_span::cast (pos),
+		       size_span::cast (size)));
 }
 
 /* Return true if the two ranges [POS1, POS1 + SIZE1) and [POS2, POS2 + SIZE2)
@@ -2504,8 +2552,9 @@ inline bool
 ranges_known_overlap_p (const T1 &pos1, const T2 &size1,
 			const T3 &pos2, const T4 &size2)
 {
-  typedef poly_span_traits<T1, T3, T2> span1;
-  typedef poly_span_traits<T1, T3, T4> span2;
+  typedef poly_span_traits<T1, T3> start_span;
+  typedef poly_span_traits<T2, T2> size1_span;
+  typedef poly_span_traits<T4, T4> size2_span;
   /* known_gt (POS1 + SIZE1, POS2)                         [infinite precision]
      --> known_gt (SIZE1, POS2 - POS1)                     [infinite precision]
      --> known_gt (SIZE1, POS2 - lower_bound (POS1, POS2)) [infinite precision]
@@ -2520,8 +2569,12 @@ ranges_known_overlap_p (const T1 &pos1, const T2 &size1,
      which the indeterminate is zero (the minimum value).  */
   return (known_size_p (size1)
 	  && known_size_p (size2)
-	  && known_lt (span1::cast (pos2 - lower_bound (pos1, pos2)), size1)
-	  && known_lt (span2::cast (pos1 - lower_bound (pos1, pos2)), size2));
+	  && known_lt (start_span::cast (pos2)
+		       - start_span::cast (lower_bound (pos1, pos2)),
+		       size1_span::cast (size1))
+	  && known_lt (start_span::cast (pos1)
+		       - start_span::cast (lower_bound (pos1, pos2)),
+		       size2_span::cast (size2)));
 }
 
 /* Return true if range [POS1, POS1 + SIZE1) is known to be a subrange of
@@ -2534,15 +2587,16 @@ known_subrange_p (const T1 &pos1, const T2 &size1,
 		  const T3 &pos2, const T4 &size2)
 {
   typedef typename poly_int_traits<T2>::coeff_type C2;
-  typedef POLY_BINARY_COEFF (T2, T4) size_diff_type;
-  typedef poly_span_traits<T1, T3, size_diff_type> span;
+  typedef poly_span_traits<T1, T3> start_span;
+  typedef poly_span_traits<T2, T4> size_span;
   return (known_gt (size1, POLY_INT_TYPE (T2) (0))
 	  && (poly_coeff_traits<C2>::signedness > 0
 	      || known_size_p (size1))
 	  && known_size_p (size2)
 	  && known_ge (pos1, pos2)
 	  && known_le (size1, size2)
-	  && known_le (span::cast (pos1 - pos2), size2 - size1));
+	  && known_le (start_span::cast (pos1) - start_span::cast (pos2),
+		       size_span::cast (size2) - size_span::cast (size1)));
 }
 
 /* Return true if the endpoint of the range [POS, POS + SIZE) can be

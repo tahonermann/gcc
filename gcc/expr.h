@@ -100,7 +100,11 @@ enum block_op_methods
   BLOCK_OP_NO_LIBCALL,
   BLOCK_OP_CALL_PARM,
   /* Like BLOCK_OP_NORMAL, but the libcall can be tail call optimized.  */
-  BLOCK_OP_TAILCALL
+  BLOCK_OP_TAILCALL,
+  /* Like BLOCK_OP_NO_LIBCALL, but instead of emitting a libcall return
+     pc_rtx to indicate nothing has been emitted and let the caller handle
+     it.  */
+  BLOCK_OP_NO_LIBCALL_RET
 };
 
 typedef rtx (*by_pieces_constfn) (void *, HOST_WIDE_INT, scalar_int_mode);
@@ -250,7 +254,6 @@ extern void expand_assignment (tree, tree, bool);
    and storing the value into TARGET.
    If SUGGEST_REG is nonzero, copy the value through a register
    and return that register, if that is possible.  */
-extern rtx store_expr_with_bounds (tree, rtx, int, bool, bool, tree);
 extern rtx store_expr (tree, rtx, int, bool, bool);
 
 /* Given an rtx that may include add and multiply operations,
@@ -285,7 +288,9 @@ expand_normal (tree exp)
 
 /* Return the tree node and offset if a given argument corresponds to
    a string constant.  */
-extern tree string_constant (tree, tree *);
+extern tree string_constant (tree, tree *, tree *, tree *);
+
+extern enum tree_code maybe_optimize_mod_cmp (enum tree_code, tree *, tree *);
 
 /* Two different ways of generating switch statements.  */
 extern int try_casesi (tree, tree, tree, tree, rtx, rtx, rtx, profile_probability);

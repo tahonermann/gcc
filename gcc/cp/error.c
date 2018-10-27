@@ -31,6 +31,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "c-family/c-objc.h"
 #include "ubsan.h"
 #include "internal-fn.h"
+#include "gcc-rich-location.h"
 
 #define pp_separate_with_comma(PP) pp_cxx_separate_with (PP, ',')
 #define pp_separate_with_semicolon(PP) pp_cxx_separate_with (PP, ';')
@@ -784,13 +785,13 @@ dump_type_prefix (cxx_pretty_printer *pp, tree t, int flags)
 	  }
 	if (TYPE_PTR_P (t))
 	  pp_star (pp);
-	else if (TREE_CODE (t) == REFERENCE_TYPE)
-	{
-	  if (TYPE_REF_IS_RVALUE (t))
-	    pp_ampersand_ampersand (pp);
-	  else
-	    pp_ampersand (pp);
-	}
+	else if (TYPE_REF_P (t))
+	  {
+	    if (TYPE_REF_IS_RVALUE (t))
+	      pp_ampersand_ampersand (pp);
+	    else
+	      pp_ampersand (pp);
+	  }
 	pp->padding = pp_before;
 	pp_cxx_cv_qualifier_seq (pp, t);
       }
@@ -1472,7 +1473,7 @@ find_typenames_r (tree *tp, int *walk_subtrees, void *data)
     /* Add the typename without any cv-qualifiers.  */
     mv = TYPE_MAIN_VARIANT (*tp);
 
-  if (TREE_CODE (*tp) == TYPE_PACK_EXPANSION)
+  if (PACK_EXPANSION_P (*tp))
     {
       /* Don't mess with parameter packs since we don't remember
 	 the pack expansion context for a particular typename.  */
@@ -2271,7 +2272,7 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
 	    if (!is_this_parameter (ob))
 	      {
 		dump_expr (pp, ob, flags | TFF_EXPR_IN_PARENS);
-		if (TREE_CODE (TREE_TYPE (ob)) == REFERENCE_TYPE)
+		if (TYPE_REF_P (TREE_TYPE (ob)))
 		  pp_cxx_dot (pp);
 		else
 		  pp_cxx_arrow (pp);
@@ -2305,7 +2306,7 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
 	     shouldn't print the `&' doing so indicates to the user
 	     that the expression has pointer type.  */
 	  || (TREE_TYPE (t)
-	      && TREE_CODE (TREE_TYPE (t)) == REFERENCE_TYPE))
+	      && TYPE_REF_P (TREE_TYPE (t))))
 	dump_expr (pp, TREE_OPERAND (t, 0), flags | TFF_EXPR_IN_PARENS);
       else if (TREE_CODE (TREE_OPERAND (t, 0)) == LABEL_DECL)
 	dump_unary_op (pp, "&&", t, flags);
@@ -2412,12 +2413,12 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
 	tree optype = TREE_TYPE (op);
 
 	if (TREE_CODE (ttype) != TREE_CODE (optype)
-	    && POINTER_TYPE_P (ttype)
-	    && POINTER_TYPE_P (optype)
+	    && INDIRECT_TYPE_P (ttype)
+	    && INDIRECT_TYPE_P (optype)
 	    && same_type_p (TREE_TYPE (optype),
 			    TREE_TYPE (ttype)))
 	  {
-	    if (TREE_CODE (ttype) == REFERENCE_TYPE)
+	    if (TYPE_REF_P (ttype))
 	      {
 		STRIP_NOPS (op);
 		if (TREE_CODE (op) == ADDR_EXPR)
@@ -2714,6 +2715,7 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
     case INTEGER_TYPE:
     case COMPLEX_TYPE:
     case VECTOR_TYPE:
+    case DECLTYPE_TYPE:
       pp_type_specifier_seq (pp, t);
       break;
 
@@ -2763,6 +2765,7 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
     case VEC_DELETE_EXPR:
     case MODOP_EXPR:
     case ABS_EXPR:
+    case ABSU_EXPR:
     case CONJ_EXPR:
     case VECTOR_CST:
     case FIXED_CST:
@@ -3030,7 +3033,7 @@ location_of (tree t)
     return DECL_SOURCE_LOCATION (t);
   if (TREE_CODE (t) == DEFAULT_ARG)
     return defarg_location (t);
-  return EXPR_LOC_OR_LOC (t, input_location);
+  return cp_expr_loc_or_loc (t, input_location);
 }
 
 /* Now the interfaces from error et al to dump_type et al. Each takes an
@@ -3285,8 +3288,13 @@ void
 cxx_print_error_function (diagnostic_context *context, const char *file,
 			  diagnostic_info *diagnostic)
 {
+  char *prefix;
+  if (file)
+    prefix = xstrdup (file);
+  else
+    prefix = NULL;
   lhd_print_error_function (context, file, diagnostic);
-  pp_set_prefix (context->printer, file);
+  pp_set_prefix (context->printer, prefix);
   maybe_print_instantiation_context (context);
 }
 
@@ -3314,7 +3322,7 @@ cp_print_error_function (diagnostic_context *context,
     return;
   if (diagnostic_last_function_changed (context, diagnostic))
     {
-      const char *old_prefix = context->printer->prefix;
+      char *old_prefix = pp_take_prefix (context->printer);
       const char *file = LOCATION_FILE (diagnostic_location (diagnostic));
       tree abstract_origin = diagnostic_abstract_origin (diagnostic);
       char *new_prefix = (file && abstract_origin == NULL)
@@ -3331,10 +3339,6 @@ cp_print_error_function (diagnostic_context *context,
 	  if (abstract_origin)
 	    {
 	      ao = BLOCK_ABSTRACT_ORIGIN (abstract_origin);
-	      while (TREE_CODE (ao) == BLOCK
-		     && BLOCK_ABSTRACT_ORIGIN (ao)
-		     && BLOCK_ABSTRACT_ORIGIN (ao) != ao)
-		ao = BLOCK_ABSTRACT_ORIGIN (ao);
 	      gcc_assert (TREE_CODE (ao) == FUNCTION_DECL);
 	      fndecl = ao;
 	    }
@@ -3356,12 +3360,6 @@ cp_print_error_function (diagnostic_context *context,
 		     && BLOCK_ABSTRACT_ORIGIN (block))
 		{
 		  ao = BLOCK_ABSTRACT_ORIGIN (block);
-
-		  while (TREE_CODE (ao) == BLOCK
-			 && BLOCK_ABSTRACT_ORIGIN (ao)
-			 && BLOCK_ABSTRACT_ORIGIN (ao) != ao)
-		    ao = BLOCK_ABSTRACT_ORIGIN (ao);
-
 		  if (TREE_CODE (ao) == FUNCTION_DECL)
 		    {
 		      fndecl = ao;
@@ -3456,11 +3454,11 @@ print_instantiation_full_context (diagnostic_context *context)
   if (p)
     {
       pp_verbatim (context->printer,
-		   TREE_CODE (p->decl) == TREE_LIST
+		   p->list_p ()
 		   ? _("%s: In substitution of %qS:\n")
 		   : _("%s: In instantiation of %q#D:\n"),
 		   LOCATION_FILE (location),
-		   p->decl);
+		   p->get_node ());
 
       location = p->locus;
       p = p->next;
@@ -3474,7 +3472,7 @@ print_instantiation_full_context (diagnostic_context *context)
 
 static void
 print_instantiation_partial_context_line (diagnostic_context *context,
-					  const struct tinst_level *t,
+					  struct tinst_level *t,
 					  location_t loc, bool recursive_p)
 {
   if (loc == UNKNOWN_LOCATION)
@@ -3491,18 +3489,18 @@ print_instantiation_partial_context_line (diagnostic_context *context,
 
   if (t != NULL)
     {
-      if (TREE_CODE (t->decl) == TREE_LIST)
+      if (t->list_p ())
 	pp_verbatim (context->printer,
 		     recursive_p
 		     ? _("recursively required by substitution of %qS\n")
 		     : _("required by substitution of %qS\n"),
-		     t->decl);
+		     t->get_node ());
       else
 	pp_verbatim (context->printer,
 		     recursive_p
 		     ? _("recursively required from %q#D\n")
 		     : _("required from %q#D\n"),
-		     t->decl);
+		     t->get_node ());
     }
   else
     {
@@ -4023,6 +4021,10 @@ defer_phase_2_of_type_diff (deferred_printed_type *deferred,
    %D   declaration.
    %E   expression.
    %F   function declaration.
+   %G   gcall *
+   %H   type difference (from).
+   %I   type difference (to).
+   %K   tree
    %L	language as used in extern "lang".
    %O	binary operator.
    %P   function parameter whose position is indicated by an integer.
@@ -4030,9 +4032,7 @@ defer_phase_2_of_type_diff (deferred_printed_type *deferred,
    %S   substitution (template + args)
    %T   type.
    %V   cv-qualifier.
-   %X   exception-specification.
-   %H   type difference (from)
-   %I   type difference (to).  */
+   %X   exception-specification.  */
 static bool
 cp_printer (pretty_printer *pp, text_info *text, const char *spec,
 	    int precision, bool wide, bool set_locus, bool verbose,
@@ -4074,6 +4074,21 @@ cp_printer (pretty_printer *pp, text_info *text, const char *spec,
       break;
     case 'E': result = expr_to_string (next_tree);		break;
     case 'F': result = fndecl_to_string (next_tree, verbose);	break;
+    case 'G':
+      percent_G_format (text);
+      return true;
+    case 'H':
+      defer_phase_2_of_type_diff (&postprocessor->m_type_a, next_tree,
+				  buffer_ptr, verbose, *quoted);
+      return true;
+    case 'I':
+      defer_phase_2_of_type_diff (&postprocessor->m_type_b, next_tree,
+				  buffer_ptr, verbose, *quoted);
+      return true;
+    case 'K':
+      t = va_arg (*text->args_ptr, tree);
+      percent_K_format (text, EXPR_LOCATION (t), TREE_BLOCK (t));
+      return true;
     case 'L': result = language_to_string (next_lang);		break;
     case 'O': result = op_to_string (false, next_tcode);	break;
     case 'P': result = parm_to_string (next_int);		break;
@@ -4088,36 +4103,13 @@ cp_printer (pretty_printer *pp, text_info *text, const char *spec,
     case 'V': result = cv_to_string (next_tree, verbose);	break;
     case 'X': result = eh_spec_to_string (next_tree, verbose);  break;
 
-    case 'G':
-      percent_G_format (text);
-      return true;
-
-    case 'K':
-      t = va_arg (*text->args_ptr, tree);
-      percent_K_format (text, t);
-      return true;
-
-    case 'H':
-      {
-	defer_phase_2_of_type_diff (&postprocessor->m_type_a, next_tree,
-				    buffer_ptr, verbose, *quoted);
-	return true;
-      }
-
-    case 'I':
-      {
-	defer_phase_2_of_type_diff (&postprocessor->m_type_b, next_tree,
-				    buffer_ptr, verbose, *quoted);
-	return true;
-      }
-
     default:
       return false;
     }
 
   pp_string (pp, result);
   if (set_locus && t != NULL)
-    text->set_location (0, location_of (t), true);
+    text->set_location (0, location_of (t), SHOW_RANGE_WITH_CARET);
   return true;
 #undef next_tree
 #undef next_tcode
@@ -4268,13 +4260,42 @@ qualified_name_lookup_error (tree scope, tree name,
     }
   else if (scope != global_namespace)
     {
+      auto_diagnostic_group d;
       error_at (location, "%qD is not a member of %qD", name, scope);
       if (!suggest_alternative_in_explicit_scope (location, name, scope))
 	suggest_alternatives_for (location, name, false);
     }
   else
     {
+      auto_diagnostic_group d;
       error_at (location, "%<::%D%> has not been declared", name);
       suggest_alternatives_for (location, name, true);
     }
+}
+
+/* C++-specific implementation of range_label::get_text () vfunc for
+   range_label_for_type_mismatch.
+
+   Compare with print_template_differences above.  */
+
+label_text
+range_label_for_type_mismatch::get_text (unsigned /*range_idx*/) const
+{
+  if (m_labelled_type == NULL_TREE)
+    return label_text (NULL, false);
+
+  const bool verbose = false;
+  const bool show_color = false;
+
+  const char *result;
+  if (m_other_type
+      && comparable_template_types_p (m_labelled_type, m_other_type))
+    result = type_to_string_with_compare (m_labelled_type, m_other_type,
+					  verbose, show_color);
+  else
+    result = type_to_string (m_labelled_type, verbose, true, NULL, show_color);
+
+  /* Both of the above return GC-allocated buffers, so the caller mustn't
+     free them.  */
+  return label_text (const_cast <char *> (result), false);
 }

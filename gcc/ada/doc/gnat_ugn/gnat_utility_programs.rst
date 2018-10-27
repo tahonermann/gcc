@@ -2710,7 +2710,8 @@ Alternatively, you may run the script using the following command line:
   :switch:`-P {file}`
     Indicates the name of the project file that describes the set of sources
     to be processed. The exact set of argument sources depends on other options
-    specified, see below.
+    specified, see below. An aggregate project is allowed as the file parameter
+    only if it has exactly one non-aggregate project being aggregated.
 
 
   .. index:: -U (gnatmetric)
@@ -2893,9 +2894,11 @@ Alternatively, you may run the script using the following command line:
      * ``=>`` in associations, and
      * ``at`` keywords in the component clauses in record representation clauses.
 
+   In addition, ``in`` and ``out`` in parameter specifications are lined up.
 
    .. index:: --no-alignment (gnatpp)
    .. index:: --alignment (gnatpp)
+   .. index:: --no-align-modes (gnatpp)
 
 
    :switch:`--no-alignment`
@@ -2904,6 +2907,10 @@ Alternatively, you may run the script using the following command line:
 
    :switch:`--alignment`
      Set alignment to ON
+
+
+   :switch:`--no-align-modes`
+     Do not line up ``in`` and ``out`` in parameter specifications.
 
    .. _Casing_Control:
 
@@ -3055,6 +3062,14 @@ Alternatively, you may run the script using the following command line:
 
    :switch:`--pragma-mixed-case`
      Pragma names are mixed case (this is the default)
+
+
+   .. index:: --syntax-only (gnatpp)
+
+   :switch:`--syntax-only`
+     Disable the semantic analysis (name resolution) done by libadalang.
+     This means gnatpp will not be able to support any of the
+     "as-declared" switches.
 
 
    .. index:: --dictionary (gnatpp)
@@ -3238,6 +3253,19 @@ Alternatively, you may run the script using the following command line:
      changed to ``16#0001_FFFE#``.
 
 
+   .. index:: --split-line-before-record (gnatpp)
+
+   :switch:`--split-line-before-record`
+     Split the line just before ``record`` in a record type declaration.
+
+
+   .. index:: --indent-named-statements (gnatpp)
+
+   :switch:`--indent-named-statements`
+     Named block and loop statements are indented with respect to
+     the name.
+
+
    .. index:: --split-line-before-op (gnatpp)
 
    :switch:`--split-line-before-op`
@@ -3390,9 +3418,9 @@ Alternatively, you may run the script using the following command line:
      already exists, it is overwritten.
 
 
-   .. index:: --end-of-line (gnatpp)
+   .. index:: --eol (gnatpp)
 
-   :switch:`--end-of-line={xxx}`
+   :switch:`--eol={xxx}`
      Specifies the line-ending style of the reformatted output file. The
      ``xxx`` string specified with the switch may be:
 
@@ -3414,7 +3442,7 @@ Alternatively, you may run the script using the following command line:
    Options ``--output-file`` and ``--output-force`` are allowed only if
    the call to gnatpp contains only one file to reformat.
 
-   Option ``--end-of-line`` and ``--wide-character-encoding`` cannot be used together
+   Option ``--eol`` and ``--wide-character-encoding`` cannot be used together
    with the ``--pipe`` option.
 
 
@@ -3542,6 +3570,30 @@ Alternatively, you may run the script using the following command line:
    specified (either directly or by means of ``--files`` option), and no
    ``-U`` is specified, then the set of processed sources is
    all the immediate units of the argument project.
+
+
+   .. index:: --gnat83 (gnatpp)
+
+   :switch:`--gnat83`
+     Ada 83 mode
+
+
+   .. index:: --gnat95 (gnatpp)
+
+   :switch:`--gnat95`
+     Ada 95 mode
+
+
+   .. index:: --gnat2005 (gnatpp)
+
+   :switch:`--gnat2005`
+     Ada 2005 mode
+
+
+   .. index:: --gnat2012 (gnatpp)
+
+   :switch:`--gnat2012`
+     Ada 2012 mode
 
 
    .. _Formatting_Rules:
@@ -3990,9 +4042,6 @@ Alternatively, you may run the script using the following command line:
 
    .. index:: --eol (gnatpp)
 
-   :switch:`--eol={xxx}`
-     :switch:`--end-of-line={xxx}`
-
    .. index:: -W (gnatpp)
 
    :switch:`-W{e}`
@@ -4078,8 +4127,8 @@ Alternatively, you may run the script using the following command line:
       for which a body must be created or a library unit body for which subunits
       must be created for the body stubs declared in this body.
       The file name may contain the path information.
-      If the name does not follow GNAT file naming conventions and a set
-      of seitches does not contain a project file that defines naming
+      If the name does not follow GNAT file naming conventions and the set
+      of switches does not contain a project file that defines naming
       conventions, the name of the body file must
       be provided
       explicitly as the value of the :switch:`-o{body-name}` option.
@@ -4124,7 +4173,8 @@ Alternatively, you may run the script using the following command line:
 
   :switch:`-P {file}`
     Indicates the name of the project file that describes the set of sources
-    to be processed.
+    to be processed. An aggregate project is allowed as the file parameter only
+    if it has exactly one non-aggregate project being aggregated.
 
 
   .. index:: -X (gnatstub)
@@ -4146,7 +4196,7 @@ Alternatively, you may run the script using the following command line:
 
   :switch:`--subunits`
     Generate subunits for body stubs. If this switch is specified,
-    ``gnatstub`` expects a library unit body as an agrument file,
+    ``gnatstub`` expects a library unit body as an argument file,
     otherwise a library unit declaration is expected. If a body stub
     already has a corresponding subunit, ``gnatstub`` does not
     generate anything for it.
@@ -4248,8 +4298,8 @@ Alternatively, you may run the script using the following command line:
   .. index:: --no-exception (gnatstub)
 
   :switch:`--no-exception`
-    Avoid raising PROGRAM_ERROR in the generated bodies of program unit stubs.
-    This is not always possible for function stubs.
+    Avoid raising Program_Error in the generated bodies of program unit stubs,
+    except in the case of functions, where we have no value to return.
 
 
   .. index:: --no-local-header (gnatstub)
@@ -4732,6 +4782,13 @@ Alternatively, you may run the script using the following command line:
     Runs ``n`` tests in parallel (default is 1).
 
 
+    .. index:: --copy-environment (gnattest)
+
+  :switch:`--copy-environment={dir}`
+    Contents of ``dir`` directory will be copied to temporary directories
+    created by gnattest in which individual test drivers are spawned.
+
+
   .. _Project_Attributes_for_gnattest:
 
   Project Attributes for ``gnattest``
@@ -4753,6 +4810,9 @@ Alternatively, you may run the script using the following command line:
   * ``Tests_Dir``
        is used to select the same output mode as with the ``--tests-dir`` option.
        This attribute cannot be used together with ``Subdir`` or ``Tests_Root``.
+
+  * ``Stubs_Dir``
+       is used to select the same output mode as with the ``--stubs-dir`` option.
 
   * ``Harness_Dir``
        is used to specify the directory in which to place harness packages and project

@@ -850,20 +850,14 @@ struct arm_build_target arm_active_target;
 /* The following are used in the arm.md file as equivalents to bits
    in the above two flag variables.  */
 
-/* Nonzero if this chip supports the ARM Architecture 3M extensions.  */
-int arm_arch3m = 0;
-
 /* Nonzero if this chip supports the ARM Architecture 4 extensions.  */
 int arm_arch4 = 0;
 
 /* Nonzero if this chip supports the ARM Architecture 4t extensions.  */
 int arm_arch4t = 0;
 
-/* Nonzero if this chip supports the ARM Architecture 5 extensions.  */
-int arm_arch5 = 0;
-
-/* Nonzero if this chip supports the ARM Architecture 5E extensions.  */
-int arm_arch5e = 0;
+/* Nonzero if this chip supports the ARM Architecture 5T extensions.  */
+int arm_arch5t = 0;
 
 /* Nonzero if this chip supports the ARM Architecture 5TE extensions.  */
 int arm_arch5te = 0;
@@ -2472,8 +2466,9 @@ arm_set_fixed_conv_libfunc (convert_optab optable, machine_mode to,
   set_conv_libfunc (optable, to, from, buffer);
 }
 
-/* Set up library functions unique to ARM.  */
+static GTY(()) rtx speculation_barrier_libfunc;
 
+/* Set up library functions unique to ARM.  */
 static void
 arm_init_libfuncs (void)
 {
@@ -2759,6 +2754,8 @@ arm_init_libfuncs (void)
 
   if (TARGET_AAPCS_BASED)
     synchronize_libfunc = init_one_libfunc ("__sync_synchronize");
+
+  speculation_barrier_libfunc = init_one_libfunc ("__speculation_barrier");
 }
 
 /* On AAPCS systems, this is the "struct __va_list".  */
@@ -2958,9 +2955,10 @@ static GTY(()) tree init_optimize;
 static void
 arm_override_options_after_change_1 (struct gcc_options *opts)
 {
-  if (opts->x_align_functions <= 0)
-    opts->x_align_functions = TARGET_THUMB_P (opts->x_target_flags)
-      && opts->x_optimize_size ? 2 : 4;
+  /* -falign-functions without argument: supply one.  */
+  if (opts->x_flag_align_functions && !opts->x_str_align_functions)
+    opts->x_str_align_functions = TARGET_THUMB_P (opts->x_target_flags)
+      && opts->x_optimize_size ? "2" : "4";
 }
 
 /* Implement targetm.override_options_after_change.  */
@@ -3005,7 +3003,8 @@ arm_option_override_internal (struct gcc_options *opts,
   if (TARGET_INTERWORK && !bitmap_bit_p (arm_active_target.isa, isa_bit_thumb))
     {
       /* The default is to enable interworking, so this warning message would
-	 be confusing to users who have just compiled with, eg, -march=armv3.  */
+	 be confusing to users who have just compiled with
+	 eg, -march=armv4.  */
       /* warning (0, "ignoring -minterwork because target CPU does not support THUMB"); */
       opts->x_target_flags &= ~MASK_INTERWORK;
     }
@@ -3237,17 +3236,7 @@ arm_configure_build_target (struct arm_build_target *target,
 	 switches that require certain abilities from the cpu.  */
 
       if (TARGET_INTERWORK || TARGET_THUMB)
-	{
-	  bitmap_set_bit (sought_isa, isa_bit_thumb);
-	  bitmap_set_bit (sought_isa, isa_bit_mode32);
-
-	  /* There are no ARM processors that support both APCS-26 and
-	     interworking.  Therefore we forcibly remove MODE26 from
-	     from the isa features here (if it was set), so that the
-	     search below will always be able to find a compatible
-	     processor.  */
-	  bitmap_clear_bit (default_isa, isa_bit_mode26);
-	}
+	bitmap_set_bit (sought_isa, isa_bit_thumb);
 
       /* If there are such requirements and the default CPU does not
 	 satisfy them, we need to run over the complete list of
@@ -3639,13 +3628,10 @@ arm_option_reconfigure_globals (void)
 
   /* Initialize boolean versions of the architectural flags, for use
      in the arm.md file.  */
-  arm_arch3m = bitmap_bit_p (arm_active_target.isa, isa_bit_armv3m);
   arm_arch4 = bitmap_bit_p (arm_active_target.isa, isa_bit_armv4);
   arm_arch4t = arm_arch4 && bitmap_bit_p (arm_active_target.isa, isa_bit_thumb);
-  arm_arch5 = bitmap_bit_p (arm_active_target.isa, isa_bit_armv5);
-  arm_arch5e = bitmap_bit_p (arm_active_target.isa, isa_bit_armv5e);
-  arm_arch5te = arm_arch5e
-    && bitmap_bit_p (arm_active_target.isa, isa_bit_thumb);
+  arm_arch5t =  bitmap_bit_p (arm_active_target.isa, isa_bit_armv5t);
+  arm_arch5te = bitmap_bit_p (arm_active_target.isa, isa_bit_armv5te);
   arm_arch6 = bitmap_bit_p (arm_active_target.isa, isa_bit_armv6);
   arm_arch6k = bitmap_bit_p (arm_active_target.isa, isa_bit_armv6k);
   arm_arch_notm = bitmap_bit_p (arm_active_target.isa, isa_bit_notm);
@@ -3694,7 +3680,7 @@ arm_option_reconfigure_globals (void)
 void
 arm_options_perform_arch_sanity_checks (void)
 {
-  /* V5 code we generate is completely interworking capable, so we turn off
+  /* V5T code we generate is completely interworking capable, so we turn off
      TARGET_INTERWORK here to avoid many tests later on.  */
 
   /* XXX However, we must pass the right pre-processor defines to CPP
@@ -3702,7 +3688,7 @@ arm_options_perform_arch_sanity_checks (void)
   if (TARGET_INTERWORK)
     arm_cpp_interwork = 1;
 
-  if (arm_arch5)
+  if (arm_arch5t)
     target_flags &= ~MASK_INTERWORK;
 
   if (TARGET_IWMMXT && !ARM_DOUBLEWORD_ALIGN)
@@ -4061,10 +4047,10 @@ use_return_insn (int iscond, rtx sibling)
      the other registers, since that is never slower than executing
      another instruction.
 
-     We test for !arm_arch5 here, because code for any architecture
+     We test for !arm_arch5t here, because code for any architecture
      less than this could potentially be run on one of the buggy
      chips.  */
-  if (stack_adjust == 4 && !arm_arch5 && TARGET_ARM)
+  if (stack_adjust == 4 && !arm_arch5t && TARGET_ARM)
     {
       /* Validate that r3 is a call-clobbered register (always true in
 	 the default abi) ...  */
@@ -10010,8 +9996,7 @@ arm_rtx_costs_internal (rtx x, enum rtx_code code, enum rtx_code outer_code,
 
       if (mode == DImode)
 	{
-	  if (arm_arch3m
-	      && GET_CODE (XEXP (x, 0)) == MULT
+	  if (GET_CODE (XEXP (x, 0)) == MULT
 	      && ((GET_CODE (XEXP (XEXP (x, 0), 0)) == ZERO_EXTEND
 		   && GET_CODE (XEXP (XEXP (x, 0), 1)) == ZERO_EXTEND)
 		  || (GET_CODE (XEXP (XEXP (x, 0), 0)) == SIGN_EXTEND
@@ -10209,11 +10194,10 @@ arm_rtx_costs_internal (rtx x, enum rtx_code code, enum rtx_code outer_code,
 
       if (mode == DImode)
 	{
-	  if (arm_arch3m
-	      && ((GET_CODE (XEXP (x, 0)) == ZERO_EXTEND
-		   && GET_CODE (XEXP (x, 1)) == ZERO_EXTEND)
-		  || (GET_CODE (XEXP (x, 0)) == SIGN_EXTEND
-		      && GET_CODE (XEXP (x, 1)) == SIGN_EXTEND)))
+	  if ((GET_CODE (XEXP (x, 0)) == ZERO_EXTEND
+		&& GET_CODE (XEXP (x, 1)) == ZERO_EXTEND)
+	       || (GET_CODE (XEXP (x, 0)) == SIGN_EXTEND
+		   && GET_CODE (XEXP (x, 1)) == SIGN_EXTEND))
 	    {
 	      if (speed_p)
 		*cost += extra_cost->mult[1].extend;
@@ -15957,7 +15941,7 @@ get_label_padding (rtx label)
 {
   HOST_WIDE_INT align, min_insn_size;
 
-  align = 1 << label_to_alignment (label);
+  align = 1 << label_to_alignment (label).levels[0].log;
   min_insn_size = TARGET_THUMB ? 2 : 4;
   return align > min_insn_size ? align - min_insn_size : 0;
 }
@@ -16555,16 +16539,6 @@ create_fix_barrier (Mfix *fix, HOST_WIDE_INT max_address)
 
   /* Make sure that we found a place to insert the jump.  */
   gcc_assert (selected);
-
-  /* Make sure we do not split a call and its corresponding
-     CALL_ARG_LOCATION note.  */
-  if (CALL_P (selected))
-    {
-      rtx_insn *next = NEXT_INSN (selected);
-      if (next && NOTE_P (next)
-	  && NOTE_KIND (next) == NOTE_INSN_CALL_ARG_LOCATION)
-	  selected = next;
-    }
 
   /* Create a new JUMP_INSN that branches around a barrier.  */
   from = emit_jump_insn_after (gen_jump (label), selected);
@@ -17673,7 +17647,11 @@ arm_reorg (void)
 
   if (use_cmse)
     cmse_nonsecure_call_clear_caller_saved ();
-  if (TARGET_THUMB1)
+
+  /* We cannot run the Thumb passes for thunks because there is no CFG.  */
+  if (cfun->is_thunk)
+    ;
+  else if (TARGET_THUMB1)
     thumb1_reorg ();
   else if (TARGET_THUMB2)
     thumb2_reorg ();
@@ -18107,7 +18085,7 @@ arm_emit_call_insn (rtx pat, rtx addr, bool sibcall)
 const char *
 output_call (rtx *operands)
 {
-  gcc_assert (!arm_arch5); /* Patterns should call blx <reg> directly.  */
+  gcc_assert (!arm_arch5t); /* Patterns should call blx <reg> directly.  */
 
   /* Handle calls to lr using ip (which may be clobbered in subr anyway).  */
   if (REGNO (operands[0]) == LR_REGNUM)
@@ -18493,12 +18471,18 @@ output_move_double (rtx *operands, bool emit, int *count)
       gcc_assert ((REGNO (operands[1]) != IP_REGNUM)
                   || (TARGET_ARM && TARGET_LDRD));
 
+      /* For TARGET_ARM the first source register of an STRD
+	 must be even.  This is usually the case for double-word
+	 values but user assembly constraints can force an odd
+	 starting register.  */
+      bool allow_strd = TARGET_LDRD
+			 && !(TARGET_ARM && (REGNO (operands[1]) & 1) == 1);
       switch (GET_CODE (XEXP (operands[0], 0)))
         {
 	case REG:
 	  if (emit)
 	    {
-	      if (TARGET_LDRD)
+	      if (allow_strd)
 		output_asm_insn ("strd%?\t%1, [%m0]", operands);
 	      else
 		output_asm_insn ("stm%?\t%m0, %M1", operands);
@@ -18506,7 +18490,7 @@ output_move_double (rtx *operands, bool emit, int *count)
 	  break;
 
         case PRE_INC:
-	  gcc_assert (TARGET_LDRD);
+	  gcc_assert (allow_strd);
 	  if (emit)
 	    output_asm_insn ("strd%?\t%1, [%m0, #8]!", operands);
 	  break;
@@ -18514,7 +18498,7 @@ output_move_double (rtx *operands, bool emit, int *count)
         case PRE_DEC:
 	  if (emit)
 	    {
-	      if (TARGET_LDRD)
+	      if (allow_strd)
 		output_asm_insn ("strd%?\t%1, [%m0, #-8]!", operands);
 	      else
 		output_asm_insn ("stmdb%?\t%m0!, %M1", operands);
@@ -18524,7 +18508,7 @@ output_move_double (rtx *operands, bool emit, int *count)
         case POST_INC:
 	  if (emit)
 	    {
-	      if (TARGET_LDRD)
+	      if (allow_strd)
 		output_asm_insn ("strd%?\t%1, [%m0], #8", operands);
 	      else
 		output_asm_insn ("stm%?\t%m0!, %M1", operands);
@@ -18532,7 +18516,7 @@ output_move_double (rtx *operands, bool emit, int *count)
 	  break;
 
         case POST_DEC:
-	  gcc_assert (TARGET_LDRD);
+	  gcc_assert (allow_strd);
 	  if (emit)
 	    output_asm_insn ("strd%?\t%1, [%m0], #-8", operands);
 	  break;
@@ -18543,8 +18527,8 @@ output_move_double (rtx *operands, bool emit, int *count)
 	  otherops[1] = XEXP (XEXP (XEXP (operands[0], 0), 1), 0);
 	  otherops[2] = XEXP (XEXP (XEXP (operands[0], 0), 1), 1);
 
-	  /* IWMMXT allows offsets larger than ldrd can handle,
-	     fix these up with a pair of ldr.  */
+	  /* IWMMXT allows offsets larger than strd can handle,
+	     fix these up with a pair of str.  */
 	  if (!TARGET_THUMB2
 	      && CONST_INT_P (otherops[2])
 	      && (INTVAL(otherops[2]) <= -256
@@ -18609,7 +18593,7 @@ output_move_double (rtx *operands, bool emit, int *count)
 		  return "";
 		}
 	    }
-	  if (TARGET_LDRD
+	  if (allow_strd
 	      && (REG_P (otherops[2])
 		  || TARGET_THUMB2
 		  || (CONST_INT_P (otherops[2])
@@ -19402,6 +19386,11 @@ arm_r3_live_at_start_p (void)
 static int
 arm_compute_static_chain_stack_bytes (void)
 {
+  /* Once the value is updated from the init value of -1, do not
+     re-compute.  */
+  if (cfun->machine->static_chain_stack_bytes != -1)
+    return cfun->machine->static_chain_stack_bytes;
+
   /* See the defining assertion in arm_expand_prologue.  */
   if (IS_NESTED (arm_current_func_type ())
       && ((TARGET_APCS_FRAME && frame_pointer_needed && TARGET_ARM)
@@ -19737,7 +19726,7 @@ output_return_instruction (rtx operand, bool really_return, bool reverse,
 	      stack_adjust = offsets->outgoing_args - offsets->saved_regs;
 	      gcc_assert (stack_adjust == 0 || stack_adjust == 4);
 
-	      if (stack_adjust && arm_arch5 && TARGET_ARM)
+	      if (stack_adjust && arm_arch5t && TARGET_ARM)
 		  sprintf (instr, "ldmib%s\t%%|sp, {", conditional);
 	      else
 		{
@@ -19812,7 +19801,7 @@ output_return_instruction (rtx operand, bool really_return, bool reverse,
 	  break;
 
 	case ARM_FT_INTERWORKED:
-	  gcc_assert (arm_arch5 || arm_arch4t);
+	  gcc_assert (arm_arch5t || arm_arch4t);
 	  sprintf (instr, "bx%s\t%%|lr", conditional);
 	  break;
 
@@ -19860,7 +19849,7 @@ output_return_instruction (rtx operand, bool really_return, bool reverse,
 	      snprintf (instr, sizeof (instr), "bxns\t%%|lr");
 	    }
 	  /* Use bx if it's available.  */
-	  else if (arm_arch5 || arm_arch4t)
+	  else if (arm_arch5t || arm_arch4t)
 	    sprintf (instr, "bx%s\t%%|lr", conditional);
 	  else
 	    sprintf (instr, "mov%s\t%%|pc, %%|lr", conditional);
@@ -21709,6 +21698,11 @@ arm_expand_prologue (void)
       emit_insn (gen_movsi (stack_pointer_rtx, r1));
     }
 
+  /* Let's compute the static_chain_stack_bytes required and store it.  Right
+     now the value must be -1 as stored by arm_init_machine_status ().  */
+  cfun->machine->static_chain_stack_bytes
+    = arm_compute_static_chain_stack_bytes ();
+
   /* The static chain register is the same as the IP register.  If it is
      clobbered when creating the frame, we need to save and restore it.  */
   clobber_ip = IS_NESTED (func_type)
@@ -23459,7 +23453,7 @@ arm_final_prescan_insn (rtx_insn *insn)
 		 used since they make interworking inefficient (the
 		 linker can't transform BL<cond> into BLX).  That's
 		 only a problem if the machine has BLX.  */
-	      if (arm_arch5)
+	      if (arm_arch5t)
 		{
 		  fail = TRUE;
 		  break;
@@ -24885,6 +24879,7 @@ arm_init_machine_status (void)
 #if ARM_FT_UNKNOWN != 0
   machine->func_type = ARM_FT_UNKNOWN;
 #endif
+  machine->static_chain_stack_bytes = -1;
   return machine;
 }
 
@@ -26730,6 +26725,8 @@ static void
 arm32_output_mi_thunk (FILE *file, tree, HOST_WIDE_INT delta,
 		       HOST_WIDE_INT vcall_offset, tree function)
 {
+  const bool long_call_p = arm_is_long_call_p (function);
+
   /* On ARM, this_regno is R0 or R1 depending on
      whether the function returns an aggregate or not.
   */
@@ -26767,9 +26764,22 @@ arm32_output_mi_thunk (FILE *file, tree, HOST_WIDE_INT delta,
       TREE_USED (function) = 1;
     }
   rtx funexp = XEXP (DECL_RTL (function), 0);
+  if (long_call_p)
+    {
+      emit_move_insn (temp, funexp);
+      funexp = temp;
+    }
   funexp = gen_rtx_MEM (FUNCTION_MODE, funexp);
-  rtx_insn * insn = emit_call_insn (gen_sibcall (funexp, const0_rtx, NULL_RTX));
+  rtx_insn *insn = emit_call_insn (gen_sibcall (funexp, const0_rtx, NULL_RTX));
   SIBLING_CALL_P (insn) = 1;
+  emit_barrier ();
+
+  /* Indirect calls require a bit of fixup in PIC mode.  */
+  if (long_call_p)
+    {
+      split_all_insns_noflow ();
+      arm_reorg ();
+    }
 
   insn = get_insns ();
   shorten_branches (insn);
@@ -27172,7 +27182,10 @@ static bool
 arm_array_mode_supported_p (machine_mode mode,
 			    unsigned HOST_WIDE_INT nelems)
 {
-  if (TARGET_NEON
+  /* We don't want to enable interleaved loads and stores for BYTES_BIG_ENDIAN
+     for now, as the lane-swapping logic needs to be extended in the expanders.
+     See PR target/82518.  */
+  if (TARGET_NEON && !BYTES_BIG_ENDIAN
       && (VALID_NEON_DREG_MODE (mode) || VALID_NEON_QREG_MODE (mode))
       && (nelems >= 2 && nelems <= 4))
     return true;
@@ -28632,7 +28645,7 @@ arm_expand_compare_and_swap (rtx operands[])
 void
 arm_split_compare_and_swap (rtx operands[])
 {
-  rtx rval, mem, oldval, newval, neg_bval;
+  rtx rval, mem, oldval, newval, neg_bval, mod_s_rtx;
   machine_mode mode;
   enum memmodel mod_s, mod_f;
   bool is_weak;
@@ -28644,20 +28657,16 @@ arm_split_compare_and_swap (rtx operands[])
   oldval = operands[3];
   newval = operands[4];
   is_weak = (operands[5] != const0_rtx);
-  mod_s = memmodel_from_int (INTVAL (operands[6]));
+  mod_s_rtx = operands[6];
+  mod_s = memmodel_from_int (INTVAL (mod_s_rtx));
   mod_f = memmodel_from_int (INTVAL (operands[7]));
   neg_bval = TARGET_THUMB1 ? operands[0] : operands[8];
   mode = GET_MODE (mem);
 
   bool is_armv8_sync = arm_arch8 && is_mm_sync (mod_s);
 
-  bool use_acquire = TARGET_HAVE_LDACQ
-                     && !(is_mm_relaxed (mod_s) || is_mm_consume (mod_s)
-			  || is_mm_release (mod_s));
-		
-  bool use_release = TARGET_HAVE_LDACQ
-                     && !(is_mm_relaxed (mod_s) || is_mm_consume (mod_s)
-			  || is_mm_acquire (mod_s));
+  bool use_acquire = TARGET_HAVE_LDACQ && aarch_mm_needs_acquire (mod_s_rtx);
+  bool use_release = TARGET_HAVE_LDACQ && aarch_mm_needs_release (mod_s_rtx);
 
   /* For ARMv8, the load-acquire is too weak for __sync memory orders.  Instead,
      a full barrier is emitted after the store-release.  */
@@ -28752,13 +28761,8 @@ arm_split_atomic_op (enum rtx_code code, rtx old_out, rtx new_out, rtx mem,
 
   bool is_armv8_sync = arm_arch8 && is_mm_sync (model);
 
-  bool use_acquire = TARGET_HAVE_LDACQ
-                     && !(is_mm_relaxed (model) || is_mm_consume (model)
-			  || is_mm_release (model));
-
-  bool use_release = TARGET_HAVE_LDACQ
-                     && !(is_mm_relaxed (model) || is_mm_consume (model)
-			  || is_mm_acquire (model));
+  bool use_acquire = TARGET_HAVE_LDACQ && aarch_mm_needs_acquire (model_rtx);
+  bool use_release = TARGET_HAVE_LDACQ && aarch_mm_needs_release (model_rtx);
 
   /* For ARMv8, a load-acquire is too weak for __sync memory orders.  Instead,
      a full barrier is emitted after the store-release.  */
@@ -29783,6 +29787,9 @@ arm_valid_symbolic_address_p (rtx addr)
   rtx xop0, xop1 = NULL_RTX;
   rtx tmp = addr;
 
+  if (target_word_relocations)
+    return false;
+
   if (GET_CODE (tmp) == SYMBOL_REF || GET_CODE (tmp) == LABEL_REF)
     return true;
 
@@ -30052,7 +30059,6 @@ arm_block_set_aligned_vect (rtx dstbase,
   rtx dst, addr, mem;
   rtx val_vec, reg;
   machine_mode mode;
-  unsigned HOST_WIDE_INT v = value;
   unsigned int offset = 0;
 
   gcc_assert ((align & 0x3) == 0);
@@ -30071,10 +30077,8 @@ arm_block_set_aligned_vect (rtx dstbase,
 
   dst = copy_addr_to_reg (XEXP (dstbase, 0));
 
-  v = sext_hwi (v, BITS_PER_WORD);
-
   reg = gen_reg_rtx (mode);
-  val_vec = gen_const_vec_duplicate (mode, GEN_INT (v));
+  val_vec = gen_const_vec_duplicate (mode, gen_int_mode (value, QImode));
   /* Emit instruction loading the constant value.  */
   emit_move_insn (reg, val_vec);
 
@@ -30847,7 +30851,7 @@ arm_insert_attributes (tree fndecl, tree * attributes)
     return;
 
   if (TREE_CODE (fndecl) != FUNCTION_DECL || DECL_EXTERNAL(fndecl)
-      || DECL_BUILT_IN (fndecl) || DECL_ARTIFICIAL (fndecl))
+      || fndecl_built_in_p (fndecl) || DECL_ARTIFICIAL (fndecl))
    return;
 
   /* Nested definitions must inherit mode.  */
@@ -31426,7 +31430,7 @@ arm_coproc_builtin_available (enum unspecv builtin)
       case VUNSPEC_MRC2:
 	/* Only present in ARMv5*, ARMv6 (but not ARMv6-M), ARMv7* and
 	   ARMv8-{A,M}.  */
-	if (arm_arch5)
+	if (arm_arch5t)
 	  return true;
 	break;
       case VUNSPEC_MCRR:
@@ -31535,6 +31539,16 @@ arm_constant_alignment (const_tree exp, HOST_WIDE_INT align)
   if (TREE_CODE (exp) == STRING_CST && !optimize_size)
     return MAX (align, BITS_PER_WORD * factor);
   return align;
+}
+
+/* Emit a speculation barrier on target architectures that do not have
+   DSB/ISB directly.  Such systems probably don't need a barrier
+   themselves, but if the code is ever run on a later architecture, it
+   might become a problem.  */
+void
+arm_emit_speculation_barrier_function ()
+{
+  emit_library_call (speculation_barrier_libfunc, LCT_NORMAL, VOIDmode);
 }
 
 #if CHECKING_P

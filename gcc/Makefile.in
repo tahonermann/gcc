@@ -137,8 +137,10 @@ SUBDIRS =@subdirs@ build
 
 # Selection of languages to be made.
 CONFIG_LANGUAGES = @all_selected_languages@
-LANGUAGES = c gcov$(exeext) gcov-dump$(exeext) gcov-tool$(exeext) \
-            $(CONFIG_LANGUAGES)
+LANGUAGES = c $(CONFIG_LANGUAGES)
+ifeq (@enable_gcov@,yes)
+LANGUAGES += gcov$(exeext) gcov-dump$(exeext) gcov-tool$(exeext)
+endif
 
 # Default values for variables overridden in Makefile fragments.
 # CFLAGS is for the user to override to, e.g., do a cross build with -O2.
@@ -976,8 +978,7 @@ CPPLIB_H = $(srcdir)/../libcpp/include/line-map.h \
 INPUT_H = $(srcdir)/../libcpp/include/line-map.h input.h
 OPTS_H = $(INPUT_H) $(VEC_H) opts.h $(OBSTACK_H)
 SYMTAB_H = $(srcdir)/../libcpp/include/symtab.h $(OBSTACK_H)
-CPP_ID_DATA_H = $(CPPLIB_H) $(srcdir)/../libcpp/include/cpp-id-data.h
-CPP_INTERNAL_H = $(srcdir)/../libcpp/internal.h $(CPP_ID_DATA_H)
+CPP_INTERNAL_H = $(srcdir)/../libcpp/internal.h
 TREE_DUMP_H = tree-dump.h $(SPLAY_TREE_H) $(DUMPFILE_H)
 TREE_PASS_H = tree-pass.h $(TIMEVAR_H) $(DUMPFILE_H)
 TREE_SSA_H = tree-ssa.h tree-ssa-operands.h \
@@ -1076,7 +1077,7 @@ BUILD_LIBS = $(BUILD_LIBIBERTY)
 
 BUILD_RTL = build/rtl.o build/read-rtl.o build/ggc-none.o \
 	    build/vec.o build/min-insn-modes.o build/gensupport.o \
-	    build/print-rtl.o build/hash-table.o
+	    build/print-rtl.o build/hash-table.o build/sort.o
 BUILD_MD = build/read-md.o
 BUILD_ERRORS = build/errors.o
 
@@ -1116,6 +1117,10 @@ endif
 
 LANG_MAKEFRAGS = @all_lang_makefrags@
 
+# Used by gcc/jit/Make-lang.in
+LD_VERSION_SCRIPT_OPTION = @ld_version_script_option@
+LD_SONAME_OPTION = @ld_soname_option@
+
 # Flags to pass to recursive makes.
 # CC is set by configure.
 # ??? The choices here will need some experimenting with.
@@ -1150,6 +1155,7 @@ FLAGS_TO_PASS = \
 	"INSTALL_SCRIPT=$(INSTALL_SCRIPT)" \
 	"LN=$(LN)" \
 	"LN_S=$(LN_S)" \
+	"RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET)" \
 	"MAKEINFO=$(MAKEINFO)" \
 	"MAKEINFOFLAGS=$(MAKEINFOFLAGS)" \
 	"MAKEOVERRIDES=" \
@@ -1351,7 +1357,6 @@ OBJS = \
 	incpath.o \
 	init-regs.o \
 	internal-fn.o \
-	ipa-chkp.o \
 	ipa-cp.o \
 	ipa-devirt.o \
 	ipa-fnsummary.o \
@@ -1381,6 +1386,7 @@ OBJS = \
 	ira-color.o \
 	ira-emit.o \
 	ira-lives.o \
+	json.o \
 	jump.o \
 	langhooks.o \
 	lcm.o \
@@ -1417,10 +1423,13 @@ OBJS = \
 	omp-grid.o \
 	omp-low.o \
 	omp-simd-clone.o \
+	opt-problem.o \
 	optabs.o \
 	optabs-libfuncs.o \
 	optabs-query.o \
 	optabs-tree.o \
+	optinfo.o \
+	optinfo-emit-json.o \
 	options-save.o \
 	opts-global.o \
 	passes.o \
@@ -1448,7 +1457,6 @@ OBJS = \
 	reload1.o \
 	reorg.o \
 	resource.o \
-	rtl-chkp.o \
 	rtl-error.o \
 	rtl-tests.o \
 	rtl.o \
@@ -1514,8 +1522,6 @@ OBJS = \
 	tree-outof-ssa.o \
 	tree-parloops.o \
 	tree-phinodes.o \
-	tree-chkp.o \
-	tree-chkp-opt.o \
 	tree-predcom.o \
 	tree-pretty-print.o \
 	tree-profile.o \
@@ -1595,6 +1601,7 @@ OBJS = \
 	web.o \
 	wide-int.o \
 	wide-int-print.o \
+	wide-int-range.o \
 	xcoffout.o \
 	$(out_object_file) \
 	$(EXTRA_OBJS) \
@@ -1607,13 +1614,13 @@ OBJS-libcommon = diagnostic.o diagnostic-color.o diagnostic-show-locus.o \
 	pretty-print.o intl.o \
 	sbitmap.o \
 	vec.o input.o version.o hash-table.o ggc-none.o memory-block.o \
-	selftest.o selftest-diagnostic.o
+	selftest.o selftest-diagnostic.o sort.o
 
 # Objects in libcommon-target.a, used by drivers and by the core
 # compiler and containing target-dependent code.
 OBJS-libcommon-target = $(common_out_object_file) prefix.o params.o \
 	opts.o opts-common.o options.o vec.o hooks.o common/common-targhooks.o \
-	hash-table.o file-find.o spellcheck.o selftest.o
+	hash-table.o file-find.o spellcheck.o selftest.o opt-suggestions.o
 
 # This lists all host objects for the front ends.
 ALL_HOST_FRONTEND_OBJS = $(foreach v,$(CONFIG_LANGUAGES),$($(v)_OBJS))
@@ -1928,13 +1935,7 @@ DEVNULL=$(if $(findstring mingw,$(build)),nul,/dev/null)
 SELFTEST_FLAGS = -nostdinc $(DEVNULL) -S -o $(DEVNULL) \
 	-fself-test=$(srcdir)/testsuite/selftests
 
-C_SELFTEST_FLAGS = -xc $(SELFTEST_FLAGS)
-CPP_SELFTEST_FLAGS = -xc++ $(SELFTEST_FLAGS)
-
 SELFTEST_DEPS = $(GCC_PASSES) stmp-int-hdrs $(srcdir)/testsuite/selftests
-
-C_SELFTEST_DEPS = cc1$(exeext) $(SELFTEST_DEPS)
-CPP_SELFTEST_DEPS = cc1plus$(exeext) $(SELFTEST_DEPS)
 
 # Run the selftests during the build once we have a driver and the frontend,
 # so that self-test failures are caught as early as possible.
@@ -1942,48 +1943,12 @@ CPP_SELFTEST_DEPS = cc1plus$(exeext) $(SELFTEST_DEPS)
 # driver, frontend, or selftest data change.
 .PHONY: selftest
 
-# By default, only run the selftests within the C frontend
-selftest: s-selftest-c
+# Potentially run all selftest-<LANG>.  The various <LANG>/Make-lang.in can
+# require the selftests to be run by defining their selftest-<LANG> as
+# s-selftest-<LANG>.  Otherwise, they should define it as empty.
 
-# C selftests
-s-selftest-c: $(C_SELFTEST_DEPS)
-	$(GCC_FOR_TARGET) $(C_SELFTEST_FLAGS)
-	$(STAMP) $@
-
-# Convenience methods for running C selftests under gdb:
-.PHONY: selftest-c-gdb
-selftest-c-gdb: $(C_SELFTEST_DEPS)
-	$(GCC_FOR_TARGET) $(C_SELFTEST_FLAGS) \
-	  -wrapper gdb,--args
-
-.PHONY: selftest-gdb
-selftest-gdb: selftest-c-gdb
-
-# Convenience methods for running C selftests under valgrind:
-.PHONY: selftest-c-valgrind
-selftest-c-valgrind: $(C_SELFTEST_DEPS)
-	$(GCC_FOR_TARGET) $(C_SELFTEST_FLAGS) \
-	  -wrapper valgrind,--leak-check=full
-
-.PHONY: selftest-valgrind
-selftest-valgrind: selftest-c-valgrind
-
-# C++ selftests
-s-selftest-c++: $(CPP_SELFTEST_DEPS)
-	$(GCC_FOR_TARGET) $(CPP_SELFTEST_FLAGS)
-	$(STAMP) $@
-
-# Convenience method for running C++ selftests under gdb:
-.PHONY: selftest-c++-gdb
-selftest-c++-gdb: $(CPP_SELFTEST_DEPS)
-	$(GCC_FOR_TARGET) $(CPP_SELFTEST_FLAGS) \
-	  -wrapper gdb,--args
-
-# Convenience method for running C++ selftests under valgrind:
-.PHONY: selftest-c++-valgrind
-selftest-c++-valgrind: $(CPP_SELFTEST_DEPS)
-	$(GCC_FOR_TARGET) $(CPP_SELFTEST_FLAGS) \
-	  -wrapper valgrind,--leak-check=full
+SELFTEST_TARGETS = @selftest_languages@
+selftest: $(SELFTEST_TARGETS)
 
 # Recompile all the language-independent object files.
 # This is used only if the user explicitly asks for it.
@@ -2151,7 +2116,7 @@ CFLAGS-collect2.o += -DTARGET_MACHINE=\"$(target_noncanonical)\" \
 
 LTO_WRAPPER_OBJS = lto-wrapper.o collect-utils.o ggc-none.o
 lto-wrapper$(exeext): $(LTO_WRAPPER_OBJS) libcommon-target.a $(LIBDEPS)
-	+$(LINKER) $(ALL_COMPILERFLAGS) $(LDFLAGS) -o T$@ \
+	+$(LINKER) $(ALL_LINKERFLAGS) $(LDFLAGS) -o T$@ \
 	   $(LTO_WRAPPER_OBJS) libcommon-target.a $(LIBS)
 	mv -f T$@ $@
 
@@ -2247,6 +2212,7 @@ s-bversion: BASE-VER
 	$(STAMP) s-bversion
 
 CFLAGS-toplev.o += -DTARGET_NAME=\"$(target_noncanonical)\"
+CFLAGS-optinfo-emit-json.o += -DTARGET_NAME=\"$(target_noncanonical)\"
 
 pass-instances.def: $(srcdir)/passes.def $(PASSES_EXTRA) \
 		    $(srcdir)/gen-pass-instances.awk
@@ -2496,7 +2462,7 @@ s-tm-texi: build/genhooks$(build_exeext) $(srcdir)/doc/tm.texi.in
 	else \
 	  echo >&2 ; \
 	  echo Verify that you have permission to grant a GFDL license for all >&2 ; \
-	  echo new text in tm.texi, then copy it to $(srcdir)/doc/tm.texi. >&2 ; \
+	  echo new text in $(objdir)/tm.texi, then copy it to $(srcdir)/doc/tm.texi. >&2 ; \
 	  false; \
 	fi
 
@@ -2514,7 +2480,7 @@ s-match: build/genmatch$(build_exeext) $(srcdir)/match.pd cfn-operators.pd
 	    					generic-match.c
 	$(STAMP) s-match
 
-GTFILES = $(CPP_ID_DATA_H) $(srcdir)/input.h $(srcdir)/coretypes.h \
+GTFILES = $(CPPLIB_H) $(srcdir)/input.h $(srcdir)/coretypes.h \
   $(host_xm_file_list) \
   $(tm_file_list) $(HASHTAB_H) $(SPLAY_TREE_H) $(srcdir)/bitmap.h \
   $(srcdir)/wide-int.h $(srcdir)/alias.h \
@@ -2548,7 +2514,6 @@ GTFILES = $(CPP_ID_DATA_H) $(srcdir)/input.h $(srcdir)/coretypes.h \
   $(srcdir)/stringpool.c $(srcdir)/tree.c $(srcdir)/varasm.c \
   $(srcdir)/gimple.h \
   $(srcdir)/gimple-ssa.h \
-  $(srcdir)/tree-chkp.c \
   $(srcdir)/tree-ssanames.c $(srcdir)/tree-eh.c $(srcdir)/tree-ssa-address.c \
   $(srcdir)/tree-cfg.c $(srcdir)/tree-ssa-loop-ivopts.c \
   $(srcdir)/tree-dfa.c \
@@ -2659,7 +2624,7 @@ build/version.o:  version.c version.h \
 build/errors.o : errors.c $(BCONFIG_H) $(SYSTEM_H) errors.h
 build/gensupport.o: gensupport.c $(BCONFIG_H) $(SYSTEM_H) 		\
   $(CORETYPES_H) $(GTM_H) $(RTL_BASE_H) $(OBSTACK_H) errors.h		\
-  $(HASHTAB_H) $(READ_MD_H) $(GENSUPPORT_H)
+  $(HASHTAB_H) $(READ_MD_H) $(GENSUPPORT_H) $(HASH_TABLE_H)
 build/ggc-none.o : ggc-none.c $(BCONFIG_H) $(SYSTEM_H) $(CORETYPES_H) 	\
   $(GGC_H)
 build/min-insn-modes.o : min-insn-modes.c $(BCONFIG_H) $(SYSTEM_H)	\
@@ -2674,9 +2639,10 @@ build/read-rtl.o: read-rtl.c $(BCONFIG_H) $(SYSTEM_H) $(CORETYPES_H)	\
 build/rtl.o: rtl.c $(BCONFIG_H) $(CORETYPES_H) $(GTM_H) $(SYSTEM_H)	\
   $(RTL_H) $(GGC_H) errors.h
 build/vec.o : vec.c $(BCONFIG_H) $(SYSTEM_H) $(CORETYPES_H) $(VEC_H)	\
-  $(GGC_H) toplev.h $(DIAGNOSTIC_CORE_H)
+  $(GGC_H) toplev.h $(DIAGNOSTIC_CORE_H) $(HASH_TABLE_H)
 build/hash-table.o : hash-table.c $(BCONFIG_H) $(SYSTEM_H)		\
   $(CORETYPES_H) $(HASH_TABLE_H) $(GGC_H) toplev.h $(DIAGNOSTIC_CORE_H)
+build/sort.o : sort.cc $(BCONFIG_H) $(SYSTEM_H)
 build/inchash.o : inchash.c $(BCONFIG_H) $(SYSTEM_H) $(CORETYPES_H)	\
   $(HASHTAB_H) inchash.h
 build/gencondmd.o : build/gencondmd.c $(BCONFIG_H) $(SYSTEM_H)		\
@@ -2782,7 +2748,7 @@ build/genmddump.o : genmddump.c $(RTL_BASE_H) $(BCONFIG_H) $(SYSTEM_H)	\
   $(CORETYPES_H) $(GTM_H) errors.h $(READ_MD_H) $(GENSUPPORT_H)
 build/genmatch.o : genmatch.c $(BCONFIG_H) $(SYSTEM_H) \
   $(CORETYPES_H) errors.h $(HASH_TABLE_H) hash-map.h $(GGC_H) is-a.h \
-  tree.def builtins.def internal-fn.def
+  tree.def builtins.def internal-fn.def case-cfn-macros.h
 build/gencfn-macros.o : gencfn-macros.c $(BCONFIG_H) $(SYSTEM_H)	\
   $(CORETYPES_H) errors.h $(HASH_TABLE_H) hash-set.h builtins.def	\
   internal-fn.def
@@ -2813,7 +2779,7 @@ build/genautomata$(build_exeext) : BUILD_LIBS += -lm
 
 build/genrecog$(build_exeext) : build/hash-table.o build/inchash.o
 build/gencfn-macros$(build_exeext) : build/hash-table.o build/vec.o \
-  build/ggc-none.o
+  build/ggc-none.o build/sort.o
 
 # For stage1 and when cross-compiling use the build libcpp which is
 # built with NLS disabled.  For stage2+ use the host library and
@@ -2827,7 +2793,7 @@ build/genmatch$(build_exeext): BUILD_LIBS += $(LIBINTL) $(LIBICONV)
 endif
 
 build/genmatch$(build_exeext) : $(BUILD_CPPLIB) \
-  $(BUILD_ERRORS) build/vec.o build/hash-table.o
+  $(BUILD_ERRORS) build/vec.o build/hash-table.o build/sort.o
 
 # These programs are not linked with the MD reader.
 build/gengtype$(build_exeext) : build/gengtype-lex.o build/gengtype-parse.o \
@@ -3168,7 +3134,7 @@ TEXI_GCCINT_FILES = gccint.texi gcc-common.texi gcc-vers.texi		\
 	 gnu.texi gpl_v3.texi fdl.texi contrib.texi languages.texi	\
 	 sourcebuild.texi gty.texi libgcc.texi cfg.texi tree-ssa.texi	\
 	 loop.texi generic.texi gimple.texi plugins.texi optinfo.texi   \
-	 match-and-simplify.texi poly-int.texi
+	 match-and-simplify.texi ux.texi poly-int.texi
 
 TEXI_GCCINSTALL_FILES = install.texi install-old.texi fdl.texi		\
 	 gcc-common.texi gcc-vers.texi
@@ -3507,7 +3473,7 @@ PLUGIN_HEADERS = $(TREE_H) $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
   tree-ssa-loop-niter.h tree-ssa-ter.h tree-ssa-threadedge.h \
   tree-ssa-threadupdate.h inchash.h wide-int.h signop.h hash-map.h \
   hash-set.h dominance.h cfg.h cfgrtl.h cfganal.h cfgbuild.h cfgcleanup.h \
-  lcm.h cfgloopmanip.h file-prefix-map.h builtins.def chkp-builtins.def \
+  lcm.h cfgloopmanip.h file-prefix-map.h builtins.def \
   pass-instances.def params.list
 
 # generate the 'build fragment' b-header-vars

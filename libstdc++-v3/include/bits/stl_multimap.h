@@ -224,12 +224,12 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	       const _Compare& __comp = _Compare(),
 	       const allocator_type& __a = allocator_type())
       : _M_t(__comp, _Pair_alloc_type(__a))
-      { _M_t._M_insert_equal(__l.begin(), __l.end()); }
+      { _M_t._M_insert_range_equal(__l.begin(), __l.end()); }
 
       /// Allocator-extended default constructor.
       explicit
       multimap(const allocator_type& __a)
-      : _M_t(_Compare(), _Pair_alloc_type(__a)) { }
+      : _M_t(_Pair_alloc_type(__a)) { }
 
       /// Allocator-extended copy constructor.
       multimap(const multimap& __m, const allocator_type& __a)
@@ -243,15 +243,15 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
       /// Allocator-extended initialier-list constructor.
       multimap(initializer_list<value_type> __l, const allocator_type& __a)
-      : _M_t(_Compare(), _Pair_alloc_type(__a))
-      { _M_t._M_insert_equal(__l.begin(), __l.end()); }
+      : _M_t(_Pair_alloc_type(__a))
+      { _M_t._M_insert_range_equal(__l.begin(), __l.end()); }
 
       /// Allocator-extended range constructor.
       template<typename _InputIterator>
 	multimap(_InputIterator __first, _InputIterator __last,
 		 const allocator_type& __a)
-	: _M_t(_Compare(), _Pair_alloc_type(__a))
-	{ _M_t._M_insert_equal(__first, __last); }
+	: _M_t(_Pair_alloc_type(__a))
+	{ _M_t._M_insert_range_equal(__first, __last); }
 #endif
 
       /**
@@ -266,7 +266,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       template<typename _InputIterator>
 	multimap(_InputIterator __first, _InputIterator __last)
 	: _M_t()
-	{ _M_t._M_insert_equal(__first, __last); }
+	{ _M_t._M_insert_range_equal(__first, __last); }
 
       /**
        *  @brief  Builds a %multimap from a range.
@@ -284,7 +284,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 		 const _Compare& __comp,
 		 const allocator_type& __a = allocator_type())
 	: _M_t(__comp, _Pair_alloc_type(__a))
-	{ _M_t._M_insert_equal(__first, __last); }
+	{ _M_t._M_insert_range_equal(__first, __last); }
 
 #if __cplusplus >= 201103L
       /**
@@ -544,12 +544,10 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       insert(value_type&& __x)
       { return _M_t._M_insert_equal(std::move(__x)); }
 
-      template<typename _Pair, typename = typename
-	       std::enable_if<std::is_constructible<value_type,
-						    _Pair&&>::value>::type>
-	iterator
+      template<typename _Pair>
+	__enable_if_t<is_constructible<value_type, _Pair>::value, iterator>
 	insert(_Pair&& __x)
-	{ return _M_t._M_insert_equal(std::forward<_Pair>(__x)); }
+	{ return _M_t._M_emplace_equal(std::forward<_Pair>(__x)); }
 #endif
       // @}
 
@@ -589,13 +587,13 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       insert(const_iterator __position, value_type&& __x)
       { return _M_t._M_insert_equal_(__position, std::move(__x)); }
 
-      template<typename _Pair, typename = typename
-	       std::enable_if<std::is_constructible<value_type,
-						    _Pair&&>::value>::type>
-	iterator
+      template<typename _Pair>
+	__enable_if_t<is_constructible<value_type, _Pair&&>::value, iterator>
 	insert(const_iterator __position, _Pair&& __x)
-	{ return _M_t._M_insert_equal_(__position,
-				       std::forward<_Pair>(__x)); }
+	{
+	  return _M_t._M_emplace_hint_equal(__position,
+					    std::forward<_Pair>(__x));
+	}
 #endif
       // @}
 
@@ -611,7 +609,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       template<typename _InputIterator>
 	void
 	insert(_InputIterator __first, _InputIterator __last)
-	{ _M_t._M_insert_equal(__first, __last); }
+	{ _M_t._M_insert_range_equal(__first, __last); }
 
 #if __cplusplus >= 201103L
       /**
@@ -651,7 +649,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       { return _M_t._M_reinsert_node_hint_equal(__hint, std::move(__nh)); }
 
       template<typename, typename>
-	friend class _Rb_tree_merge_helper;
+	friend class std::_Rb_tree_merge_helper;
 
       template<typename _C2>
 	void
@@ -892,6 +890,25 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	{ return _M_t._M_count_tr(__x); }
 #endif
       //@}
+
+#if __cplusplus > 201703L
+      //@{
+      /**
+       *  @brief  Finds whether an element with the given key exists.
+       *  @param  __x  Key of (key, value) pairs to be located.
+       *  @return  True if there is any element with the specified key.
+       */
+      bool
+      contains(const key_type& __x) const
+      { return _M_t.find(__x) != _M_t.end(); }
+
+      template<typename _Kt>
+	auto
+	contains(const _Kt& __x) const
+	-> decltype(_M_t._M_find_tr(__x), void(), true)
+	{ return _M_t._M_find_tr(__x) != _M_t.end(); }
+      //@}
+#endif
 
       //@{
       /**

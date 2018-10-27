@@ -1554,6 +1554,17 @@ record_set (rtx dest, const_rtx set, void *data ATTRIBUTE_UNUSED)
 	  new_reg_base_value[regno] = 0;
 	  return;
 	}
+      /* A CLOBBER_HIGH only wipes out the old value if the mode of the old
+	 value is greater than that of the clobber.  */
+      else if (GET_CODE (set) == CLOBBER_HIGH)
+	{
+	  if (new_reg_base_value[regno] != 0
+	      && reg_is_clobbered_by_clobber_high (
+		   regno, GET_MODE (new_reg_base_value[regno]), XEXP (set, 0)))
+	    new_reg_base_value[regno] = 0;
+	  return;
+	}
+
       src = SET_SRC (set);
     }
   else
@@ -1876,7 +1887,8 @@ rtx_equal_for_memref_p (const_rtx x, const_rtx y)
 }
 
 static rtx
-find_base_term (rtx x)
+find_base_term (rtx x, vec<std::pair<cselib_val *,
+				     struct elt_loc_list *> > &visited_vals)
 {
   cselib_val *val;
   struct elt_loc_list *l, *f;
@@ -1910,7 +1922,7 @@ find_base_term (rtx x)
     case POST_DEC:
     case PRE_MODIFY:
     case POST_MODIFY:
-      return find_base_term (XEXP (x, 0));
+      return find_base_term (XEXP (x, 0), visited_vals);
 
     case ZERO_EXTEND:
     case SIGN_EXTEND:	/* Used for Alpha/NT pointers */
@@ -1921,7 +1933,7 @@ find_base_term (rtx x)
 	return 0;
 
       {
-	rtx temp = find_base_term (XEXP (x, 0));
+	rtx temp = find_base_term (XEXP (x, 0), visited_vals);
 
 	if (temp != 0 && CONSTANT_P (temp))
 	  temp = convert_memory_address (Pmode, temp);
@@ -1940,7 +1952,9 @@ find_base_term (rtx x)
 	return static_reg_base_value[STACK_POINTER_REGNUM];
 
       f = val->locs;
-      /* Temporarily reset val->locs to avoid infinite recursion.  */
+      /* Reset val->locs to avoid infinite recursion.  */
+      if (f)
+	visited_vals.safe_push (std::make_pair (val, f));
       val->locs = NULL;
 
       for (l = f; l; l = l->next)
@@ -1949,16 +1963,15 @@ find_base_term (rtx x)
 	    && !CSELIB_VAL_PTR (l->loc)->locs->next
 	    && CSELIB_VAL_PTR (l->loc)->locs->loc == x)
 	  continue;
-	else if ((ret = find_base_term (l->loc)) != 0)
+	else if ((ret = find_base_term (l->loc, visited_vals)) != 0)
 	  break;
 
-      val->locs = f;
       return ret;
 
     case LO_SUM:
       /* The standard form is (lo_sum reg sym) so look only at the
          second operand.  */
-      return find_base_term (XEXP (x, 1));
+      return find_base_term (XEXP (x, 1), visited_vals);
 
     case CONST:
       x = XEXP (x, 0);
@@ -1984,7 +1997,7 @@ find_base_term (rtx x)
 	   other operand is the base register.  */
 
 	if (tmp1 == pic_offset_table_rtx && CONSTANT_P (tmp2))
-	  return find_base_term (tmp2);
+	  return find_base_term (tmp2, visited_vals);
 
 	/* If either operand is known to be a pointer, then prefer it
 	   to determine the base term.  */
@@ -2001,12 +2014,12 @@ find_base_term (rtx x)
 	   term is from a pointer or is a named object or a special address
 	   (like an argument or stack reference), then use it for the
 	   base term.  */
-	rtx base = find_base_term (tmp1);
+	rtx base = find_base_term (tmp1, visited_vals);
 	if (base != NULL_RTX
 	    && ((REG_P (tmp1) && REG_POINTER (tmp1))
 		 || known_base_value_p (base)))
 	  return base;
-	base = find_base_term (tmp2);
+	base = find_base_term (tmp2, visited_vals);
 	if (base != NULL_RTX
 	    && ((REG_P (tmp2) && REG_POINTER (tmp2))
 		 || known_base_value_p (base)))
@@ -2020,7 +2033,7 @@ find_base_term (rtx x)
 
     case AND:
       if (CONST_INT_P (XEXP (x, 1)) && INTVAL (XEXP (x, 1)) != 0)
-	return find_base_term (XEXP (x, 0));
+	return find_base_term (XEXP (x, 0), visited_vals);
       return 0;
 
     case SYMBOL_REF:
@@ -2030,6 +2043,19 @@ find_base_term (rtx x)
     default:
       return 0;
     }
+}
+
+/* Wrapper around the worker above which removes locs from visited VALUEs
+   to avoid visiting them multiple times.  We unwind that changes here.  */
+
+static rtx
+find_base_term (rtx x)
+{
+  auto_vec<std::pair<cselib_val *, struct elt_loc_list *>, 32> visited_vals;
+  rtx res = find_base_term (x, visited_vals);
+  for (unsigned i = 0; i < visited_vals.length (); ++i)
+    visited_vals[i].first->locs = visited_vals[i].second;
+  return res;
 }
 
 /* Return true if accesses to address X may alias accesses based
@@ -2247,9 +2273,10 @@ get_addr (rtx x)
 	  rtx op0 = get_addr (XEXP (x, 0));
 	  if (op0 != XEXP (x, 0))
 	    {
+	      poly_int64 c;
 	      if (GET_CODE (x) == PLUS
-		  && GET_CODE (XEXP (x, 1)) == CONST_INT)
-		return plus_constant (GET_MODE (x), op0, INTVAL (XEXP (x, 1)));
+		  && poly_int_rtx_p (XEXP (x, 1), &c))
+		return plus_constant (GET_MODE (x), op0, c);
 	      return simplify_gen_binary (GET_CODE (x), GET_MODE (x),
 					  op0, XEXP (x, 1));
 	    }
@@ -2536,10 +2563,11 @@ memrefs_conflict_p (poly_int64 xsize, rtx x, poly_int64 ysize, rtx y,
 	    return offset_overlap_p (c, xsize, ysize);
 
 	  /* Can't properly adjust our sizes.  */
-	  if (!CONST_INT_P (x1)
-	      || !can_div_trunc_p (xsize, INTVAL (x1), &xsize)
-	      || !can_div_trunc_p (ysize, INTVAL (x1), &ysize)
-	      || !can_div_trunc_p (c, INTVAL (x1), &c))
+	  poly_int64 c1;
+	  if (!poly_int_rtx_p (x1, &c1)
+	      || !can_div_trunc_p (xsize, c1, &xsize)
+	      || !can_div_trunc_p (ysize, c1, &ysize)
+	      || !can_div_trunc_p (c, c1, &c))
 	    return -1;
 	  return memrefs_conflict_p (xsize, x0, ysize, y0, c);
 	}
@@ -2683,22 +2711,22 @@ adjust_offset_for_component_ref (tree x, bool *known_p,
     {
       tree xoffset = component_ref_field_offset (x);
       tree field = TREE_OPERAND (x, 1);
-      if (TREE_CODE (xoffset) != INTEGER_CST)
+      if (!poly_int_tree_p (xoffset))
 	{
 	  *known_p = false;
 	  return;
 	}
 
-      offset_int woffset
-	= (wi::to_offset (xoffset)
+      poly_offset_int woffset
+	= (wi::to_poly_offset (xoffset)
 	   + (wi::to_offset (DECL_FIELD_BIT_OFFSET (field))
-	      >> LOG2_BITS_PER_UNIT));
-      if (!wi::fits_uhwi_p (woffset))
+	      >> LOG2_BITS_PER_UNIT)
+	   + *offset);
+      if (!woffset.to_shwi (offset))
 	{
 	  *known_p = false;
 	  return;
 	}
-      *offset += woffset.to_uhwi ();
 
       x = TREE_OPERAND (x, 0);
     }
@@ -2999,7 +3027,8 @@ write_dependence_p (const_rtx mem,
   int ret;
 
   gcc_checking_assert (x_canonicalized
-		       ? (x_addr != NULL_RTX && x_mode != VOIDmode)
+		       ? (x_addr != NULL_RTX
+			  && (x_mode != VOIDmode || GET_MODE (x) == VOIDmode))
 		       : (x_addr == NULL_RTX && x_mode == VOIDmode));
 
   if (MEM_VOLATILE_P (x) && MEM_VOLATILE_P (mem))
@@ -3191,12 +3220,21 @@ init_alias_target (void)
 	&& targetm.hard_regno_mode_ok (i, Pmode))
       static_reg_base_value[i] = arg_base_value;
 
+  /* RTL code is required to be consistent about whether it uses the
+     stack pointer, the frame pointer or the argument pointer to
+     access a given area of the frame.  We can therefore use the
+     base address to distinguish between the different areas.  */
   static_reg_base_value[STACK_POINTER_REGNUM]
     = unique_base_value (UNIQUE_BASE_VALUE_SP);
   static_reg_base_value[ARG_POINTER_REGNUM]
     = unique_base_value (UNIQUE_BASE_VALUE_ARGP);
   static_reg_base_value[FRAME_POINTER_REGNUM]
     = unique_base_value (UNIQUE_BASE_VALUE_FP);
+
+  /* The above rules extend post-reload, with eliminations applying
+     consistently to each of the three pointers.  Cope with cases in
+     which the frame pointer is eliminated to the hard frame pointer
+     rather than the stack pointer.  */
   if (!HARD_FRAME_POINTER_IS_FRAME_POINTER)
     static_reg_base_value[HARD_FRAME_POINTER_REGNUM]
       = unique_base_value (UNIQUE_BASE_VALUE_HFP);
@@ -3230,15 +3268,6 @@ memory_modified_in_insn_p (const_rtx mem, const_rtx insn)
   memory_modified = false;
   note_stores (PATTERN (insn), memory_modified_1, CONST_CAST_RTX(mem));
   return memory_modified;
-}
-
-/* Return TRUE if the destination of a set is rtx identical to
-   ITEM.  */
-static inline bool
-set_dest_equal_p (const_rtx set, const_rtx item)
-{
-  rtx dest = SET_DEST (set);
-  return rtx_equal_p (dest, item);
 }
 
 /* Initialize the aliasing machinery.  Initialize the REG_KNOWN_VALUE
@@ -3329,7 +3358,14 @@ init_alias_analysis (void)
 
       /* Initialize the alias information for this pass.  */
       for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
-	if (static_reg_base_value[i])
+	if (static_reg_base_value[i]
+	    /* Don't treat the hard frame pointer as special if we
+	       eliminated the frame pointer to the stack pointer instead.  */
+	    && !(i == HARD_FRAME_POINTER_REGNUM
+		 && reload_completed
+		 && !frame_pointer_needed
+		 && targetm.can_eliminate (FRAME_POINTER_REGNUM,
+					   STACK_POINTER_REGNUM)))
 	  {
 	    new_reg_base_value[i] = static_reg_base_value[i];
 	    bitmap_set_bit (reg_seen, i);
@@ -3375,6 +3411,7 @@ init_alias_analysis (void)
 			  && DF_REG_DEF_COUNT (regno) != 1)
 			note = NULL_RTX;
 
+		      poly_int64 offset;
 		      if (note != NULL_RTX
 			  && GET_CODE (XEXP (note, 0)) != EXPR_LIST
 			  && ! rtx_varies_p (XEXP (note, 0), 1)
@@ -3389,10 +3426,9 @@ init_alias_analysis (void)
 			       && GET_CODE (src) == PLUS
 			       && REG_P (XEXP (src, 0))
 			       && (t = get_reg_known_value (REGNO (XEXP (src, 0))))
-			       && CONST_INT_P (XEXP (src, 1)))
+			       && poly_int_rtx_p (XEXP (src, 1), &offset))
 			{
-			  t = plus_constant (GET_MODE (src), t,
-					     INTVAL (XEXP (src, 1)));
+			  t = plus_constant (GET_MODE (src), t, offset);
 			  set_reg_known_value (regno, t);
 			  set_reg_known_equiv_p (regno, false);
 			}

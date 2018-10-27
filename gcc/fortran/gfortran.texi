@@ -533,8 +533,7 @@ Specification @code{Further Interoperability of Fortran with C}
 (ISO/IEC TS 29113:2012).  Full support of those standards and future
 Fortran standards is planned.  The current status of the support is
 can be found in the @ref{Fortran 2003 status}, @ref{Fortran 2008
-status}, @ref{TS 29113 status}, @ref{TS 18508 status} and @ref{Fortran
-2018 status} sections of the documentation.
+status} and @ref{Fortran 2018 status} sections of the documentation.
 
 Additionally, the GNU Fortran compilers supports the OpenMP specification
 (version 4.0 and most of the features of the 4.5 version,
@@ -793,8 +792,6 @@ compile option was used.
 @menu
 * Fortran 2003 status::
 * Fortran 2008 status::
-* TS 29113 status::
-* TS 18508 status::
 * Fortran 2018 status::
 @end menu
 
@@ -882,8 +879,7 @@ than @code{(/.../)}.  Type-specification for array constructors like
 @item Extensions to the specification and initialization expressions,
 including the support for intrinsics with real and complex arguments.
 
-@item Support for the asynchronous input/output syntax; however, the
-data transfer is currently always synchronously performed. 
+@item Support for the asynchronous input/output.
 
 @item
 @cindex @code{FLUSH} statement
@@ -1096,57 +1092,6 @@ arrays are supported for named constants (@code{PARAMETER}).
 
 
 
-@node TS 29113 status
-@section Technical Specification 29113 Status
-
-GNU Fortran supports some of the new features of the Technical
-Specification (TS) 29113 on Further Interoperability of Fortran with C.
-The @uref{https://gcc.gnu.org/wiki/TS29113Status, wiki} has some information
-about the current TS 29113 implementation status.  In particular, the
-following is implemented.
-
-See also @ref{Further Interoperability of Fortran with C}.
-
-@itemize
-@item The @option{-std=f2008ts} option.
-
-@item The @code{OPTIONAL} attribute is allowed for dummy arguments
-of @code{BIND(C) procedures.}
-
-@item The @code{RANK} intrinsic is supported.
-
-@item GNU Fortran's implementation for variables with @code{ASYNCHRONOUS}
-attribute is compatible with TS 29113.
-
-@item Assumed types (@code{TYPE(*)}).
-
-@item Assumed-rank (@code{DIMENSION(..)}). However, the array descriptor
-of the TS is not yet supported.
-@end itemize
-
-
-@node TS 18508 status
-@section Technical Specification 18508 Status
-
-GNU Fortran supports the following new features of the Technical
-Specification 18508 on Additional Parallel Features in Fortran:
-
-@itemize
-@item The new atomic ADD, CAS, FETCH and ADD/OR/XOR, OR and XOR intrinsics.
-
-@item The @code{CO_MIN} and @code{CO_MAX} and @code{SUM} reduction intrinsics.
-And the @code{CO_BROADCAST} and @code{CO_REDUCE} intrinsic, except that those
-do not support polymorphic types or types with allocatable, pointer or
-polymorphic components.
-
-@item Events (@code{EVENT POST}, @code{EVENT WAIT}, @code{EVENT_QUERY})
-
-@item Failed images (@code{FAIL IMAGE}, @code{IMAGE_STATUS},
-@code{FAILED_IMAGES}, @code{STOPPED_IMAGES})
-
-@end itemize
-
-
 @node Fortran 2018 status
 @section Status of Fortran 2018 support
 
@@ -1168,6 +1113,55 @@ specifier now conforms to Fortran 2018.
 
 @end itemize
 
+
+@subsection TS 29113 Status (Further Interoperability with C)
+
+GNU Fortran supports some of the new features of the Technical
+Specification (TS) 29113 on Further Interoperability of Fortran with C.
+The @uref{https://gcc.gnu.org/wiki/TS29113Status, wiki} has some information
+about the current TS 29113 implementation status.  In particular, the
+following is implemented.
+
+See also @ref{Further Interoperability of Fortran with C}.
+
+@itemize
+@item The @code{OPTIONAL} attribute is allowed for dummy arguments
+of @code{BIND(C) procedures.}
+
+@item The @code{RANK} intrinsic is supported.
+
+@item GNU Fortran's implementation for variables with @code{ASYNCHRONOUS}
+attribute is compatible with TS 29113.
+
+@item Assumed types (@code{TYPE(*)}).
+
+@item Assumed-rank (@code{DIMENSION(..)}). However, the array descriptor
+of the TS is not yet supported.
+@end itemize
+
+
+
+@subsection TS 18508 Status (Additional Parallel Features)
+
+GNU Fortran supports the following new features of the Technical
+Specification 18508 on Additional Parallel Features in Fortran:
+
+@itemize
+@item The new atomic ADD, CAS, FETCH and ADD/OR/XOR, OR and XOR intrinsics.
+
+@item The @code{CO_MIN} and @code{CO_MAX} and @code{SUM} reduction intrinsics.
+And the @code{CO_BROADCAST} and @code{CO_REDUCE} intrinsic, except that those
+do not support polymorphic types or types with allocatable, pointer or
+polymorphic components.
+
+@item Events (@code{EVENT POST}, @code{EVENT WAIT}, @code{EVENT_QUERY})
+
+@item Failed images (@code{FAIL IMAGE}, @code{IMAGE_STATUS},
+@code{FAILED_IMAGES}, @code{STOPPED_IMAGES})
+
+@end itemize
+
+
 @c ---------------------------------------------------------------------
 @c Compiler Characteristics
 @c ---------------------------------------------------------------------
@@ -1182,11 +1176,14 @@ might in some way or another become visible to the programmer.
 @menu
 * KIND Type Parameters::
 * Internal representation of LOGICAL variables::
+* Evaluation of logical expressions::
+* MAX and MIN intrinsics with REAL NaN arguments::
 * Thread-safety of the runtime library::
 * Data consistency and durability::
 * Files opened without an explicit ACTION= specifier::
 * File operations on symbolic links::
 * File format of unformatted sequential files::
+* Asynchronous I/O::
 @end menu
 
 
@@ -1254,6 +1251,34 @@ values: @code{1} for @code{.TRUE.} and @code{0} for
 @code{.FALSE.}.  Any other integer value results in undefined behavior.
 
 See also @ref{Argument passing conventions} and @ref{Interoperability with C}.
+
+
+@node Evaluation of logical expressions
+@section Evaluation of logical expressions
+
+The Fortran standard does not require the compiler to evaluate all parts of an
+expression, if they do not contribute to the final result.  For logical
+expressions with @code{.AND.} or @code{.OR.} operators, in particular, GNU
+Fortran will optimize out function calls (even to impure functions) if the
+result of the expression can be established without them.  However, since not
+all compilers do that, and such an optimization can potentially modify the
+program flow and subsequent results, GNU Fortran throws warnings for such
+situations with the @option{-Wfunction-elimination} flag.
+
+
+@node MAX and MIN intrinsics with REAL NaN arguments
+@section MAX and MIN intrinsics with REAL NaN arguments
+@cindex MAX, MIN, NaN
+
+The Fortran standard does not specify what the result of the
+@code{MAX} and @code{MIN} intrinsics are if one of the arguments is a
+@code{NaN}.  Accordingly, the GNU Fortran compiler does not specify
+that either, as this allows for faster and more compact code to be
+generated.  If the programmer wishes to take some specific action in
+case one of the arguments is a @code{NaN}, it is necessary to
+explicitly test the arguments before calling @code{MAX} or @code{MIN},
+e.g. with the @code{IEEE_IS_NAN} function from the intrinsic module
+@code{IEEE_ARITHMETIC}.
 
 
 @node Thread-safety of the runtime library
@@ -1476,6 +1501,21 @@ program main
   if (all (a == b)) print *,'success!'
 end program main
 @end smallexample
+
+@node Asynchronous I/O
+@section Asynchronous I/O
+@cindex input/output, asynchronous
+@cindex asynchronous I/O
+
+Asynchronous I/O is supported if the program is linked against the
+POSIX thread library. If that is not the case, all I/O is performed
+as synchronous. On systems which do not support pthread condition
+variables, such as AIX, I/O is also performed as synchronous.
+
+On some systems, such as Darwin or Solaris, the POSIX thread library
+is always linked in, so asynchronous I/O is always performed. On other
+sytems, such as Linux, it is necessary to specify @option{-pthread},
+@option{-lpthread} or @option{-fopenmp} during the linking step.
 
 @c ---------------------------------------------------------------------
 @c Extensions
@@ -1906,10 +1946,12 @@ or,
         pointer ( <pointer1> , <pointee1> ), ( <pointer2> , <pointee2> ), ...
 @end smallexample
 The pointer is an integer that is intended to hold a memory address.
-The pointee may be an array or scalar.  A pointee can be an assumed
-size array---that is, the last dimension may be left unspecified by
-using a @code{*} in place of a value---but a pointee cannot be an
-assumed shape array.  No space is allocated for the pointee.
+The pointee may be an array or scalar.
+If an assumed-size array is permitted within the scoping unit, a
+pointee can be an assumed-size array.
+That is, the last dimension may be left unspecified by using a @code{*}
+in place of a value. A pointee cannot be an assumed shape array.
+No space is allocated for the pointee.
 
 The pointee may have its type declared before or after the pointer
 statement, and its array specification (if any) may be declared
@@ -4458,7 +4500,7 @@ in the @var{DESC}'s data-ptr is registered or allocate when the data-ptr is
 
 @item @emph{Syntax}:
 @code{void caf_register (size_t size, caf_register_t type, caf_token_t *token,
-gfc_descriptor_t *desc, int *stat, char *errmsg, int errmsg_len)}
+gfc_descriptor_t *desc, int *stat, char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -4510,7 +4552,7 @@ during a call to @code{_gfortran_caf_register}.
 
 @item @emph{Syntax}:
 @code{void caf_deregister (caf_token_t *token, caf_deregister_t type,
-int *stat, char *errmsg, int errmsg_len)}
+int *stat, char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -4750,7 +4792,7 @@ remote image identified by the @var{image_index}.
 @item @emph{Syntax}:
 @code{void _gfortran_caf_send_by_ref (caf_token_t token, int image_index,
 gfc_descriptor_t *src, caf_reference_t *refs, int dst_kind, int src_kind,
-bool may_require_tmp, bool dst_reallocatable, int *stat)}
+bool may_require_tmp, bool dst_reallocatable, int *stat, int dst_type)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -4774,6 +4816,9 @@ is a full array or component ref.
 @item @var{stat} @tab intent(out) When non-@code{NULL} give the result of the
 operation, i.e., zero on success and non-zero on error.  When @code{NULL} and
 an error occurs, then an error message is printed and the program is terminated.
+@item @var{dst_type} @tab intent(in)  Give the type of the destination.  When
+the destination is not an array, than the precise type, e.g. of a component in
+a derived type, is not known, but provided here.
 @end multitable
 
 @item @emph{NOTES}
@@ -4808,7 +4853,7 @@ identified by the @var{image_index}.
 @item @emph{Syntax}:
 @code{void _gfortran_caf_get_by_ref (caf_token_t token, int image_index,
 caf_reference_t *refs, gfc_descriptor_t *dst, int dst_kind, int src_kind,
-bool may_require_tmp, bool dst_reallocatable, int *stat)}
+bool may_require_tmp, bool dst_reallocatable, int *stat, int src_type)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -4833,6 +4878,9 @@ array or a component is referenced.
 @item @var{stat} @tab intent(out) When non-@code{NULL} give the result of the
 operation, i.e., zero on success and non-zero on error.  When @code{NULL} and an
 error occurs, then an error message is printed and the program is terminated.
+@item @var{src_type} @tab intent(in)  Give the type of the source.  When the
+source is not an array, than the precise type, e.g. of a component in a
+derived type, is not known, but provided here.
 @end multitable
 
 @item @emph{NOTES}
@@ -4868,7 +4916,8 @@ identified by the @var{src_image_index} to a remote image identified by the
 @code{void _gfortran_caf_sendget_by_ref (caf_token_t dst_token,
 int dst_image_index, caf_reference_t *dst_refs,
 caf_token_t src_token, int src_image_index, caf_reference_t *src_refs,
-int dst_kind, int src_kind, bool may_require_tmp, int *dst_stat, int *src_stat)}
+int dst_kind, int src_kind, bool may_require_tmp, int *dst_stat,
+int *src_stat, int dst_type, int src_type)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -4899,6 +4948,12 @@ program is terminated.
 the get-operation, i.e., zero on success and non-zero on error.  When
 @code{NULL} and an error occurs, then an error message is printed and the
 program is terminated.
+@item @var{dst_type} @tab intent(in)  Give the type of the destination.  When
+the destination is not an array, than the precise type, e.g. of a component in
+a derived type, is not known, but provided here.
+@item @var{src_type} @tab intent(in)  Give the type of the source.  When the
+source is not an array, than the precise type, e.g. of a component in a
+derived type, is not known, but provided here.
 @end multitable
 
 @item @emph{NOTES}
@@ -4936,7 +4991,7 @@ which has already been locked by the same image is an error.
 
 @item @emph{Syntax}:
 @code{void _gfortran_caf_lock (caf_token_t token, size_t index, int image_index,
-int *aquired_lock, int *stat, char *errmsg, int errmsg_len)}
+int *aquired_lock, int *stat, char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -4971,7 +5026,7 @@ which is unlocked or has been locked by a different image is an error.
 
 @item @emph{Syntax}:
 @code{void _gfortran_caf_unlock (caf_token_t token, size_t index, int image_index,
-int *stat, char *errmsg, int errmsg_len)}
+int *stat, char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5003,7 +5058,7 @@ Increment the event count of the specified event variable.
 
 @item @emph{Syntax}:
 @code{void _gfortran_caf_event_post (caf_token_t token, size_t index,
-int image_index, int *stat, char *errmsg, int errmsg_len)}
+int image_index, int *stat, char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5040,7 +5095,7 @@ amount and return.
 
 @item @emph{Syntax}:
 @code{void _gfortran_caf_event_wait (caf_token_t token, size_t index,
-int until_count, int *stat, char *errmsg, int errmsg_len)}
+int until_count, int *stat, char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5118,7 +5173,7 @@ current team.  Additionally, it ensures that all pending data transfers of
 previous segment have completed.
 
 @item @emph{Syntax}:
-@code{void _gfortran_caf_sync_all (int *stat, char *errmsg, int errmsg_len)}
+@code{void _gfortran_caf_sync_all (int *stat, char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5146,7 +5201,7 @@ transfers of previous segments have completed.
 
 @item @emph{Syntax}:
 @code{void _gfortran_caf_sync_images (int count, int images[], int *stat,
-char *errmsg, int errmsg_len)}
+char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5174,7 +5229,7 @@ Acts as optimization barrier between different segments. It also ensures that
 all pending memory operations of this image have been completed.
 
 @item @emph{Syntax}:
-@code{void _gfortran_caf_sync_memory (int *stat, char *errmsg, int errmsg_len)}
+@code{void _gfortran_caf_sync_memory (int *stat, char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5201,7 +5256,7 @@ function should terminate the program with the specified exit code.
 
 
 @item @emph{Syntax}:
-@code{void _gfortran_caf_error_stop (int32_t error)}
+@code{void _gfortran_caf_error_stop (int error)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5221,7 +5276,7 @@ Invoked for an @code{ERROR STOP} statement which has a string as argument.  The
 function should terminate the program with a nonzero-exit code.
 
 @item @emph{Syntax}:
-@code{void _gfortran_caf_error_stop (const char *string, int32_t len)}
+@code{void _gfortran_caf_error_stop (const char *string, size_t len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5399,7 +5454,7 @@ be called collectively.
 
 @item @emph{Syntax}:
 @code{void _gfortran_caf_co_broadcast (gfc_descriptor_t *a,
-int source_image, int *stat, char *errmsg, int errmsg_len)}
+int source_image, int *stat, char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5430,7 +5485,7 @@ strings.
 
 @item @emph{Syntax}:
 @code{void _gfortran_caf_co_max (gfc_descriptor_t *a, int result_image,
-int *stat, char *errmsg, int a_len, int errmsg_len)}
+int *stat, char *errmsg, int a_len, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5467,7 +5522,7 @@ strings.
 
 @item @emph{Syntax}:
 @code{void _gfortran_caf_co_min (gfc_descriptor_t *a, int result_image,
-int *stat, char *errmsg, int a_len, int errmsg_len)}
+int *stat, char *errmsg, int a_len, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5503,7 +5558,7 @@ specified image.  This function operates on numeric values only.
 
 @item @emph{Syntax}:
 @code{void _gfortran_caf_co_sum (gfc_descriptor_t *a, int result_image,
-int *stat, char *errmsg, int errmsg_len)}
+int *stat, char *errmsg, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70
@@ -5548,7 +5603,7 @@ string lengths shall be specified as hidden arguments;
 @item @emph{Syntax}:
 @code{void _gfortran_caf_co_reduce (gfc_descriptor_t *a,
 void * (*opr) (void *, void *), int opr_flags, int result_image,
-int *stat, char *errmsg, int a_len, int errmsg_len)}
+int *stat, char *errmsg, int a_len, size_t errmsg_len)}
 
 @item @emph{Arguments}:
 @multitable @columnfractions .15 .70

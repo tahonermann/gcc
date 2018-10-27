@@ -253,7 +253,7 @@ static tree last_alloca_addr;
 /* Set of variable declarations that are going to be guarded by
    use-after-scope sanitizer.  */
 
-static hash_set<tree> *asan_handled_variables = NULL;
+hash_set<tree> *asan_handled_variables = NULL;
 
 hash_set <tree> *asan_used_labels = NULL;
 
@@ -554,14 +554,14 @@ get_last_alloca_addr ()
   return last_alloca_addr;
 }
 
-/* Insert __asan_allocas_unpoison (top, bottom) call after
+/* Insert __asan_allocas_unpoison (top, bottom) call before
    __builtin_stack_restore (new_sp) call.
    The pseudocode of this routine should look like this:
-     __builtin_stack_restore (new_sp);
      top = last_alloca_addr;
      bot = new_sp;
      __asan_allocas_unpoison (top, bot);
      last_alloca_addr = new_sp;
+     __builtin_stack_restore (new_sp);
    In general, we can't use new_sp as bot parameter because on some
    architectures SP has non zero offset from dynamic stack area.  Moreover, on
    some architectures this offset (STACK_DYNAMIC_OFFSET) becomes known for each
@@ -570,9 +570,8 @@ get_last_alloca_addr ()
    http://refspecs.linuxfoundation.org/ELF/ppc64/PPC-elf64abi.html#DYNAM-STACK.
    To overcome the issue we use following trick: pass new_sp as a second
    parameter to __asan_allocas_unpoison and rewrite it during expansion with
-   virtual_dynamic_stack_rtx later in expand_asan_emit_allocas_unpoison
-   function.
-*/
+   new_sp + (virtual_dynamic_stack_rtx - sp) later in
+   expand_asan_emit_allocas_unpoison function.  */
 
 static void
 handle_builtin_stack_restore (gcall *call, gimple_stmt_iterator *iter)
@@ -584,9 +583,9 @@ handle_builtin_stack_restore (gcall *call, gimple_stmt_iterator *iter)
   tree restored_stack = gimple_call_arg (call, 0);
   tree fn = builtin_decl_implicit (BUILT_IN_ASAN_ALLOCAS_UNPOISON);
   gimple *g = gimple_build_call (fn, 2, last_alloca, restored_stack);
-  gsi_insert_after (iter, g, GSI_NEW_STMT);
+  gsi_insert_before (iter, g, GSI_SAME_STMT);
   g = gimple_build_assign (last_alloca, restored_stack);
-  gsi_insert_after (iter, g, GSI_NEW_STMT);
+  gsi_insert_before (iter, g, GSI_SAME_STMT);
 }
 
 /* Deploy and poison redzones around __builtin_alloca call.  To do this, we
@@ -1270,6 +1269,9 @@ asan_emit_stack_protection (rtx base, rtx pbase, unsigned int alignb,
   if (shadow_ptr_types[0] == NULL_TREE)
     asan_init_shadow_ptr_types ();
 
+  expanded_location cfun_xloc
+    = expand_location (DECL_SOURCE_LOCATION (current_function_decl));
+
   /* First of all, prepare the description string.  */
   pretty_printer asan_pp;
 
@@ -1282,15 +1284,30 @@ asan_emit_stack_protection (rtx base, rtx pbase, unsigned int alignb,
       pp_space (&asan_pp);
       pp_wide_integer (&asan_pp, offsets[l - 1] - offsets[l]);
       pp_space (&asan_pp);
+
+      expanded_location xloc
+	= expand_location (DECL_SOURCE_LOCATION (decl));
+      char location[32];
+
+      if (xloc.file == cfun_xloc.file)
+	sprintf (location, ":%d", xloc.line);
+      else
+	location[0] = '\0';
+
       if (DECL_P (decl) && DECL_NAME (decl))
 	{
-	  pp_decimal_int (&asan_pp, IDENTIFIER_LENGTH (DECL_NAME (decl)));
+	  unsigned idlen
+	    = IDENTIFIER_LENGTH (DECL_NAME (decl)) + strlen (location);
+	  pp_decimal_int (&asan_pp, idlen);
 	  pp_space (&asan_pp);
 	  pp_tree_identifier (&asan_pp, DECL_NAME (decl));
+	  pp_string (&asan_pp, location);
 	}
       else
 	pp_string (&asan_pp, "9 <unknown>");
-      pp_space (&asan_pp);
+
+      if (l > 2)
+	pp_space (&asan_pp);
     }
   str_cst = asan_pp_string (&asan_pp);
 

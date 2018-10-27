@@ -318,7 +318,7 @@ static rtx frv_expand_mwtacc_builtin		(enum insn_code, tree);
 static rtx frv_expand_noargs_builtin		(enum insn_code);
 static void frv_split_iacc_move			(rtx, rtx);
 static rtx frv_emit_comparison			(enum rtx_code, rtx, rtx);
-static void frv_ifcvt_add_insn			(rtx, rtx, int);
+static void frv_ifcvt_add_insn			(rtx, rtx_insn *, int);
 static rtx frv_ifcvt_rewrite_mem		(rtx, machine_mode, rtx);
 static rtx frv_ifcvt_load_value			(rtx, rtx);
 static unsigned int frv_insn_unit		(rtx_insn *);
@@ -527,6 +527,9 @@ static bool frv_modes_tieable_p			(machine_mode, machine_mode);
 #define TARGET_MODES_TIEABLE_P frv_modes_tieable_p
 #undef TARGET_CONSTANT_ALIGNMENT
 #define TARGET_CONSTANT_ALIGNMENT constant_alignment_word_strings
+
+#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
+#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -1415,8 +1418,6 @@ frv_function_contains_far_jump (void)
 static void
 frv_function_prologue (FILE *file)
 {
-  rtx_insn *insn, *next, *last_call;
-
   /* If no frame was created, check whether the function uses a call
      instruction to implement a far jump.  If so, save the link in gr3 and
      replace all returns to LR with returns to GR3.  GR3 is used because it
@@ -1457,32 +1458,6 @@ frv_function_prologue (FILE *file)
 
   /* Allow the garbage collector to free the nops created by frv_reorg.  */
   memset (frv_nops, 0, sizeof (frv_nops));
-
-  /* Locate CALL_ARG_LOCATION notes that have been misplaced
-     and move them back to where they should be located.  */
-  last_call = NULL;
-  for (insn = get_insns (); insn; insn = next)
-    {
-      next = NEXT_INSN (insn);
-      if (CALL_P (insn)
-	  || (INSN_P (insn) && GET_CODE (PATTERN (insn)) == SEQUENCE
-	      && CALL_P (XVECEXP (PATTERN (insn), 0, 0))))
-	last_call = insn;
-
-      if (!NOTE_P (insn) || NOTE_KIND (insn) != NOTE_INSN_CALL_ARG_LOCATION)
-	continue;
-
-      if (NEXT_INSN (last_call) == insn)
-	continue;
-
-      SET_NEXT_INSN (PREV_INSN (insn)) = NEXT_INSN (insn);
-      SET_PREV_INSN (NEXT_INSN (insn)) = PREV_INSN (insn);
-      SET_PREV_INSN (insn) = last_call;
-      SET_NEXT_INSN (insn) = NEXT_INSN (last_call);
-      SET_PREV_INSN (NEXT_INSN (insn)) = insn;
-      SET_NEXT_INSN (PREV_INSN (insn)) = insn;
-      last_call = insn;
-    }
 }
 
 
@@ -5188,7 +5163,7 @@ frv_ifcvt_machdep_init (void *ce_info ATTRIBUTE_UNUSED)
    if the conditional execution conversion is successful.  */
 
 static void
-frv_ifcvt_add_insn (rtx pattern, rtx insn, int before_p)
+frv_ifcvt_add_insn (rtx pattern, rtx_insn *insn, int before_p)
 {
   rtx link = alloc_EXPR_LIST (VOIDmode, pattern, insn);
 
@@ -5870,7 +5845,7 @@ single_set_pattern (rtx pattern)
 rtx
 frv_ifcvt_modify_insn (ce_if_block *ce_info,
                        rtx pattern,
-                       rtx insn)
+                       rtx_insn *insn)
 {
   rtx orig_ce_pattern = pattern;
   rtx set;
@@ -6134,7 +6109,7 @@ frv_ifcvt_modify_insn (ce_if_block *ce_info,
 void
 frv_ifcvt_modify_final (ce_if_block *ce_info ATTRIBUTE_UNUSED)
 {
-  rtx existing_insn;
+  rtx_insn *existing_insn;
   rtx check_insn;
   rtx p = frv_ifcvt.added_insns_list;
   int i;
@@ -6149,7 +6124,7 @@ frv_ifcvt_modify_final (ce_if_block *ce_info ATTRIBUTE_UNUSED)
       rtx old_p = p;
 
       check_insn = XEXP (check_and_insert_insns, 0);
-      existing_insn = XEXP (check_and_insert_insns, 1);
+      existing_insn = as_a <rtx_insn *> (XEXP (check_and_insert_insns, 1));
       p = XEXP (p, 1);
 
       /* The jump bit is used to say that the new insn is to be inserted BEFORE
@@ -6170,7 +6145,7 @@ frv_ifcvt_modify_final (ce_if_block *ce_info ATTRIBUTE_UNUSED)
   /* Load up any constants needed into temp gprs */
   for (i = 0; i < frv_ifcvt.cur_scratch_regs; i++)
     {
-      rtx insn = emit_insn_before (frv_ifcvt.scratch_regs[i], existing_insn);
+      rtx_insn *insn = emit_insn_before (frv_ifcvt.scratch_regs[i], existing_insn);
       if (! frv_ifcvt.scratch_insns_bitmap)
 	frv_ifcvt.scratch_insns_bitmap = BITMAP_ALLOC (NULL);
       bitmap_set_bit (frv_ifcvt.scratch_insns_bitmap, INSN_UID (insn));
@@ -7964,7 +7939,7 @@ frv_align_label (void)
     {
       if (LABEL_P (x))
 	{
-	  unsigned int subalign = 1 << label_to_alignment (x);
+	  unsigned int subalign = 1 << label_to_alignment (x).levels[0].log;
 	  alignment = MAX (alignment, subalign);
 	  label = x;
 	}

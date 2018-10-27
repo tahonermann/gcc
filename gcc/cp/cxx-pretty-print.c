@@ -294,6 +294,39 @@ pp_cxx_qualified_id (cxx_pretty_printer *pp, tree t)
     }
 }
 
+/* Given a value e of ENUMERAL_TYPE:
+   Print out the first ENUMERATOR id with value e, if one is found,
+   (including nested names but excluding the enum name if unscoped)
+   else print out the value as a C-style cast (type-id)value.  */
+
+static void
+pp_cxx_enumeration_constant (cxx_pretty_printer *pp, tree e)
+{
+  tree type = TREE_TYPE (e);
+  tree value;
+
+  /* Find the name of this constant.  */
+  for (value = TYPE_VALUES (type);
+       value != NULL_TREE
+	&& !tree_int_cst_equal (DECL_INITIAL (TREE_VALUE (value)), e);
+       value = TREE_CHAIN (value))
+    ;
+
+  if (value != NULL_TREE)
+    {
+      if (!ENUM_IS_SCOPED (type))
+	type = get_containing_scope (type);
+      pp_cxx_nested_name_specifier (pp, type);
+      pp->id_expression (TREE_PURPOSE (value));
+    }
+  else
+    {
+      /* Value must have been cast.  */
+       pp_c_type_cast (pp, type);
+       pp_c_integer_constant (pp, e);
+    }
+}
+
 
 void
 cxx_pretty_printer::constant (tree t)
@@ -315,6 +348,11 @@ cxx_pretty_printer::constant (tree t)
       if (NULLPTR_TYPE_P (TREE_TYPE (t)))
 	{
 	  pp_string (this, "nullptr");
+	  break;
+	}
+      else if (TREE_CODE (TREE_TYPE (t)) == ENUMERAL_TYPE)
+	{
+	  pp_cxx_enumeration_constant (this, t);
 	  break;
 	}
       /* fall through.  */
@@ -899,11 +937,13 @@ cxx_pretty_printer::multiplicative_expression (tree e)
     case MULT_EXPR:
     case TRUNC_DIV_EXPR:
     case TRUNC_MOD_EXPR:
+    case EXACT_DIV_EXPR:
+    case RDIV_EXPR:
       multiplicative_expression (TREE_OPERAND (e, 0));
       pp_space (this);
       if (code == MULT_EXPR)
 	pp_star (this);
-      else if (code == TRUNC_DIV_EXPR)
+      else if (code != TRUNC_MOD_EXPR)
 	pp_slash (this);
       else
 	pp_modulo (this);
@@ -1113,6 +1153,8 @@ cxx_pretty_printer::expression (tree t)
     case MULT_EXPR:
     case TRUNC_DIV_EXPR:
     case TRUNC_MOD_EXPR:
+    case EXACT_DIV_EXPR:
+    case RDIV_EXPR:
       multiplicative_expression (t);
       break;
 
@@ -1698,7 +1740,7 @@ cxx_pretty_printer::abstract_declarator (tree t)
 {
   if (TYPE_PTRMEM_P (t))
     pp_cxx_right_paren (this);
-  else if (POINTER_TYPE_P (t))
+  else if (INDIRECT_TYPE_P (t))
     {
       if (TREE_CODE (TREE_TYPE (t)) == ARRAY_TYPE
 	  || TREE_CODE (TREE_TYPE (t)) == FUNCTION_TYPE)
@@ -2017,6 +2059,12 @@ cxx_pretty_printer::statement (tree t)
       pp_cxx_ws_string (this, "for");
       pp_space (this);
       pp_cxx_left_paren (this);
+      if (RANGE_FOR_INIT_STMT (t))
+	{
+	  statement (RANGE_FOR_INIT_STMT (t));
+	  pp_needs_newline (this) = false;
+	  pp_cxx_whitespace (this);
+	}
       statement (RANGE_FOR_DECL (t));
       pp_space (this);
       pp_needs_newline (this) = false;
@@ -2391,7 +2439,7 @@ pp_cxx_offsetof_expression_1 (cxx_pretty_printer *pp, tree t)
     {
     case ARROW_EXPR:
       if (TREE_CODE (TREE_OPERAND (t, 0)) == STATIC_CAST_EXPR
-	  && POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (t, 0))))
+	  && INDIRECT_TYPE_P (TREE_TYPE (TREE_OPERAND (t, 0))))
 	{
 	  pp->type_id (TREE_TYPE (TREE_TYPE (TREE_OPERAND (t, 0))));
 	  pp_cxx_separate_with (pp, ',');

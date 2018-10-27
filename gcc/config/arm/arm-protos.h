@@ -56,6 +56,8 @@ extern void arm_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update
 extern rtx arm_simd_vect_par_cnst_half (machine_mode mode, bool high);
 extern bool arm_simd_check_vect_par_cnst_half_p (rtx op, machine_mode mode,
 						 bool high);
+extern void arm_emit_speculation_barrier_function (void);
+
 #ifdef RTX_CODE
 extern void arm_gen_unlikely_cbranch (enum rtx_code, machine_mode cc_mode,
 				      rtx label_ref);
@@ -379,20 +381,17 @@ extern bool arm_is_constant_pool_ref (rtx);
    be used.  */
 extern unsigned int tune_flags;
 
-/* Nonzero if this chip supports the ARM Architecture 3M extensions.  */
-extern int arm_arch3m;
-
 /* Nonzero if this chip supports the ARM Architecture 4 extensions.  */
 extern int arm_arch4;
 
 /* Nonzero if this chip supports the ARM Architecture 4t extensions.  */
 extern int arm_arch4t;
 
-/* Nonzero if this chip supports the ARM Architecture 5 extensions.  */
-extern int arm_arch5;
+/* Nonzero if this chip supports the ARM Architecture 5t extensions.  */
+extern int arm_arch5t;
 
-/* Nonzero if this chip supports the ARM Architecture 5E extensions.  */
-extern int arm_arch5e;
+/* Nonzero if this chip supports the ARM Architecture 5te extensions.  */
+extern int arm_arch5te;
 
 /* Nonzero if this chip supports the ARM Architecture 6 extensions.  */
 extern int arm_arch6;
@@ -545,9 +544,9 @@ extern const arch_option all_architectures[];
 extern const cpu_option all_cores[];
 
 const cpu_option *arm_parse_cpu_option_name (const cpu_option *, const char *,
-					     const char *);
+					     const char *, bool = true);
 const arch_option *arm_parse_arch_option_name (const arch_option *,
-					       const char *, const char *);
+					       const char *, const char *, bool = true);
 void arm_parse_option_features (sbitmap, const cpu_arch_option *,
 				const char *);
 

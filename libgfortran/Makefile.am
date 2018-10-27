@@ -100,7 +100,8 @@ io/transfer128.c \
 io/unit.c \
 io/unix.c \
 io/write.c \
-io/fbuf.c
+io/fbuf.c \
+io/async.c
 
 endif
 
@@ -108,7 +109,8 @@ gfor_io_headers= \
 io/io.h \
 io/fbuf.h \
 io/format.h \
-io/unix.h
+io/unix.h \
+io/async.h
 
 gfor_helper_src= \
 intrinsics/associated.c \
@@ -915,7 +917,8 @@ $(gfor_built_specific_src) \
 $(gfor_built_specific2_src) \
 $(gfor_misc_specifics) \
 intrinsics/dprod_r8.f90 \
-intrinsics/f2c_specifics.F90
+intrinsics/f2c_specifics.F90 \
+intrinsics/random_init.f90
 
 # Turn on vectorization and loop unrolling for matmul.
 $(patsubst %.c,%.lo,$(notdir $(i_matmul_c))): AM_CFLAGS += -ffast-math -ftree-vectorize -funroll-loops --param max-unroll-times=4

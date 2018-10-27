@@ -1366,6 +1366,9 @@ gfc_match_assignment (void)
 
   gfc_check_do_variable (lvalue->symtree);
 
+  if (lvalue->ts.type == BT_CLASS)
+    gfc_find_vtab (&rvalue->ts);
+
   return MATCH_YES;
 }
 
@@ -1442,7 +1445,8 @@ match_arithmetic_if (void)
       return MATCH_ERROR;
     }
 
-  if (!gfc_notify_std (GFC_STD_F95_OBS, "Arithmetic IF statement at %C"))
+  if (!gfc_notify_std (GFC_STD_F95_OBS | GFC_STD_F2018_DEL,
+		       "Arithmetic IF statement at %C"))
     return MATCH_ERROR;
 
   new_st.op = EXEC_ARITHMETIC_IF;
@@ -1522,7 +1526,8 @@ gfc_match_if (gfc_statement *if_type)
 	  return MATCH_ERROR;
 	}
 
-      if (!gfc_notify_std (GFC_STD_F95_OBS, "Arithmetic IF statement at %C"))
+      if (!gfc_notify_std (GFC_STD_F95_OBS | GFC_STD_F2018_DEL,
+			   "Arithmetic IF statement at %C"))
 	return MATCH_ERROR;
 
       new_st.op = EXEC_ARITHMETIC_IF;
@@ -1887,17 +1892,21 @@ gfc_match_associate (void)
       gfc_association_list* a;
 
       /* Match the next association.  */
-      if (gfc_match (" %n => %e", newAssoc->name, &newAssoc->target)
-	    != MATCH_YES)
+      if (gfc_match (" %n =>", newAssoc->name) != MATCH_YES)
+	{
+	  gfc_error ("Expected association at %C");
+	  goto assocListError;
+	}
+
+      if (gfc_match (" %e", &newAssoc->target) != MATCH_YES)
 	{
 	  /* Have another go, allowing for procedure pointer selectors.  */
 	  gfc_matching_procptr_assignment = 1;
-	  if (gfc_match (" %n => %e", newAssoc->name, &newAssoc->target)
- 	      != MATCH_YES)
- 	    {
- 	      gfc_error ("Expected association at %C");
- 	      goto assocListError;
- 	    }
+	  if (gfc_match (" %e", &newAssoc->target) != MATCH_YES)
+	    {
+	      gfc_error ("Invalid association target at %C");
+	      goto assocListError;
+	    }
 	  gfc_matching_procptr_assignment = 0;
 	}
       newAssoc->where = gfc_current_locus;
@@ -2118,7 +2127,7 @@ gfc_match_type_spec (gfc_typespec *ts)
      or list item in a type-list of an OpenMP reduction clause.  Need to
      differentiate REAL([KIND]=scalar-int-initialization-expr) from
      REAL(A,[KIND]) and REAL(KIND,A).  Logically, when this code was
-     written the use of LOGICAL as a type-spec or intrinsic subprogram 
+     written the use of LOGICAL as a type-spec or intrinsic subprogram
      was overlooked.  */
 
   m = gfc_match (" %n", name);
@@ -2938,12 +2947,10 @@ gfc_match_stopcode (gfc_statement st)
   bool f95, f03;
 
   /* Set f95 for -std=f95.  */
-  f95 = gfc_option.allow_std == (GFC_STD_F95_OBS | GFC_STD_F95 | GFC_STD_F77
-				 | GFC_STD_F2008_OBS);
+  f95 = (gfc_option.allow_std == GFC_STD_OPT_F95);
 
   /* Set f03 for -std=f2003.  */
-  f03 = gfc_option.allow_std == (GFC_STD_F95_OBS | GFC_STD_F95 | GFC_STD_F77
-				 | GFC_STD_F2008_OBS | GFC_STD_F2003);
+  f03 = (gfc_option.allow_std == GFC_STD_OPT_F03);
 
   /* Look for a blank between STOP and the stop-code for F2008 or later.  */
   if (gfc_current_form != FORM_FIXED && !(f95 || f03))
@@ -3322,7 +3329,7 @@ cleanup:
 match
 gfc_match_event_post (void)
 {
-  if (!gfc_notify_std (GFC_STD_F2008_TS, "EVENT POST statement at %C"))
+  if (!gfc_notify_std (GFC_STD_F2018, "EVENT POST statement at %C"))
     return MATCH_ERROR;
 
   return event_statement (ST_EVENT_POST);
@@ -3332,7 +3339,7 @@ gfc_match_event_post (void)
 match
 gfc_match_event_wait (void)
 {
-  if (!gfc_notify_std (GFC_STD_F2008_TS, "EVENT WAIT statement at %C"))
+  if (!gfc_notify_std (GFC_STD_F2018, "EVENT WAIT statement at %C"))
     return MATCH_ERROR;
 
   return event_statement (ST_EVENT_WAIT);
@@ -3344,7 +3351,7 @@ gfc_match_event_wait (void)
 match
 gfc_match_fail_image (void)
 {
-  if (!gfc_notify_std (GFC_STD_F2008_TS, "FAIL IMAGE statement at %C"))
+  if (!gfc_notify_std (GFC_STD_F2018, "FAIL IMAGE statement at %C"))
     return MATCH_ERROR;
 
   if (gfc_match_char ('(') == MATCH_YES)
@@ -3368,7 +3375,7 @@ gfc_match_form_team (void)
   match m;
   gfc_expr *teamid,*team;
 
-  if (!gfc_notify_std (GFC_STD_F2008_TS, "FORM TEAM statement at %C"))
+  if (!gfc_notify_std (GFC_STD_F2018, "FORM TEAM statement at %C"))
     return MATCH_ERROR;
 
   if (gfc_match_char ('(') == MATCH_NO)
@@ -3407,7 +3414,7 @@ gfc_match_change_team (void)
   match m;
   gfc_expr *team;
 
-  if (!gfc_notify_std (GFC_STD_F2008_TS, "CHANGE TEAM statement at %C"))
+  if (!gfc_notify_std (GFC_STD_F2018, "CHANGE TEAM statement at %C"))
     return MATCH_ERROR;
 
   if (gfc_match_char ('(') == MATCH_NO)
@@ -3437,7 +3444,7 @@ syntax:
 match
 gfc_match_end_team (void)
 {
-  if (!gfc_notify_std (GFC_STD_F2008_TS, "END TEAM statement at %C"))
+  if (!gfc_notify_std (GFC_STD_F2018, "END TEAM statement at %C"))
     return MATCH_ERROR;
 
   if (gfc_match_char ('(') == MATCH_YES)
@@ -3461,7 +3468,7 @@ gfc_match_sync_team (void)
   match m;
   gfc_expr *team;
 
-  if (!gfc_notify_std (GFC_STD_F2008_TS, "SYNC TEAM statement at %C"))
+  if (!gfc_notify_std (GFC_STD_F2018, "SYNC TEAM statement at %C"))
     return MATCH_ERROR;
 
   if (gfc_match_char ('(') == MATCH_NO)
@@ -5259,6 +5266,10 @@ gfc_match_block_data (void)
   gfc_symbol *sym;
   match m;
 
+  if (!gfc_notify_std (GFC_STD_F2018_OBS, "BLOCK DATA construct at %L",
+      &gfc_current_locus))
+    return MATCH_ERROR;
+
   if (gfc_match_eos () == MATCH_YES)
     {
       gfc_new_block = NULL;
@@ -5574,6 +5585,9 @@ gfc_match_equivalence (void)
 	  goto cleanup;
 	}
     }
+
+  if (!gfc_notify_std (GFC_STD_F2018_OBS, "EQUIVALENCE statement at %C"))
+    return MATCH_ERROR;
 
   return MATCH_YES;
 
@@ -5935,6 +5949,7 @@ copy_ts_from_selector_to_associate (gfc_expr *associate, gfc_expr *selector)
 {
   gfc_ref *ref;
   gfc_symbol *assoc_sym;
+  int rank = 0;
 
   assoc_sym = associate->symtree->n.sym;
 
@@ -5971,14 +5986,28 @@ copy_ts_from_selector_to_associate (gfc_expr *associate, gfc_expr *selector)
 	selector->rank = ref->u.ar.dimen;
       else
 	selector->rank = 0;
+
+      rank = selector->rank;
     }
 
-  if (selector->rank)
+  if (rank)
     {
-      assoc_sym->attr.dimension = 1;
-      assoc_sym->as = gfc_get_array_spec ();
-      assoc_sym->as->rank = selector->rank;
-      assoc_sym->as->type = AS_DEFERRED;
+      for (int i = 0; i < ref->u.ar.dimen + ref->u.ar.codimen; i++)
+	if (ref->u.ar.dimen_type[i] == DIMEN_ELEMENT
+	    || (ref->u.ar.dimen_type[i] == DIMEN_UNKNOWN
+		&& ref->u.ar.end[i] == NULL
+		&& ref->u.ar.stride[i] == NULL))
+	  rank--;
+
+      if (rank)
+	{
+	  assoc_sym->attr.dimension = 1;
+	  assoc_sym->as = gfc_get_array_spec ();
+	  assoc_sym->as->rank = rank;
+	  assoc_sym->as->type = AS_DEFERRED;
+	}
+      else
+	assoc_sym->as = NULL;
     }
   else
     assoc_sym->as = NULL;

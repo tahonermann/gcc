@@ -222,7 +222,7 @@ build_function_decl_skip_args (tree orig_decl, bitmap args_to_skip,
     DECL_VINDEX (new_decl) = NULL_TREE;
 
   /* When signature changes, we need to clear builtin info.  */
-  if (DECL_BUILT_IN (new_decl)
+  if (fndecl_built_in_p (new_decl)
       && args_to_skip
       && !bitmap_empty_p (args_to_skip))
     {
@@ -274,10 +274,11 @@ duplicate_thunk_for_node (cgraph_node *thunk, cgraph_node *node)
   cgraph_edge *cs;
   for (cs = node->callers; cs; cs = cs->next_caller)
     if (cs->caller->thunk.thunk_p
-	&& cs->caller->thunk.this_adjusting == thunk->thunk.this_adjusting
 	&& cs->caller->thunk.fixed_offset == thunk->thunk.fixed_offset
-	&& cs->caller->thunk.virtual_offset_p == thunk->thunk.virtual_offset_p
-	&& cs->caller->thunk.virtual_value == thunk->thunk.virtual_value)
+	&& cs->caller->thunk.virtual_value == thunk->thunk.virtual_value
+	&& cs->caller->thunk.indirect_offset == thunk->thunk.indirect_offset
+	&& cs->caller->thunk.this_adjusting == thunk->thunk.this_adjusting
+	&& cs->caller->thunk.virtual_offset_p == thunk->thunk.virtual_offset_p)
       return cs->caller;
 
   tree new_decl;
@@ -482,8 +483,7 @@ cgraph_node::create_clone (tree new_decl, profile_count prof_count,
 	 version.  The only exception is when the edge was proved to
 	 be unreachable during the clonning procedure.  */
       if (!e->callee
-	  || DECL_BUILT_IN_CLASS (e->callee->decl) != BUILT_IN_NORMAL
-	  || DECL_FUNCTION_CODE (e->callee->decl) != BUILT_IN_UNREACHABLE)
+	  || !fndecl_built_in_p (e->callee->decl, BUILT_IN_UNREACHABLE))
         e->redirect_callee_duplicating_thunks (new_node);
     }
   new_node->expand_all_artificial_thunks ();
@@ -967,6 +967,8 @@ cgraph_node::create_version_clone_with_body
   DECL_NAME (new_decl) = clone_function_name (old_decl, suffix);
   SET_DECL_ASSEMBLER_NAME (new_decl, DECL_NAME (new_decl));
   SET_DECL_RTL (new_decl, NULL);
+
+  DECL_VIRTUAL_P (new_decl) = 0;
 
   /* When the old decl was a con-/destructor make sure the clone isn't.  */
   DECL_STATIC_CONSTRUCTOR (new_decl) = 0;

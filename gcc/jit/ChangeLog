@@ -1,3 +1,34 @@
+2018-10-17  David Malcolm  <dmalcolm@redhat.com>
+
+	* Make-lang.in (selftest-jit): New.
+
+2018-06-28  Martin Liska  <mliska@suse.cz>
+
+	* jit-playback.c: Include opt-suggestions.h.
+
+2018-06-28  Martin Liska  <mliska@suse.cz>
+
+	* jit-playback.c (class auto_argvec): Moved to vec.h.
+	(auto_argvec::~auto_argvec): Likewise.
+	(compile): Use the renamed name.
+	(invoke_driver): Likewise.
+
+2018-03-21  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	PR jit/84288
+	* Make-lang.in ($(LIBGCCJIT_FILENAME)): Add $(EXTRA_GCC_LIBS).
+
+2018-03-09  David Malcolm  <dmalcolm@redhat.com>
+	    Francois-Xavier Coudert  <fxcoudert@gcc.gnu.org>
+
+	PR jit/64089
+	PR jit/84288
+	* Make-lang.in (COMMA): New.
+	(LIBGCCJIT_VERSION_SCRIPT_OPTION): New.
+	(LIBGCCJIT_SONAME_OPTION): New.
+	(jit): Move --version-script and -soname linker options to the
+	above.
+
 2018-01-25  David Malcolm  <dmalcolm@redhat.com>
 
 	PR jit/81672
@@ -2131,7 +2162,7 @@
 
 2014-12-09  David Malcolm  <dmalcolm@redhat.com>
 
-        PR jit/64206
+	PR jit/64206
 	* Make-lang.in (jit_OBJS): Add jit/jit-tempdir.o.
 	* jit-common.h (gcc::jit::tempdir): New forward decl.
 	* jit-playback.c: Include jit-tempdir.h.

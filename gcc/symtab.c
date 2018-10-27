@@ -39,7 +39,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "attribs.h"
 #include "builtins.h"
 
-static const char *ipa_ref_use_name[] = {"read","write","addr","alias","chkp"};
+static const char *ipa_ref_use_name[] = {"read","write","addr","alias"};
 
 const char * const ld_plugin_symbol_resolution_names[]=
 {
@@ -947,6 +947,12 @@ symbol_table::dump (FILE *f)
     node->dump (f);
 }
 
+DEBUG_FUNCTION void
+symbol_table::debug (void)
+{
+  dump (stderr);
+}
+
 /* Return the cgraph node that has ASMNAME for its DECL_ASSEMBLER_NAME.
    Return NULL if there's no such node.  */
 
@@ -990,6 +996,13 @@ symtab_node::verify_base (void)
       if (TREE_CODE (decl) != FUNCTION_DECL)
 	{
           error ("function symbol is not function");
+          error_found = true;
+	}
+      else if ((lookup_attribute ("ifunc", DECL_ATTRIBUTES (decl))
+		!= NULL)
+	       != dyn_cast <cgraph_node *> (this)->ifunc_resolver)
+	{
+          error ("inconsistent `ifunc' attribute");
           error_found = true;
 	}
     }
@@ -1946,11 +1959,11 @@ symtab_node::nonzero_address ()
       return true;
     }
 
-  /* If target is defined and not extern, we know it will be output and thus
-     it will bind to non-NULL.
-     Play safe for flag_delete_null_pointer_checks where weak definition maye
+  /* If target is defined and either comdat or not extern, we know it will be
+     output and thus it will bind to non-NULL.
+     Play safe for flag_delete_null_pointer_checks where weak definition may
      be re-defined by NULL.  */
-  if (definition && !DECL_EXTERNAL (decl)
+  if (definition && (!DECL_EXTERNAL (decl) || DECL_COMDAT (decl))
       && (flag_delete_null_pointer_checks || !DECL_WEAK (decl)))
     {
       if (!DECL_WEAK (decl))
@@ -2192,7 +2205,7 @@ increase_alignment_1 (symtab_node *n, void *v)
 void
 symtab_node::increase_alignment (unsigned int align)
 {
-  gcc_assert (can_increase_alignment_p () && align < MAX_OFILE_ALIGNMENT);
+  gcc_assert (can_increase_alignment_p () && align <= MAX_OFILE_ALIGNMENT);
   ultimate_alias_target()->call_for_symbol_and_aliases (increase_alignment_1,
 						        (void *)(size_t) align,
 						        true);
@@ -2247,13 +2260,13 @@ symtab_node::binds_to_current_def_p (symtab_node *ref)
   if (transparent_alias)
     return definition
 	   && get_alias_target()->binds_to_current_def_p (ref);
-  if (lookup_attribute ("ifunc", DECL_ATTRIBUTES (decl)))
+  cgraph_node *cnode = dyn_cast <cgraph_node *> (this);
+  if (cnode && cnode->ifunc_resolver)
     return false;
   if (decl_binds_to_current_def_p (decl))
     return true;
 
   /* Inline clones always binds locally.  */
-  cgraph_node *cnode = dyn_cast <cgraph_node *> (this);
   if (cnode && cnode->global.inlined_to)
     return true;
 
@@ -2310,7 +2323,7 @@ symtab_node::output_to_lto_symbol_table_p (void)
     return false;
   /* FIXME: Builtins corresponding to real functions probably should have
      symbol table entries.  */
-  if (is_builtin_fn (decl))
+  if (TREE_CODE (decl) == FUNCTION_DECL && fndecl_built_in_p (decl))
     return false;
 
   /* We have real symbol that should be in symbol table.  However try to trim

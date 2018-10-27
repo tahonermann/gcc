@@ -1627,9 +1627,24 @@ is_macro(cpp_reader *pfile, const uchar *base)
   cpp_hashnode *result = CPP_HASHNODE (ht_lookup_with_hash (pfile->hash_table,
 					base, cur - base, hash, HT_NO_INSERT));
 
-  return !result ? false : (result->type == NT_MACRO);
+  return result && cpp_macro_p (result);
 }
 
+/* Returns true if a literal suffix does not have the expected form
+   and is defined as a macro.  */
+
+static bool
+is_macro_not_literal_suffix(cpp_reader *pfile, const uchar *base)
+{
+  /* User-defined literals outside of namespace std must start with a single
+     underscore, so assume anything of that form really is a UDL suffix.
+     We don't need to worry about UDLs defined inside namespace std because
+     their names are reserved, so cannot be used as macro names in valid
+     programs.  */
+  if (base[0] == '_' && base[1] != '_')
+    return false;
+  return is_macro (pfile, base);
+}
 
 /* Lexes a raw string.  The stored string contains the spelling, including
    double quotes, delimiter string, '(' and ')', any leading
@@ -1900,10 +1915,8 @@ lex_raw_string (cpp_reader *pfile, cpp_token *token, const uchar *base,
     {
       /* If a string format macro, say from inttypes.h, is placed touching
 	 a string literal it could be parsed as a C++11 user-defined string
-	 literal thus breaking the program.
-	 Try to identify macros with is_macro. A warning is issued.
-	 The macro name should not start with '_' for this warning. */
-      if ((*cur != '_') && is_macro (pfile, cur))
+	 literal thus breaking the program.  */
+      if (is_macro_not_literal_suffix (pfile, cur))
 	{
 	  /* Raise a warning, but do not consume subsequent tokens.  */
 	  if (CPP_OPTION (pfile, warn_literal_suffix) && !pfile->state.skipping)
@@ -2031,10 +2044,8 @@ lex_string (cpp_reader *pfile, cpp_token *token, const uchar *base)
     {
       /* If a string format macro, say from inttypes.h, is placed touching
 	 a string literal it could be parsed as a C++11 user-defined string
-	 literal thus breaking the program.
-	 Try to identify macros with is_macro. A warning is issued.
-	 The macro name should not start with '_' for this warning. */
-      if ((*cur != '_') && is_macro (pfile, cur))
+	 literal thus breaking the program.  */
+      if (is_macro_not_literal_suffix (pfile, cur))
 	{
 	  /* Raise a warning, but do not consume subsequent tokens.  */
 	  if (CPP_OPTION (pfile, warn_literal_suffix) && !pfile->state.skipping)
@@ -2861,10 +2872,10 @@ _cpp_lex_direct (cpp_reader *pfile)
 		   && CPP_PEDANTIC (pfile)
 		   && ! buffer->warned_cplusplus_comments)
 	    {
-	      cpp_error (pfile, CPP_DL_PEDWARN,
-			 "C++ style comments are not allowed in ISO C90");
-	      cpp_error (pfile, CPP_DL_PEDWARN,
-			 "(this will be reported only once per input file)");
+	      if (cpp_error (pfile, CPP_DL_PEDWARN,
+			     "C++ style comments are not allowed in ISO C90"))
+		cpp_error (pfile, CPP_DL_NOTE,
+			   "(this will be reported only once per input file)");
 	      buffer->warned_cplusplus_comments = 1;
 	    }
 	  /* Or if specifically desired via -Wc90-c99-compat.  */
@@ -2872,10 +2883,10 @@ _cpp_lex_direct (cpp_reader *pfile)
 		   && ! CPP_OPTION (pfile, cplusplus)
 		   && ! buffer->warned_cplusplus_comments)
 	    {
-	      cpp_error (pfile, CPP_DL_WARNING,
-			 "C++ style comments are incompatible with C90");
-	      cpp_error (pfile, CPP_DL_WARNING,
-			 "(this will be reported only once per input file)");
+	      if (cpp_error (pfile, CPP_DL_WARNING,
+			     "C++ style comments are incompatible with C90"))
+		cpp_error (pfile, CPP_DL_NOTE,
+			   "(this will be reported only once per input file)");
 	      buffer->warned_cplusplus_comments = 1;
 	    }
 	  /* In C89/C94, C++ style comments are forbidden.  */
@@ -2895,11 +2906,12 @@ _cpp_lex_direct (cpp_reader *pfile)
 		}
 	      else if (! buffer->warned_cplusplus_comments)
 		{
-		  cpp_error (pfile, CPP_DL_ERROR,
-			     "C++ style comments are not allowed in ISO C90");
-		  cpp_error (pfile, CPP_DL_ERROR,
-			     "(this will be reported only once per input "
-			     "file)");
+		  if (cpp_error (pfile, CPP_DL_ERROR,
+				 "C++ style comments are not allowed in "
+				 "ISO C90"))
+		    cpp_error (pfile, CPP_DL_NOTE,
+			       "(this will be reported only once per input "
+			       "file)");
 		  buffer->warned_cplusplus_comments = 1;
 		}
 	    }
@@ -3711,6 +3723,25 @@ _cpp_aligned_alloc (cpp_reader *pfile, size_t len)
 
   buff->cur = result + len;
   return result;
+}
+
+/* Commit or allocate storage from a buffer.  */
+
+void *
+_cpp_commit_buff (cpp_reader *pfile, size_t size)
+{
+  void *ptr = BUFF_FRONT (pfile->a_buff);
+
+  if (pfile->hash_table->alloc_subobject)
+    {
+      void *copy = pfile->hash_table->alloc_subobject (size);
+      memcpy (copy, ptr, size);
+      ptr = copy;
+    }
+  else
+    BUFF_FRONT (pfile->a_buff) += size;
+
+  return ptr;
 }
 
 /* Say which field of TOK is in use.  */

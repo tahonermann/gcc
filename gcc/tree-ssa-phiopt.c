@@ -45,8 +45,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-scalar-evolution.h"
 #include "tree-inline.h"
 #include "params.h"
+#include "case-cfn-macros.h"
 
-static unsigned int tree_ssa_phiopt_worker (bool, bool);
+static unsigned int tree_ssa_phiopt_worker (bool, bool, bool);
 static bool conditional_replacement (basic_block, basic_block,
 				     edge, edge, gphi *, tree, tree);
 static gphi *factor_out_conditional_conversion (edge, edge, gphi *, tree, tree,
@@ -57,6 +58,8 @@ static bool minmax_replacement (basic_block, basic_block,
 				edge, edge, gimple *, tree, tree);
 static bool abs_replacement (basic_block, basic_block,
 			     edge, edge, gimple *, tree, tree);
+static bool cond_removal_in_popcount_pattern (basic_block, basic_block,
+					      edge, edge, gimple *, tree, tree);
 static bool cond_store_replacement (basic_block, basic_block, edge, edge,
 				    hash_set<tree> *);
 static bool cond_if_else_store_replacement (basic_block, basic_block, basic_block);
@@ -116,7 +119,7 @@ tree_ssa_cs_elim (void)
      An interfacing issue of find_data_references_in_bb.  */
   loop_optimizer_init (LOOPS_NORMAL);
   scev_initialize ();
-  todo = tree_ssa_phiopt_worker (true, false);
+  todo = tree_ssa_phiopt_worker (true, false, false);
   scev_finalize ();
   loop_optimizer_finalize ();
   return todo;
@@ -156,7 +159,7 @@ single_non_singleton_phi_for_edges (gimple_seq seq, edge e0, edge e1)
    DO_HOIST_LOADS is true when we want to hoist adjacent loads out
    of diamond control flow patterns, false otherwise.  */
 static unsigned int
-tree_ssa_phiopt_worker (bool do_store_elim, bool do_hoist_loads)
+tree_ssa_phiopt_worker (bool do_store_elim, bool do_hoist_loads, bool early_p)
 {
   basic_block bb;
   basic_block *bb_order;
@@ -286,18 +289,19 @@ tree_ssa_phiopt_worker (bool do_store_elim, bool do_hoist_loads)
 
 	  /* Value replacement can work with more than one PHI
 	     so try that first. */
-	  for (gsi = gsi_start (phis); !gsi_end_p (gsi); gsi_next (&gsi))
-	    {
-	      phi = as_a <gphi *> (gsi_stmt (gsi));
-	      arg0 = gimple_phi_arg_def (phi, e1->dest_idx);
-	      arg1 = gimple_phi_arg_def (phi, e2->dest_idx);
-	      if (value_replacement (bb, bb1, e1, e2, phi, arg0, arg1) == 2)
-		{
-		  candorest = false;
-	          cfgchanged = true;
-		  break;
-		}
-	    }
+	  if (!early_p)
+	    for (gsi = gsi_start (phis); !gsi_end_p (gsi); gsi_next (&gsi))
+	      {
+		phi = as_a <gphi *> (gsi_stmt (gsi));
+		arg0 = gimple_phi_arg_def (phi, e1->dest_idx);
+		arg1 = gimple_phi_arg_def (phi, e2->dest_idx);
+		if (value_replacement (bb, bb1, e1, e2, phi, arg0, arg1) == 2)
+		  {
+		    candorest = false;
+		    cfgchanged = true;
+		    break;
+		  }
+	      }
 
 	  if (!candorest)
 	    continue;
@@ -328,9 +332,14 @@ tree_ssa_phiopt_worker (bool do_store_elim, bool do_hoist_loads)
 	    }
 
 	  /* Do the replacement of conditional if it can be done.  */
-	  if (conditional_replacement (bb, bb1, e1, e2, phi, arg0, arg1))
+	  if (!early_p
+	      && conditional_replacement (bb, bb1, e1, e2, phi, arg0, arg1))
 	    cfgchanged = true;
 	  else if (abs_replacement (bb, bb1, e1, e2, phi, arg0, arg1))
+	    cfgchanged = true;
+	  else if (!early_p
+		   && cond_removal_in_popcount_pattern (bb, bb1, e1, e2,
+							phi, arg0, arg1))
 	    cfgchanged = true;
 	  else if (minmax_replacement (bb, bb1, e1, e2, phi, arg0, arg1))
 	    cfgchanged = true;
@@ -907,7 +916,9 @@ value_replacement (basic_block cond_bb, basic_block middle_bb,
       gsi_next_nondebug (&gsi);
       if (!is_gimple_assign (stmt))
 	{
-	  emtpy_or_with_defined_p = false;
+	  if (gimple_code (stmt) != GIMPLE_PREDICT
+	      && gimple_code (stmt) != GIMPLE_NOP)
+	    emtpy_or_with_defined_p = false;
 	  continue;
 	}
       /* Now try to adjust arg0 or arg1 according to the computation
@@ -1224,7 +1235,7 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
 	{
 	  if (cmp == LT_EXPR)
 	    {
-	      bool overflow;
+	      wi::overflow_type overflow;
 	      wide_int alt = wi::sub (wi::to_wide (larger), 1,
 				      TYPE_SIGN (TREE_TYPE (larger)),
 				      &overflow);
@@ -1233,7 +1244,7 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
 	    }
 	  else
 	    {
-	      bool overflow;
+	      wi::overflow_type overflow;
 	      wide_int alt = wi::add (wi::to_wide (larger), 1,
 				      TYPE_SIGN (TREE_TYPE (larger)),
 				      &overflow);
@@ -1250,9 +1261,9 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
 	 Likewise larger >= CST is equivalent to larger > CST-1.  */
       if (TREE_CODE (smaller) == INTEGER_CST)
 	{
+	  wi::overflow_type overflow;
 	  if (cmp == GT_EXPR)
 	    {
-	      bool overflow;
 	      wide_int alt = wi::add (wi::to_wide (smaller), 1,
 				      TYPE_SIGN (TREE_TYPE (smaller)),
 				      &overflow);
@@ -1261,7 +1272,6 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
 	    }
 	  else
 	    {
-	      bool overflow;
 	      wide_int alt = wi::sub (wi::to_wide (smaller), 1,
 				      TYPE_SIGN (TREE_TYPE (smaller)),
 				      &overflow);
@@ -1514,6 +1524,140 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
 
   replace_phi_edge_with_variable (cond_bb, e1, phi, result);
 
+  return true;
+}
+
+/* Convert
+
+   <bb 2>
+   if (b_4(D) != 0)
+   goto <bb 3>
+   else
+   goto <bb 4>
+
+   <bb 3>
+   _2 = (unsigned long) b_4(D);
+   _9 = __builtin_popcountl (_2);
+   OR
+   _9 = __builtin_popcountl (b_4(D));
+
+   <bb 4>
+   c_12 = PHI <0(2), _9(3)>
+
+   Into
+   <bb 2>
+   _2 = (unsigned long) b_4(D);
+   _9 = __builtin_popcountl (_2);
+   OR
+   _9 = __builtin_popcountl (b_4(D));
+
+   <bb 4>
+   c_12 = PHI <_9(2)>
+*/
+
+static bool
+cond_removal_in_popcount_pattern (basic_block cond_bb, basic_block middle_bb,
+				  edge e1, edge e2,
+				  gimple *phi, tree arg0, tree arg1)
+{
+  gimple *cond;
+  gimple_stmt_iterator gsi, gsi_from;
+  gimple *popcount;
+  gimple *cast = NULL;
+  tree lhs, arg;
+
+  /* Check that
+   _2 = (unsigned long) b_4(D);
+   _9 = __builtin_popcountl (_2);
+   OR
+   _9 = __builtin_popcountl (b_4(D));
+   are the only stmts in the middle_bb.  */
+
+  gsi = gsi_start_nondebug_after_labels_bb (middle_bb);
+  if (gsi_end_p (gsi))
+    return false;
+  cast = gsi_stmt (gsi);
+  gsi_next_nondebug (&gsi);
+  if (!gsi_end_p (gsi))
+    {
+      popcount = gsi_stmt (gsi);
+      gsi_next_nondebug (&gsi);
+      if (!gsi_end_p (gsi))
+	return false;
+    }
+  else
+    {
+      popcount = cast;
+      cast = NULL;
+    }
+
+  /* Check that we have a popcount builtin.  */
+  if (!is_gimple_call (popcount))
+    return false;
+  combined_fn cfn = gimple_call_combined_fn (popcount);
+  switch (cfn)
+    {
+    CASE_CFN_POPCOUNT:
+      break;
+    default:
+      return false;
+    }
+
+  arg = gimple_call_arg (popcount, 0);
+  lhs = gimple_get_lhs (popcount);
+
+  if (cast)
+    {
+      /* We have a cast stmt feeding popcount builtin.  */
+      /* Check that we have a cast prior to that.  */
+      if (gimple_code (cast) != GIMPLE_ASSIGN
+	  || !CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (cast)))
+	return false;
+      /* Result of the cast stmt is the argument to the builtin.  */
+      if (arg != gimple_assign_lhs (cast))
+	return false;
+      arg = gimple_assign_rhs1 (cast);
+    }
+
+  cond = last_stmt (cond_bb);
+
+  /* Cond_bb has a check for b_4 [!=|==] 0 before calling the popcount
+     builtin.  */
+  if (gimple_code (cond) != GIMPLE_COND
+      || (gimple_cond_code (cond) != NE_EXPR
+	  && gimple_cond_code (cond) != EQ_EXPR)
+      || !integer_zerop (gimple_cond_rhs (cond))
+      || arg != gimple_cond_lhs (cond))
+    return false;
+
+  /* Canonicalize.  */
+  if ((e2->flags & EDGE_TRUE_VALUE
+       && gimple_cond_code (cond) == NE_EXPR)
+      || (e1->flags & EDGE_TRUE_VALUE
+	  && gimple_cond_code (cond) == EQ_EXPR))
+    {
+      std::swap (arg0, arg1);
+      std::swap (e1, e2);
+    }
+
+  /* Check PHI arguments.  */
+  if (lhs != arg0 || !integer_zerop (arg1))
+    return false;
+
+  /* And insert the popcount builtin and cast stmt before the cond_bb.  */
+  gsi = gsi_last_bb (cond_bb);
+  if (cast)
+    {
+      gsi_from = gsi_for_stmt (cast);
+      gsi_move_before (&gsi_from, &gsi);
+      reset_flow_sensitive_info (gimple_get_lhs (cast));
+    }
+  gsi_from = gsi_for_stmt (popcount);
+  gsi_move_before (&gsi_from, &gsi);
+  reset_flow_sensitive_info (gimple_get_lhs (popcount));
+
+  /* Now update the PHI and remove unneeded bbs.  */
+  replace_phi_edge_with_variable (cond_bb, e2, phi, lhs);
   return true;
 }
 
@@ -2035,6 +2179,36 @@ cond_if_else_store_replacement_1 (basic_block then_bb, basic_block else_bb,
   return true;
 }
 
+/* Return the single store in BB with VDEF or NULL if there are
+   other stores in the BB or loads following the store.  */
+
+static gimple *
+single_trailing_store_in_bb (basic_block bb, tree vdef)
+{
+  if (SSA_NAME_IS_DEFAULT_DEF (vdef))
+    return NULL;
+  gimple *store = SSA_NAME_DEF_STMT (vdef);
+  if (gimple_bb (store) != bb
+      || gimple_code (store) == GIMPLE_PHI)
+    return NULL;
+
+  /* Verify there is no other store in this BB.  */
+  if (!SSA_NAME_IS_DEFAULT_DEF (gimple_vuse (store))
+      && gimple_bb (SSA_NAME_DEF_STMT (gimple_vuse (store))) == bb
+      && gimple_code (SSA_NAME_DEF_STMT (gimple_vuse (store))) != GIMPLE_PHI)
+    return NULL;
+
+  /* Verify there is no load or store after the store.  */
+  use_operand_p use_p;
+  imm_use_iterator imm_iter;
+  FOR_EACH_IMM_USE_FAST (use_p, imm_iter, gimple_vdef (store))
+    if (USE_STMT (use_p) != store
+	&& gimple_bb (USE_STMT (use_p)) == bb)
+      return NULL;
+
+  return store;
+}
+
 /* Conditional store replacement.  We already know
    that the recognized pattern looks like so:
 
@@ -2061,8 +2235,6 @@ static bool
 cond_if_else_store_replacement (basic_block then_bb, basic_block else_bb,
                                 basic_block join_bb)
 {
-  gimple *then_assign = last_and_only_stmt (then_bb);
-  gimple *else_assign = last_and_only_stmt (else_bb);
   vec<data_reference_p> then_datarefs, else_datarefs;
   vec<ddr_p> then_ddrs, else_ddrs;
   gimple *then_store, *else_store;
@@ -2073,13 +2245,32 @@ cond_if_else_store_replacement (basic_block then_bb, basic_block else_bb,
   tree then_lhs, else_lhs;
   basic_block blocks[3];
 
+  /* Handle the case with single store in THEN_BB and ELSE_BB.  That is
+     cheap enough to always handle as it allows us to elide dependence
+     checking.  */
+  gphi *vphi = NULL;
+  for (gphi_iterator si = gsi_start_phis (join_bb); !gsi_end_p (si);
+       gsi_next (&si))
+    if (virtual_operand_p (gimple_phi_result (si.phi ())))
+      {
+	vphi = si.phi ();
+	break;
+      }
+  if (!vphi)
+    return false;
+  tree then_vdef = PHI_ARG_DEF_FROM_EDGE (vphi, single_succ_edge (then_bb));
+  tree else_vdef = PHI_ARG_DEF_FROM_EDGE (vphi, single_succ_edge (else_bb));
+  gimple *then_assign = single_trailing_store_in_bb (then_bb, then_vdef);
+  if (then_assign)
+    {
+      gimple *else_assign = single_trailing_store_in_bb (else_bb, else_vdef);
+      if (else_assign)
+	return cond_if_else_store_replacement_1 (then_bb, else_bb, join_bb,
+						 then_assign, else_assign);
+    }
+
   if (MAX_STORES_TO_SINK == 0)
     return false;
-
-  /* Handle the case with single statement in THEN_BB and ELSE_BB.  */
-  if (then_assign && else_assign)
-    return cond_if_else_store_replacement_1 (then_bb, else_bb, join_bb,
-                                             then_assign, else_assign);
 
   /* Find data references.  */
   then_datarefs.create (1);
@@ -2608,17 +2799,26 @@ class pass_phiopt : public gimple_opt_pass
 {
 public:
   pass_phiopt (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_phiopt, ctxt)
+    : gimple_opt_pass (pass_data_phiopt, ctxt), early_p (false)
   {}
 
   /* opt_pass methods: */
   opt_pass * clone () { return new pass_phiopt (m_ctxt); }
+  void set_pass_param (unsigned n, bool param)
+    {
+      gcc_assert (n == 0);
+      early_p = param;
+    }
   virtual bool gate (function *) { return flag_ssa_phiopt; }
   virtual unsigned int execute (function *)
     {
-      return tree_ssa_phiopt_worker (false, gate_hoist_loads ());
+      return tree_ssa_phiopt_worker (false,
+				     !early_p ? gate_hoist_loads () : false,
+				     early_p);
     }
 
+private:
+  bool early_p;
 }; // class pass_phiopt
 
 } // anon namespace

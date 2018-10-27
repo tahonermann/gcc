@@ -37,8 +37,7 @@
    || gpc_reg_operand (operands[1], SDmode))
    && TARGET_HARD_FLOAT"
   "stfd%U0%X0 %1,%0"
-  [(set_attr "type" "fpstore")
-   (set_attr "length" "4")])
+  [(set_attr "type" "fpstore")])
 
 (define_insn "movsd_load"
   [(set (match_operand:SD 0 "nonimmediate_operand" "=f")
@@ -48,8 +47,7 @@
    || gpc_reg_operand (operands[1], DDmode))
    && TARGET_HARD_FLOAT"
   "lfd%U1%X1 %0,%1"
-  [(set_attr "type" "fpload")
-   (set_attr "length" "4")])
+  [(set_attr "type" "fpload")])
 
 ;; Hardware support for decimal floating point operations.
 
@@ -344,11 +342,11 @@
   [(set (match_dup 3)
 	(compare:CCFP
          (unspec:D64_D128
-	  [(match_operand:SI 1 "const_int_operand" "n")
-	   (match_operand:D64_D128 2 "gpc_reg_operand" "d")]
+	  [(match_operand:SI 1 "const_int_operand")
+	   (match_operand:D64_D128 2 "gpc_reg_operand")]
 	  UNSPEC_DTSTSFI)
 	 (match_dup 4)))
-   (set (match_operand:SI 0 "register_operand" "")
+   (set (match_operand:SI 0 "register_operand")
    	(DFP_TEST:SI (match_dup 3)
 		     (const_int 0)))
   ]

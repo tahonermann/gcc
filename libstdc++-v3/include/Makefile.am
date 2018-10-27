@@ -30,6 +30,7 @@ std_headers = \
 	${std_srcdir}/any \
 	${std_srcdir}/array \
 	${std_srcdir}/atomic \
+	${std_srcdir}/bit \
 	${std_srcdir}/bitset \
 	${std_srcdir}/charconv \
 	${std_srcdir}/chrono \
@@ -53,6 +54,7 @@ std_headers = \
 	${std_srcdir}/locale \
 	${std_srcdir}/map \
 	${std_srcdir}/memory \
+	${std_srcdir}/memory_resource \
 	${std_srcdir}/mutex \
 	${std_srcdir}/numeric \
 	${std_srcdir}/optional \
@@ -80,7 +82,8 @@ std_headers = \
 	${std_srcdir}/utility \
 	${std_srcdir}/valarray \
 	${std_srcdir}/variant \
-	${std_srcdir}/vector
+	${std_srcdir}/vector \
+	${std_srcdir}/version
 
 bits_srcdir = ${glibcxx_srcdir}/include/bits
 bits_builddir = ./bits
@@ -196,6 +199,7 @@ bits_headers = \
 	${bits_srcdir}/stringfwd.h \
 	${bits_srcdir}/string_view.tcc \
 	${bits_srcdir}/uniform_int_dist.h \
+	${bits_srcdir}/unique_lock.h \
 	${bits_srcdir}/unique_ptr.h \
 	${bits_srcdir}/unordered_map.h \
 	${bits_srcdir}/unordered_set.h \
@@ -667,15 +671,21 @@ experimental_headers = \
 	${experimental_srcdir}/algorithm \
 	${experimental_srcdir}/any \
 	${experimental_srcdir}/array \
+	${experimental_srcdir}/buffer \
 	${experimental_srcdir}/chrono \
 	${experimental_srcdir}/deque \
+	${experimental_srcdir}/executor \
 	${experimental_srcdir}/forward_list \
 	${experimental_srcdir}/functional \
+	${experimental_srcdir}/internet \
+	${experimental_srcdir}/io_context \
 	${experimental_srcdir}/iterator \
 	${experimental_srcdir}/list \
 	${experimental_srcdir}/map \
 	${experimental_srcdir}/memory \
 	${experimental_srcdir}/memory_resource \
+	${experimental_srcdir}/net \
+	${experimental_srcdir}/netfwd \
 	${experimental_srcdir}/numeric \
 	${experimental_srcdir}/optional \
 	${experimental_srcdir}/propagate_const \
@@ -683,10 +693,12 @@ experimental_headers = \
 	${experimental_srcdir}/ratio \
 	${experimental_srcdir}/regex \
 	${experimental_srcdir}/set \
+	${experimental_srcdir}/socket \
 	${experimental_srcdir}/source_location \
 	${experimental_srcdir}/string \
 	${experimental_srcdir}/string_view \
 	${experimental_srcdir}/system_error \
+	${experimental_srcdir}/timer \
 	${experimental_srcdir}/tuple \
 	${experimental_srcdir}/type_traits \
 	${experimental_srcdir}/unordered_map \
@@ -700,6 +712,7 @@ experimental_bits_builddir = ./experimental/bits
 experimental_bits_headers = \
 	${experimental_bits_srcdir}/erase_if.h \
 	${experimental_bits_srcdir}/lfts_config.h \
+	${experimental_bits_srcdir}/net.h \
 	${experimental_bits_srcdir}/shared_ptr.h \
 	${experimental_bits_srcdir}/string_view.tcc \
 	${experimental_bits_filesystem_headers}
@@ -1230,6 +1243,14 @@ stamp-allocator-new:
 	echo 0 > stamp-allocator-new
 endif
 
+if ENABLE_FLOAT128
+stamp-float128:
+	echo 'define _GLIBCXX_USE_FLOAT128 1' > stamp-float128
+else
+stamp-float128:
+	echo 'undef _GLIBCXX_USE_FLOAT128' > stamp-float128
+endif
+
 # NB: The non-empty default ldbl_compat works around an AIX sed
 # oddity, see libstdc++/31957 for details.
 ${host_builddir}/c++config.h: ${CONFIG_HEADER} \
@@ -1241,7 +1262,8 @@ ${host_builddir}/c++config.h: ${CONFIG_HEADER} \
 			      stamp-extern-template \
 			      stamp-dual-abi \
 			      stamp-cxx11-abi \
-			      stamp-allocator-new
+			      stamp-allocator-new \
+			      stamp-float128
 	@date=`cat ${toplevel_srcdir}/gcc/DATESTAMP` ;\
 	release=`sed 's/^\([0-9]*\).*$$/\1/' ${toplevel_srcdir}/gcc/BASE-VER` ;\
 	ns_version=`cat stamp-namespace-version` ;\
@@ -1250,6 +1272,7 @@ ${host_builddir}/c++config.h: ${CONFIG_HEADER} \
 	dualabi=`cat stamp-dual-abi` ;\
 	cxx11abi=`cat stamp-cxx11-abi` ;\
 	allocatornew=`cat stamp-allocator-new` ;\
+	float128=`cat stamp-float128` ;\
 	ldbl_compat='s,g,g,' ;\
 	grep "^[	 ]*#[	 ]*define[	 ][	 ]*_GLIBCXX_LONG_DOUBLE_COMPAT[	 ][	 ]*1[	 ]*$$" \
 	${CONFIG_HEADER} > /dev/null 2>&1 \
@@ -1262,6 +1285,7 @@ ${host_builddir}/c++config.h: ${CONFIG_HEADER} \
 	-e "s,define _GLIBCXX_USE_DUAL_ABI, define _GLIBCXX_USE_DUAL_ABI $$dualabi," \
 	-e "s,define _GLIBCXX_USE_CXX11_ABI, define _GLIBCXX_USE_CXX11_ABI $$cxx11abi," \
 	-e "s,define _GLIBCXX_USE_ALLOCATOR_NEW, define _GLIBCXX_USE_ALLOCATOR_NEW $$allocatornew," \
+	-e "s,define _GLIBCXX_USE_FLOAT128,$$float128," \
 	-e "$$ldbl_compat" \
 	    < ${glibcxx_srcdir}/include/bits/c++config > $@ ;\
 	sed -e 's/HAVE_/_GLIBCXX_HAVE_/g' \
@@ -1344,10 +1368,10 @@ install-data-local: install-freestanding-headers
 endif
 
 # This is a subset of the full install-headers rule.  We only need <ciso646>,
-# <cstddef>, <cfloat>, <limits>, <climits>, <cstdint>, <cstdlib>, <new>,
-# <typeinfo>, <exception>, <initializer_list>, <cstdalign>, <cstdarg>,
-# <cstdbool>, <type_traits>, <atomic>, and any files which they include (and
-# which we provide).
+# <cstddef>, <cfloat>, <limits>, <climits>, <version>, <cstdint>, <cstdlib>,
+# <new>, <typeinfo>, <exception>, <initializer_list>, <cstdalign>, <cstdarg>,
+# <cstdbool>, <type_traits>, <bit>, <atomic>, and any files which they include
+# (and which we provide).
 # <new>, <typeinfo>, <exception>, and <initializer_list> are installed by
 # libsupc++, so only the others and the sub-includes are copied here.
 install-freestanding-headers:
@@ -1360,7 +1384,7 @@ install-freestanding-headers:
 	  ${glibcxx_srcdir}/$(CPU_DEFINES_SRCDIR)/cpu_defines.h; do \
 	  $(INSTALL_DATA) $${file} $(DESTDIR)${host_installdir}; done
 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${std_builddir}
-	for file in limits type_traits atomic; do \
+	for file in limits type_traits atomic bit version; do \
 	  $(INSTALL_DATA) ${std_builddir}/$${file} $(DESTDIR)${gxx_include_dir}/${std_builddir}; done
 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${c_base_builddir}
 	for file in ciso646 cstddef cfloat climits cstdint cstdlib \

@@ -153,10 +153,31 @@
        (match_test "!(aarch64_is_noplt_call_p (op)
 		      || aarch64_is_long_call_p (op))")))
 
+(define_constraint "Usg"
+  "@internal
+  A constraint that matches an immediate right shift constant in SImode
+  suitable for a SISD instruction."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 1, 31)")))
+
+(define_constraint "Usj"
+  "@internal
+  A constraint that matches an immediate right shift constant in DImode
+  suitable for a SISD instruction."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 1, 63)")))
+
 (define_constraint "UsM"
   "@internal
   A constraint that matches the immediate constant -1."
   (match_test "op == constm1_rtx"))
+
+(define_constraint "Ulc"
+ "@internal
+ A constraint that matches a constant integer whose bits are consecutive ones
+ from the MSB."
+ (and (match_code "const_int")
+      (match_test "aarch64_high_bits_all_ones_p (ival)")))
 
 (define_constraint "Usv"
   "@internal
@@ -204,13 +225,10 @@
  (and (match_code "mem")
       (match_test "REG_P (XEXP (op, 0))")))
 
-(define_memory_constraint "Umq"
+(define_memory_constraint "Ust"
   "@internal
-   A memory address which uses a base register with an offset small enough for
-   a load/store pair operation in DI mode."
-   (and (match_code "mem")
-	(match_test "aarch64_legitimate_address_p (DImode, XEXP (op, 0), false,
-						   ADDR_QUERY_LDP_STP)")))
+  A memory address with 9bit unscaled offset."
+  (match_operand 0 "aarch64_9bit_offset_memory_operand"))
 
 (define_memory_constraint "Ump"
   "@internal
@@ -219,14 +237,16 @@
        (match_test "aarch64_legitimate_address_p (GET_MODE (op), XEXP (op, 0),
 						  true, ADDR_QUERY_LDP_STP)")))
 
-;; Used for storing two 64-bit values in an AdvSIMD register using an STP
-;; as a 128-bit vec_concat.
-(define_memory_constraint "Uml"
+;; Used for storing or loading pairs in an AdvSIMD register using an STP/LDP
+;; as a vector-concat.  The address mode uses the same constraints as if it
+;; were for a single value.
+(define_memory_constraint "Umn"
   "@internal
   A memory address suitable for a load/store pair operation."
   (and (match_code "mem")
-       (match_test "aarch64_legitimate_address_p (DFmode, XEXP (op, 0), 1,
-						  ADDR_QUERY_LDP_STP)")))
+       (match_test "aarch64_legitimate_address_p (GET_MODE (op), XEXP (op, 0),
+						  true,
+						  ADDR_QUERY_LDP_STP_N)")))
 
 (define_memory_constraint "Utr"
   "@internal

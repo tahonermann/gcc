@@ -1425,8 +1425,7 @@ Optional Features:
   --enable-multilib       build many library versions (default)
   --disable-dependency-tracking  speeds up one-time build
   --enable-dependency-tracking   do not reject slow dependency extractors
-  --enable-cet            enable Intel CET in target libraries
-                          [default=default]
+  --enable-cet            enable Intel CET in target libraries [default=no]
   --disable-symvers       disable symbol versioning for libgfortran
   --enable-shared[=PKGS]  build shared libraries [default=yes]
   --enable-static[=PKGS]  build static libraries [default=yes]
@@ -2548,11 +2547,13 @@ $as_echo "$as_me: creating cache $cache_file" >&6;}
 fi
 
 as_fn_append ac_header_list " unistd.h"
+as_fn_append ac_header_list " sys/random.h"
 as_fn_append ac_header_list " sys/time.h"
 as_fn_append ac_header_list " sys/times.h"
 as_fn_append ac_header_list " sys/resource.h"
 as_fn_append ac_header_list " sys/types.h"
 as_fn_append ac_header_list " sys/stat.h"
+as_fn_append ac_header_list " sys/uio.h"
 as_fn_append ac_header_list " sys/wait.h"
 as_fn_append ac_header_list " floatingpoint.h"
 as_fn_append ac_header_list " ieeefp.h"
@@ -2571,6 +2572,7 @@ as_fn_append ac_func_list " snprintf"
 as_fn_append ac_func_list " ftruncate"
 as_fn_append ac_func_list " chsize"
 as_fn_append ac_func_list " chdir"
+as_fn_append ac_func_list " getentropy"
 as_fn_append ac_func_list " getlogin"
 as_fn_append ac_func_list " gethostname"
 as_fn_append ac_func_list " kill"
@@ -2583,6 +2585,7 @@ as_fn_append ac_func_list " access"
 as_fn_append ac_func_list " fork"
 as_fn_append ac_func_list " setmode"
 as_fn_append ac_func_list " fcntl"
+as_fn_append ac_func_list " writev"
 as_fn_append ac_func_list " gettimeofday"
 as_fn_append ac_func_list " stat"
 as_fn_append ac_func_list " fstat"
@@ -5795,27 +5798,37 @@ fi
 if test "${enable_cet+set}" = set; then :
   enableval=$enable_cet;
       case "$enableval" in
-       yes|no|default) ;;
+       yes|no|auto) ;;
        *) as_fn_error "Unknown argument to enable/disable cet" "$LINENO" 5 ;;
                           esac
 
 else
-  enable_cet=default
+  enable_cet=no
 fi
 
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CET support" >&5
+$as_echo_n "checking for CET support... " >&6; }
 
 case "$host" in
   i[34567]86-*-linux* | x86_64-*-linux*)
     case "$enable_cet" in
-      default)
-	# Check if assembler supports CET.
+      auto)
+	# Check if target supports multi-byte NOPs
+	# and if assembler supports CET insn.
 	cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
 int
 main ()
 {
+
+#if !defined(__SSE2__)
+#error target does not support multi-byte NOPs
+#else
 asm ("setssbsy");
+#endif
+
   ;
   return 0;
 }
@@ -5854,7 +5867,12 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
     ;;
 esac
 if test x$enable_cet = xyes; then
-  CET_FLAGS="-fcf-protection -mcet"
+  CET_FLAGS="-fcf-protection -mshstk"
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
 fi
 
 AM_FCFLAGS="$AM_FCFLAGS $CET_FLAGS"
@@ -12498,7 +12516,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 12501 "configure"
+#line 12519 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -12604,7 +12622,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 12607 "configure"
+#line 12625 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -16169,6 +16187,10 @@ done
 
 
 
+
+
+
+
 inttype_headers=`echo inttypes.h sys/inttypes.h  | sed -e 's/,/ /g'`
 
 acx_cv_header_stdint=stddef.h
@@ -16664,6 +16686,10 @@ _ACEOF
 
 fi
 done
+
+
+
+
 
 
 
@@ -26555,7 +26581,7 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 # Check whether --with-gcc-major-version-only was given.
 if test "${with_gcc_major_version_only+set}" = set; then :
   withval=$with_gcc_major_version_only; if test x$with_gcc_major_version_only = xyes ; then
-        get_gcc_base_ver="sed -e 's/^\([0-9]*\).*\$\$/\1/'"
+        get_gcc_base_ver="sed -e 's/^\([0-9]*\).*/\1/'"
       fi
 
 fi

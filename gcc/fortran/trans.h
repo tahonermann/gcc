@@ -330,6 +330,7 @@ typedef struct gfc_ss
   struct gfc_loopinfo *loop;
 
   unsigned is_alloc_lhs:1;
+  unsigned no_bounds_check:1;
 }
 gfc_ss;
 #define gfc_get_ss() XCNEW (gfc_ss)
@@ -431,7 +432,7 @@ tree gfc_vptr_deallocate_get (tree);
 void gfc_reset_vptr (stmtblock_t *, gfc_expr *);
 void gfc_reset_len (stmtblock_t *, gfc_expr *);
 tree gfc_get_vptr_from_expr (tree);
-tree gfc_get_class_array_ref (tree, tree, tree);
+tree gfc_get_class_array_ref (tree, tree, tree, bool);
 tree gfc_copy_class_to_class (tree, tree, tree, bool);
 bool gfc_add_finalizer_call (stmtblock_t *, gfc_expr *);
 bool gfc_add_comp_finalizer_call (stmtblock_t *, tree, gfc_component *, bool);
@@ -484,7 +485,8 @@ tree gfc_build_compare_string (tree, tree, tree, tree, int, enum tree_code);
 void gfc_conv_expr (gfc_se * se, gfc_expr * expr);
 void gfc_conv_expr_val (gfc_se * se, gfc_expr * expr);
 void gfc_conv_expr_lhs (gfc_se * se, gfc_expr * expr);
-void gfc_conv_expr_reference (gfc_se * se, gfc_expr *);
+void gfc_conv_expr_reference (gfc_se * se, gfc_expr * expr,
+			      bool add_clobber = false);
 void gfc_conv_expr_type (gfc_se * se, gfc_expr *, tree);
 
 
@@ -903,6 +905,8 @@ extern GTY(()) tree gfor_fndecl_convert_char4_to_char1;
 extern GTY(()) tree gfor_fndecl_size0;
 extern GTY(()) tree gfor_fndecl_size1;
 extern GTY(()) tree gfor_fndecl_iargc;
+extern GTY(()) tree gfor_fndecl_kill;
+extern GTY(()) tree gfor_fndecl_kill_sub;
 
 /* Implemented in Fortran.  */
 extern GTY(()) tree gfor_fndecl_sc_kind;
@@ -913,6 +917,8 @@ extern GTY(()) tree gfor_fndecl_sr_kind;
 extern GTY(()) tree gfor_fndecl_ieee_procedure_entry;
 extern GTY(()) tree gfor_fndecl_ieee_procedure_exit;
 
+/* RANDOM_INIT.  */
+extern GTY(()) tree gfor_fndecl_random_init;
 
 /* True if node is an integer constant.  */
 #define INTEGER_CST_P(node) (TREE_CODE(node) == INTEGER_CST)

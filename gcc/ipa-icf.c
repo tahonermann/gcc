@@ -227,6 +227,8 @@ void sem_item::set_hash (hashval_t hash)
   m_hash_set = true;
 }
 
+hash_map<const_tree, hashval_t> sem_item::m_type_hash_cache;
+
 /* Semantic function constructor that uses STACK as bitmap memory stack.  */
 
 sem_function::sem_function (bitmap_obstack *stack)
@@ -303,57 +305,6 @@ sem_function::get_hash (void)
   return m_hash;
 }
 
-/* Return ture if A1 and A2 represent equivalent function attribute lists.
-   Based on comp_type_attributes.  */
-
-bool
-sem_item::compare_attributes (const_tree a1, const_tree a2)
-{
-  const_tree a;
-  if (a1 == a2)
-    return true;
-  for (a = a1; a != NULL_TREE; a = TREE_CHAIN (a))
-    {
-      const struct attribute_spec *as;
-      const_tree attr;
-
-      as = lookup_attribute_spec (get_attribute_name (a));
-      /* TODO: We can introduce as->affects_decl_identity
-	 and as->affects_decl_reference_identity if attribute mismatch
-	 gets a common reason to give up on merging.  It may not be worth
-	 the effort.
-	 For example returns_nonnull affects only references, while
-	 optimize attribute can be ignored because it is already lowered
-	 into flags representation and compared separately.  */
-      if (!as)
-        continue;
-
-      attr = lookup_attribute (as->name, CONST_CAST_TREE (a2));
-      if (!attr || !attribute_value_equal (a, attr))
-        break;
-    }
-  if (!a)
-    {
-      for (a = a2; a != NULL_TREE; a = TREE_CHAIN (a))
-	{
-	  const struct attribute_spec *as;
-
-	  as = lookup_attribute_spec (get_attribute_name (a));
-	  if (!as)
-	    continue;
-
-	  if (!lookup_attribute (as->name, CONST_CAST_TREE (a1)))
-	    break;
-	  /* We don't need to compare trees again, as we did this
-	     already in first loop.  */
-	}
-      if (!a)
-        return true;
-    }
-  /* TODO: As in comp_type_attributes we may want to introduce target hook.  */
-  return false;
-}
-
 /* Compare properties of symbols N1 and N2 that does not affect semantics of
    symbol itself but affects semantics of its references from USED_BY (which
    may be NULL if it is unknown).  If comparsion is false, symbols
@@ -427,8 +378,8 @@ sem_item::compare_referenced_symbol_properties (symtab_node *used_by,
 	 variables just compare attributes for references - the codegen
 	 for constructors is affected only by those attributes that we lower
 	 to explicit representation (such as DECL_ALIGN or DECL_SECTION).  */
-      if (!compare_attributes (DECL_ATTRIBUTES (n1->decl),
-			       DECL_ATTRIBUTES (n2->decl)))
+      if (!attribute_list_equal (DECL_ATTRIBUTES (n1->decl),
+				 DECL_ATTRIBUTES (n2->decl)))
 	return return_false_with_msg ("different var decl attributes");
       if (comp_type_attributes (TREE_TYPE (n1->decl),
 				TREE_TYPE (n2->decl)) != 1)
@@ -591,6 +542,8 @@ sem_function::equals_wpa (sem_item *item,
         return return_false_with_msg ("thunk fixed_offset mismatch");
       if (cnode->thunk.virtual_value != cnode2->thunk.virtual_value)
         return return_false_with_msg ("thunk virtual_value mismatch");
+      if (cnode->thunk.indirect_offset != cnode2->thunk.indirect_offset)
+        return return_false_with_msg ("thunk indirect_offset mismatch");
       if (cnode->thunk.this_adjusting != cnode2->thunk.this_adjusting)
         return return_false_with_msg ("thunk this_adjusting mismatch");
       if (cnode->thunk.virtual_offset_p != cnode2->thunk.virtual_offset_p)
@@ -658,7 +611,7 @@ sem_function::equals_wpa (sem_item *item,
   cl_optimization *opt1 = opts_for_fn (decl);
   cl_optimization *opt2 = opts_for_fn (item->decl);
 
-  if (opt1 != opt2 && memcmp (opt1, opt2, sizeof(cl_optimization)))
+  if (opt1 != opt2 && !cl_optimization_option_eq (opt1, opt2))
     {
       if (dump_file && (dump_flags & TDF_DETAILS))
 	{
@@ -712,8 +665,8 @@ sem_function::equals_wpa (sem_item *item,
   if (comp_type_attributes (TREE_TYPE (decl),
 			    TREE_TYPE (item->decl)) != 1)
     return return_false_with_msg ("different type attributes");
-  if (!compare_attributes (DECL_ATTRIBUTES (decl),
-			   DECL_ATTRIBUTES (item->decl)))
+  if (!attribute_list_equal (DECL_ATTRIBUTES (decl),
+			     DECL_ATTRIBUTES (item->decl)))
     return return_false_with_msg ("different decl attributes");
 
   /* The type of THIS pointer type memory location for
@@ -1199,6 +1152,7 @@ sem_function::merge (sem_item *alias_item)
 		     "can not create wrapper of stdarg function.\n");
 	}
       else if (ipa_fn_summaries
+	       && ipa_fn_summaries->get (alias) != NULL
 	       && ipa_fn_summaries->get (alias)->self_size <= 2)
 	{
 	  if (dump_file)
@@ -1220,8 +1174,7 @@ sem_function::merge (sem_item *alias_item)
 	 are not interposable.  */
       redirect_callers
 	= alias->get_availability () > AVAIL_INTERPOSABLE
-	  && original->get_availability () > AVAIL_INTERPOSABLE
-	  && !alias->instrumented_version;
+	  && original->get_availability () > AVAIL_INTERPOSABLE;
       /* TODO: We can redirect, but we need to produce alias of ORIGINAL
 	 with proper properties.  */
       if (!sem_item::compare_referenced_symbol_properties (NULL, original, alias,
@@ -1580,8 +1533,14 @@ sem_item::add_type (const_tree type, inchash::hash &hstate)
     }
   else if (RECORD_OR_UNION_TYPE_P (type))
     {
-      gcc_checking_assert (COMPLETE_TYPE_P (type));
-      hashval_t *val = optimizer->m_type_hash_cache.get (type);
+      /* Incomplete types must be skipped here.  */
+      if (!COMPLETE_TYPE_P (type))
+	{
+	  hstate.add_int (RECORD_TYPE);
+	  return;
+	}
+
+      hashval_t *val = m_type_hash_cache.get (type);
 
       if (!val)
 	{
@@ -1591,8 +1550,6 @@ sem_item::add_type (const_tree type, inchash::hash &hstate)
 	  hashval_t hash;
 
 	  hstate2.add_int (RECORD_TYPE);
-	  gcc_assert (COMPLETE_TYPE_P (type));
-
 	  for (f = TYPE_FIELDS (type), nf = 0; f; f = TREE_CHAIN (f))
 	    if (TREE_CODE (f) == FIELD_DECL)
 	      {
@@ -1603,7 +1560,7 @@ sem_item::add_type (const_tree type, inchash::hash &hstate)
 	  hstate2.add_int (nf);
 	  hash = hstate2.end ();
 	  hstate.add_hwi (hash);
-	  optimizer->m_type_hash_cache.put (type, hash);
+	  m_type_hash_cache.put (type, hash);
 	}
       else
         hstate.add_hwi (*val);
@@ -1979,8 +1936,8 @@ sem_variable::equals (tree t1, tree t2)
 
 	/* Type of the offset on MEM_REF does not matter.  */
 	return return_with_debug (sem_variable::equals (x1, x2)
-			          && wi::to_offset  (y1)
-				     == wi::to_offset  (y2));
+			          && known_eq (wi::to_poly_offset (y1),
+					       wi::to_poly_offset (y2)));
       }
     case ADDR_EXPR:
     case FDESC_EXPR:
@@ -2133,23 +2090,6 @@ sem_variable::get_hash (void)
   return m_hash;
 }
 
-/* Set all points-to UIDs of aliases pointing to node N as UID.  */
-
-static void
-set_alias_uids (symtab_node *n, int uid)
-{
-  ipa_ref *ref;
-  FOR_EACH_ALIAS (n, ref)
-    {
-      if (dump_file)
-	fprintf (dump_file, "  Setting points-to UID of [%s] as %d\n",
-		 xstrdup_for_dump (ref->referring->asm_name ()), uid);
-
-      SET_DECL_PT_UID (ref->referring->decl, uid);
-      set_alias_uids (ref->referring, uid);
-    }
-}
-
 /* Merges instance with an ALIAS_ITEM, where alias, thunk or redirection can
    be applied.  */
 
@@ -2276,7 +2216,6 @@ sem_variable::merge (sem_item *alias_item)
       if (dump_file)
 	fprintf (dump_file, "Unified; Variable alias has been created.\n");
 
-      set_alias_uids (original, DECL_UID (original->decl));
       return true;
     }
 }
@@ -2296,7 +2235,7 @@ unsigned int sem_item_optimizer::class_id = 0;
 
 sem_item_optimizer::sem_item_optimizer ()
 : worklist (0), m_classes (0), m_classes_count (0), m_cgraph_node_hooks (NULL),
-  m_varpool_node_hooks (NULL)
+  m_varpool_node_hooks (NULL), m_merged_variables ()
 {
   m_items.create (0);
   bitmap_obstack_initialize (&m_bmstack);
@@ -2321,6 +2260,7 @@ sem_item_optimizer::~sem_item_optimizer ()
   m_items.release ();
 
   bitmap_obstack_release (&m_bmstack);
+  m_merged_variables.release ();
 }
 
 /* Write IPA ICF summary for symbols.  */
@@ -3572,11 +3512,101 @@ sem_item_optimizer::merge_classes (unsigned int prev_class_count)
 	      }
 
 	    if (dbg_cnt (merged_ipa_icf))
-	      merged_p |= source->merge (alias);
+	      {
+		bool merged = source->merge (alias);
+		merged_p |= merged;
+
+		if (merged && alias->type == VAR)
+		  {
+		    symtab_pair p = symtab_pair (source->node, alias->node);
+		    m_merged_variables.safe_push (p);
+		  }
+	      }
 	  }
       }
 
+  if (!m_merged_variables.is_empty ())
+    fixup_points_to_sets ();
+
   return merged_p;
+}
+
+/* Fixup points to set PT.  */
+
+void
+sem_item_optimizer::fixup_pt_set (struct pt_solution *pt)
+{
+  if (pt->vars == NULL)
+    return;
+
+  unsigned i;
+  symtab_pair *item;
+  FOR_EACH_VEC_ELT (m_merged_variables, i, item)
+    if (bitmap_bit_p (pt->vars, DECL_UID (item->second->decl)))
+      bitmap_set_bit (pt->vars, DECL_UID (item->first->decl));
+}
+
+/* Set all points-to UIDs of aliases pointing to node N as UID.  */
+
+static void
+set_alias_uids (symtab_node *n, int uid)
+{
+  ipa_ref *ref;
+  FOR_EACH_ALIAS (n, ref)
+    {
+      if (dump_file)
+	fprintf (dump_file, "  Setting points-to UID of [%s] as %d\n",
+		 xstrdup_for_dump (ref->referring->asm_name ()), uid);
+
+      SET_DECL_PT_UID (ref->referring->decl, uid);
+      set_alias_uids (ref->referring, uid);
+    }
+}
+
+/* Fixup points to analysis info.  */
+
+void
+sem_item_optimizer::fixup_points_to_sets (void)
+{
+  /* TODO: remove in GCC 9 and trigger PTA re-creation after IPA passes.  */
+  cgraph_node *cnode;
+
+  FOR_EACH_DEFINED_FUNCTION (cnode)
+    {
+      tree name;
+      unsigned i;
+      function *fn = DECL_STRUCT_FUNCTION (cnode->decl);
+      if (!gimple_in_ssa_p (fn))
+	continue;
+
+      FOR_EACH_SSA_NAME (i, name, fn)
+	if (POINTER_TYPE_P (TREE_TYPE (name))
+	    && SSA_NAME_PTR_INFO (name))
+	  fixup_pt_set (&SSA_NAME_PTR_INFO (name)->pt);
+      fixup_pt_set (&fn->gimple_df->escaped);
+
+       /* The above get's us to 99% I guess, at least catching the
+	  address compares.  Below also gets us aliasing correct
+	  but as said we're giving leeway to the situation with
+	  readonly vars anyway, so ... */
+       basic_block bb;
+       FOR_EACH_BB_FN (bb, fn)
+	for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	     gsi_next (&gsi))
+	  {
+	    gcall *call = dyn_cast<gcall *> (gsi_stmt (gsi));
+	    if (call)
+	      {
+		fixup_pt_set (gimple_call_use_set (call));
+		fixup_pt_set (gimple_call_clobber_set (call));
+	      }
+	  }
+    }
+
+  unsigned i;
+  symtab_pair *item;
+  FOR_EACH_VEC_ELT (m_merged_variables, i, item)
+    set_alias_uids (item->first, DECL_UID (item->first->decl));
 }
 
 /* Dump function prints all class members to a FILE with an INDENT.  */

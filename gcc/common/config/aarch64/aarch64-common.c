@@ -30,6 +30,7 @@
 #include "opts.h"
 #include "flags.h"
 #include "diagnostic.h"
+#include "params.h"
 
 #ifdef  TARGET_BIG_ENDIAN_DEFAULT
 #undef  TARGET_DEFAULT_TARGET_FLAGS
@@ -41,18 +42,71 @@
 
 #undef	TARGET_OPTION_OPTIMIZATION_TABLE
 #define TARGET_OPTION_OPTIMIZATION_TABLE aarch_option_optimization_table
+#undef TARGET_OPTION_DEFAULT_PARAMS
+#define TARGET_OPTION_DEFAULT_PARAMS aarch64_option_default_params
+#undef TARGET_OPTION_VALIDATE_PARAM
+#define TARGET_OPTION_VALIDATE_PARAM aarch64_option_validate_param
 
 /* Set default optimization options.  */
 static const struct default_options aarch_option_optimization_table[] =
   {
     /* Enable section anchors by default at -O1 or higher.  */
     { OPT_LEVELS_1_PLUS, OPT_fsection_anchors, NULL, 1 },
+    /* Disable fomit-frame-pointer by default.  */
+    { OPT_LEVELS_ALL, OPT_fomit_frame_pointer, NULL, 0 },
     /* Enable -fsched-pressure by default when optimizing.  */
     { OPT_LEVELS_1_PLUS, OPT_fsched_pressure, NULL, 1 },
     /* Enable redundant extension instructions removal at -O2 and higher.  */
     { OPT_LEVELS_2_PLUS, OPT_free, NULL, 1 },
+#if (TARGET_DEFAULT_ASYNC_UNWIND_TABLES == 1)
+    { OPT_LEVELS_ALL, OPT_fasynchronous_unwind_tables, NULL, 1 },
+    { OPT_LEVELS_ALL, OPT_funwind_tables, NULL, 1},
+#endif
     { OPT_LEVELS_NONE, 0, NULL, 0 }
   };
+
+/* Implement target validation TARGET_OPTION_DEFAULT_PARAM.  */
+
+static bool
+aarch64_option_validate_param (const int value, const int param)
+{
+  /* Check that both parameters are the same.  */
+  if (param == (int) PARAM_STACK_CLASH_PROTECTION_GUARD_SIZE)
+    {
+      if (value != 12 && value != 16)
+	{
+	  error ("only values 12 (4 KB) and 16 (64 KB) are supported for guard "
+		 "size.  Given value %d (%llu KB) is out of range",
+		 value, (1ULL << value) / 1024ULL);
+	  return false;
+	}
+    }
+
+  return true;
+}
+
+/* Implement TARGET_OPTION_DEFAULT_PARAMS.  */
+
+static void
+aarch64_option_default_params (void)
+{
+  /* We assume the guard page is 64k.  */
+  int index = (int) PARAM_STACK_CLASH_PROTECTION_GUARD_SIZE;
+  set_default_param_value (PARAM_STACK_CLASH_PROTECTION_GUARD_SIZE,
+			   DEFAULT_STK_CLASH_GUARD_SIZE == 0
+			     ? 16 : DEFAULT_STK_CLASH_GUARD_SIZE);
+
+  int guard_size
+    = default_param_value (PARAM_STACK_CLASH_PROTECTION_GUARD_SIZE);
+
+  /* Set the interval parameter to be the same as the guard size.  This way the
+     mid-end code does the right thing for us.  */
+  set_default_param_value (PARAM_STACK_CLASH_PROTECTION_PROBE_INTERVAL,
+			   guard_size);
+
+  /* Validate the options.  */
+  aarch64_option_validate_param (guard_size, index);
+}
 
 /* Implement TARGET_HANDLE_OPTION.
    This function handles the target specific options for CPU/target selection.
@@ -95,7 +149,10 @@ aarch64_handle_option (struct gcc_options *opts,
       return true;
 
     case OPT_mstrict_align:
-      opts->x_target_flags |= MASK_STRICT_ALIGN;
+      if (val)
+	opts->x_target_flags |= MASK_STRICT_ALIGN;
+      else
+	opts->x_target_flags &= ~MASK_STRICT_ALIGN;
       return true;
 
     case OPT_momit_leaf_frame_pointer:

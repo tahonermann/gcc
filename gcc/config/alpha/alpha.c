@@ -67,6 +67,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "params.h"
 #include "builtins.h"
 #include "rtl-iter.h"
+#include "flags.h"
 
 /* This file should be included last.  */
 #include "target-def.h"
@@ -614,13 +615,13 @@ alpha_override_options_after_change (void)
   /* ??? Kludge these by not doing anything if we don't optimize.  */
   if (optimize > 0)
     {
-      if (align_loops <= 0)
-	align_loops = 16;
-      if (align_jumps <= 0)
-	align_jumps = 16;
+      if (flag_align_loops && !str_align_loops)
+	str_align_loops = "16";
+      if (flag_align_jumps && !str_align_jumps)
+	str_align_jumps = "16";
     }
-  if (align_functions <= 0)
-    align_functions = 16;
+  if (flag_align_functions && !str_align_functions)
+    str_align_functions = "16";
 }
 
 /* Returns 1 if VALUE is a mask that contains full bytes of zero or ones.  */
@@ -7771,13 +7772,13 @@ alpha_expand_prologue (void)
 	  int probed;
 
 	  for (probed = 4096; probed < probed_size; probed += 8192)
-	    emit_insn (gen_probe_stack (GEN_INT (-probed)));
+	    emit_insn (gen_stack_probe_internal (GEN_INT (-probed)));
 
 	  /* We only have to do this probe if we aren't saving registers or
 	     if we are probing beyond the frame because of -fstack-check.  */
 	  if ((sa_size == 0 && probed_size > probed - 4096)
 	      || flag_stack_check || flag_stack_clash_protection)
-	    emit_insn (gen_probe_stack (GEN_INT (-probed_size)));
+	    emit_insn (gen_stack_probe_internal (GEN_INT (-probed_size)));
 	}
 
       if (frame_size != 0)
@@ -9268,10 +9269,11 @@ alpha_align_insns_1 (unsigned int max_align,
   /* Let shorten branches care for assigning alignments to code labels.  */
   shorten_branches (get_insns ());
 
-  if (align_functions < 4)
+  unsigned int option_alignment = align_functions.levels[0].get_value ();
+  if (option_alignment < 4)
     align = 4;
-  else if ((unsigned int) align_functions < max_align)
-    align = align_functions;
+  else if ((unsigned int) option_alignment < max_align)
+    align = option_alignment;
   else
     align = max_align;
 
@@ -9289,7 +9291,8 @@ alpha_align_insns_1 (unsigned int max_align,
       /* When we see a label, resync alignment etc.  */
       if (LABEL_P (i))
 	{
-	  unsigned int new_align = 1 << label_to_alignment (i);
+	  unsigned int new_align
+	    = label_to_alignment (i).levels[0].get_value ();
 
 	  if (new_align >= align)
 	    {
@@ -9405,14 +9408,6 @@ alpha_pad_function_end (void)
 	  || !(SIBLING_CALL_P (insn)
 	       || find_reg_note (insn, REG_NORETURN, NULL_RTX)))
         continue;
-
-      /* Make sure we do not split a call and its corresponding
-	 CALL_ARG_LOCATION note.  */
-      next = NEXT_INSN (insn);
-      if (next == NULL)
-	continue;
-      if (NOTE_P (next) && NOTE_KIND (next) == NOTE_INSN_CALL_ARG_LOCATION)
-	insn = next;
 
       next = next_active_insn (insn);
       if (next)

@@ -191,7 +191,8 @@ enum gfc_intrinsic_op
 /* Arithmetic results.  */
 enum arith
 { ARITH_OK = 1, ARITH_OVERFLOW, ARITH_UNDERFLOW, ARITH_NAN,
-  ARITH_DIV0, ARITH_INCOMMENSURATE, ARITH_ASYMMETRIC, ARITH_PROHIBIT
+  ARITH_DIV0, ARITH_INCOMMENSURATE, ARITH_ASYMMETRIC, ARITH_PROHIBIT,
+  ARITH_WRONGCONCAT
 };
 
 /* Statements.  */
@@ -291,7 +292,8 @@ enum procedure_type
   PROC_INTRINSIC, PROC_ST_FUNCTION, PROC_EXTERNAL
 };
 
-/* Intent types.  */
+/* Intent types. Note that these values are also used in another enum in
+   decl.c (match_attr_spec).  */
 enum sym_intent
 { INTENT_UNKNOWN = 0, INTENT_IN, INTENT_OUT, INTENT_INOUT
 };
@@ -553,6 +555,7 @@ enum gfc_isym_id
   GFC_ISYM_PRODUCT,
   GFC_ISYM_RADIX,
   GFC_ISYM_RAND,
+  GFC_ISYM_RANDOM_INIT,
   GFC_ISYM_RANDOM_NUMBER,
   GFC_ISYM_RANDOM_SEED,
   GFC_ISYM_RANGE,
@@ -1342,6 +1345,7 @@ typedef struct gfc_omp_clauses
   gfc_expr_list *tile_list;
   unsigned async:1, gang:1, worker:1, vector:1, seq:1, independent:1;
   unsigned wait:1, par_auto:1, gang_static:1;
+  unsigned if_present:1, finalize:1;
   locus loc;
 
 }
@@ -1611,6 +1615,9 @@ typedef struct gfc_symbol
 
   /* Link to corresponding association-list if this is an associate name.  */
   struct gfc_association_list *assoc;
+
+  /* Link to next entry in derived type list */
+  struct gfc_symbol *dt_next;
 }
 gfc_symbol;
 
@@ -1712,18 +1719,8 @@ typedef struct gfc_symtree
 }
 gfc_symtree;
 
-/* A linked list of derived types in the namespace.  */
-typedef struct gfc_dt_list
-{
-  struct gfc_symbol *derived;
-  struct gfc_dt_list *next;
-}
-gfc_dt_list;
-
-#define gfc_get_dt_list() XCNEW (gfc_dt_list)
-
-  /* A list of all derived types.  */
-  extern gfc_dt_list *gfc_derived_types;
+/* A list of all derived types.  */
+extern gfc_symbol *gfc_derived_types;
 
 typedef struct gfc_oacc_routine_name
 {
@@ -1809,7 +1806,7 @@ typedef struct gfc_namespace
 
   gfc_charlen *cl_list;
 
-  gfc_dt_list *derived_types;
+  gfc_symbol *derived_types;
 
   int save_all, seen_save, seen_implicit_none;
 
@@ -2143,6 +2140,15 @@ typedef struct gfc_expr
   /* Will require finalization after use.  */
   unsigned int must_finalize : 1;
 
+  /* Set this if no range check should be performed on this expression.  */
+
+  unsigned int no_bounds_check : 1;
+
+  /* Set this if a matmul expression has already been evaluated for conversion
+     to a BLAS call.  */
+
+  unsigned int external_blas : 1;
+
   /* If an expression comes from a Hollerith constant or compile-time
      evaluation of a transfer statement, it may have a prescribed target-
      memory representation, and these cannot always be backformed from
@@ -2437,7 +2443,7 @@ typedef struct
   gfc_expr *io_unit, *format_expr, *rec, *advance, *iostat, *size, *iomsg,
 	   *id, *pos, *asynchronous, *blank, *decimal, *delim, *pad, *round,
 	   *sign, *extra_comma, *dt_io_kind, *udtio;
-  char default_exp;
+  char dec_ext;
 
   gfc_symbol *namelist;
   /* A format_label of `format_asterisk' indicates the "*" format */
@@ -2830,7 +2836,7 @@ unsigned int gfc_option_lang_mask (void);
 void gfc_init_options_struct (struct gcc_options *);
 void gfc_init_options (unsigned int,
 		       struct cl_decoded_option *);
-bool gfc_handle_option (size_t, const char *, int, int, location_t,
+bool gfc_handle_option (size_t, const char *, HOST_WIDE_INT, int, location_t,
 			const struct cl_option_handlers *);
 bool gfc_post_options (const char **);
 char *gfc_get_option_string (void);
@@ -2921,6 +2927,7 @@ extern int gfc_numeric_storage_size;
 extern int gfc_character_storage_size;
 
 #define gfc_logical_4_kind 4
+#define gfc_integer_4_kind 4
 
 /* symbol.c */
 void gfc_clear_new_implicit (void);
@@ -3032,7 +3039,6 @@ int gfc_get_sym_tree (const char *, gfc_namespace *, gfc_symtree **, bool);
 int gfc_get_ha_symbol (const char *, gfc_symbol **);
 int gfc_get_ha_sym_tree (const char *, gfc_symtree **);
 
-void gfc_new_undo_checkpoint (gfc_undo_change_set &);
 void gfc_drop_last_undo_checkpoint (void);
 void gfc_restore_last_undo_checkpoint (void);
 void gfc_undo_symbols (void);
@@ -3268,6 +3274,8 @@ bool gfc_resolve_intrinsic (gfc_symbol *, locus *);
 bool gfc_explicit_interface_required (gfc_symbol *, char *, int);
 extern int gfc_do_concurrent_flag;
 const char* gfc_lookup_function_fuzzy (const char *, gfc_symtree *);
+int gfc_pure_function (gfc_expr *e, const char **name);
+int gfc_implicit_pure_function (gfc_expr *e);
 
 
 /* array.c */
@@ -3302,6 +3310,9 @@ bool gfc_is_compile_time_shape (gfc_array_spec *);
 
 bool gfc_ref_dimen_size (gfc_array_ref *, int dimen, mpz_t *, mpz_t *);
 
+
+#define gfc_str_startswith(str, pref) \
+	(strncmp ((str), (pref), strlen (pref)) == 0)
 
 /* interface.c -- FIXME: some of these should be in symbol.c */
 void gfc_free_interface (gfc_interface *);
@@ -3463,6 +3474,7 @@ int gfc_code_walker (gfc_code **, walk_code_fn_t, walk_expr_fn_t, void *);
 
 void gfc_convert_mpz_to_signed (mpz_t, int);
 gfc_expr *gfc_simplify_ieee_functions (gfc_expr *);
+bool gfc_is_size_zero_array (gfc_expr *);
 
 /* trans-array.c  */
 

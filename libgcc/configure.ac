@@ -68,6 +68,11 @@ AC_ARG_ENABLE(shared,
 ], [enable_shared=yes])
 AC_SUBST(enable_shared)
 
+AC_ARG_ENABLE(gcov,
+[  --disable-gcov          don't provide libgcov and related host tools],
+[], [enable_gcov=yes])
+AC_SUBST(enable_gcov)
+
 AC_ARG_ENABLE(vtable-verify,
 [  --enable-vtable-verify    Enable vtable verification feature ],
 [case "$enableval" in
@@ -454,6 +459,21 @@ EOF
   ;;
 esac
 
+# Check if Solaris linker support v2 linker mapfile syntax.
+# Link with -nostartfiles -nodefaultlibs since neither are present while
+# building libgcc.
+case ${host} in
+*-*-solaris2*)
+  solaris_ld_v2_maps=no
+  echo 'int main(void) {return 0;}' > conftest.c
+  echo '$mapfile_version 2' > conftest.map
+  if AC_TRY_COMMAND([${CC-cc} -nostartfiles -nodefaultlibs -Wl,-M,conftest.map -o conftest conftest.c 1>&AS_MESSAGE_LOG_FD]); then
+      solaris_ld_v2_maps=yes
+  fi
+  ;;
+esac
+AC_SUBST(solaris_ld_v2_maps)
+
 # Check if xtensa target is configured for windowed ABI and thus needs to use
 # custom unwind code.
 # This is after config.host so we can augment tmake_file.
@@ -486,10 +506,28 @@ AC_CACHE_CHECK([for __attribute__((visibility("hidden")))],
 
 if test $libgcc_cv_hidden_visibility_attribute = yes; then
     vis_hide='-fvisibility=hidden -DHIDE_EXPORTS'
+    AC_DEFINE_UNQUOTED(AS_HIDDEN_DIRECTIVE, $asm_hidden_op, [Define to the .hidden-like directive if it exists.])
 else
     vis_hide=
 fi
 AC_SUBST(vis_hide)
+
+# Check for .cfi_sections .debug_frame support.
+AC_CACHE_CHECK([for .cfi_sections .debug_frame],
+    libgcc_cv_cfi_sections_directive, [
+	echo 'int foo (int, char *);' > conftest.c
+	echo 'int bar (int x) { char *y = __builtin_alloca (x); return foo (x + 1, y) + 1; }' >> conftest.c
+	libgcc_cv_cfi_sections_directive=no
+	if AC_TRY_COMMAND(${CC-cc} -Werror -g -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-exceptions -S conftest.c -o conftest.s 1>&AS_MESSAGE_LOG_FD); then
+	    if grep "\\.cfi_sections.*\\.debug_frame" conftest.s >/dev/null; then
+		libgcc_cv_cfi_sections_directive=yes
+	    fi
+	fi
+	rm -f conftest.*
+    ])
+if test $libgcc_cv_cfi_sections_directive = yes; then
+    AC_DEFINE(HAVE_AS_CFI_SECTIONS, 1, [Define to 1 if the assembler supports .cfi_sections .debug_frame directive.])
+fi
 
 # See if we have thread-local storage.  We can only test assembler
 # since link-time and run-time tests require the newly built

@@ -101,12 +101,14 @@ def find_type(orig, name):
 
 _versioned_namespace = '__8::'
 
-def is_specialization_of(type, template_name):
+def is_specialization_of(x, template_name):
     "Test if a type is a given template instantiation."
     global _versioned_namespace
+    if type(x) is gdb.Type:
+        x = x.tag
     if _versioned_namespace:
-        return re.match('^std::(%s)?%s<.*>$' % (_versioned_namespace, template_name), type) is not None
-    return re.match('^std::%s<.*>$' % template_name, type) is not None
+        return re.match('^std::(%s)?%s<.*>$' % (_versioned_namespace, template_name), x) is not None
+    return re.match('^std::%s<.*>$' % template_name, x) is not None
 
 def strip_versioned_namespace(typename):
     global _versioned_namespace
@@ -249,20 +251,31 @@ class StdListPrinter:
             return 'empty %s' % (self.typename)
         return '%s' % (self.typename)
 
-class StdListIteratorPrinter:
-    "Print std::list::iterator"
-
-    def __init__(self, typename, val):
+class NodeIteratorPrinter:
+    def __init__(self, typename, val, contname):
         self.val = val
         self.typename = typename
+        self.contname = contname
 
     def to_string(self):
         if not self.val['_M_node']:
-            return 'non-dereferenceable iterator for std::list'
+            return 'non-dereferenceable iterator for std::%s' % (self.contname)
         nodetype = find_type(self.val.type, '_Node')
         nodetype = nodetype.strip_typedefs().pointer()
         node = self.val['_M_node'].cast(nodetype).dereference()
         return str(get_value_from_list_node(node))
+
+class StdListIteratorPrinter(NodeIteratorPrinter):
+    "Print std::list::iterator"
+
+    def __init__(self, typename, val):
+        NodeIteratorPrinter.__init__(self, typename, val, 'list')
+
+class StdFwdListIteratorPrinter(NodeIteratorPrinter):
+    "Print std::forward_list::iterator"
+
+    def __init__(self, typename, val):
+        NodeIteratorPrinter.__init__(self, typename, val, 'forward_list')
 
 class StdSlistPrinter:
     "Print a __gnu_cxx::slist"
@@ -402,17 +415,26 @@ class StdTuplePrinter:
     "Print a std::tuple"
 
     class _iterator(Iterator):
+        @staticmethod
+        def _is_nonempty_tuple (nodes):
+            if len (nodes) == 2:
+                if is_specialization_of (nodes[1].type, '__tuple_base'):
+                    return True
+            elif len (nodes) == 1:
+                return True
+            elif len (nodes) == 0:
+                return False
+            raise ValueError("Top of tuple tree does not consist of a single node.")
+
         def __init__ (self, head):
             self.head = head
 
             # Set the base class as the initial head of the
             # tuple.
             nodes = self.head.type.fields ()
-            if len (nodes) == 1:
+            if self._is_nonempty_tuple (nodes):
                 # Set the actual head to the first pair.
                 self.head  = self.head.cast (nodes[0].type)
-            elif len (nodes) != 0:
-                raise ValueError("Top of tuple tree does not consist of a single node.")
             self.count = 0
 
         def __iter__ (self):
@@ -575,10 +597,12 @@ class StdDebugIteratorPrinter:
     # and return the wrapped iterator value.
     def to_string (self):
         base_type = gdb.lookup_type('__gnu_debug::_Safe_iterator_base')
-        safe_seq = self.val.cast(base_type)['_M_sequence']
-        if not safe_seq or self.val['_M_version'] != safe_seq['_M_version']:
-            return "invalid iterator"
         itype = self.val.type.template_argument(0)
+        safe_seq = self.val.cast(base_type)['_M_sequence']
+        if not safe_seq:
+            return str(self.val.cast(itype))
+        if self.val['_M_version'] != safe_seq['_M_version']:
+            return "invalid iterator"
         return str(self.val.cast(itype))
 
 def num_elements(num):
@@ -1216,6 +1240,39 @@ class StdExpPathPrinter:
         return self._iterator(self.val['_M_cmpts'])
 
 
+class StdPairPrinter:
+    "Print a std::pair object, with 'first' and 'second' as children"
+
+    def __init__(self, typename, val):
+        self.val = val
+
+    class _iter(Iterator):
+        "An iterator for std::pair types. Returns 'first' then 'second'."
+
+        def __init__(self, val):
+            self.val = val
+            self.which = 'first'
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if self.which is None:
+                raise StopIteration
+            which = self.which
+            if which == 'first':
+                self.which = 'second'
+            else:
+                self.which = None
+            return (which, self.val[which])
+
+    def children(self):
+        return self._iter(self.val)
+
+    def to_string(self):
+        return None
+
+
 # A "regular expression" printer which conforms to the
 # "SubPrettyPrinter" protocol from gdb.printing.
 class RxPrinter(object):
@@ -1425,7 +1482,8 @@ def add_one_template_type_printer(obj, name, defargs):
     if _versioned_namespace:
         # Add second type printer for same type in versioned namespace:
         ns = 'std::' + _versioned_namespace
-        defargs = { n: d.replace('std::', ns) for n,d in defargs.items() }
+        # PR 86112 Cannot use dict comprehension here:
+        defargs = dict((n, d.replace('std::', ns)) for (n,d) in defargs.items())
         printer = TemplateTypePrinter(ns+name, defargs)
         gdb.types.register_type_printer(obj, printer)
 
@@ -1498,6 +1556,8 @@ def register_type_printers(obj):
     # Add type printers for typedefs std::string, std::wstring etc.
     for ch in ('', 'w', 'u8', 'u16', 'u32'):
         add_one_type_printer(obj, 'basic_string', ch + 'string')
+        add_one_type_printer(obj, '__cxx11::basic_string', ch + 'string')
+        # Typedefs for __cxx11::basic_string used to be in namespace __cxx11:
         add_one_type_printer(obj, '__cxx11::basic_string',
                              '__cxx11::' + ch + 'string')
         add_one_type_printer(obj, 'basic_string_view', ch + 'string_view')
@@ -1510,7 +1570,7 @@ def register_type_printers(obj):
         for x in ('stringbuf', 'istringstream', 'ostringstream',
                   'stringstream'):
             add_one_type_printer(obj, 'basic_' + x, ch + x)
-            # <sstream> types are in __cxx11 namespace, but typedefs aren'x:
+            # <sstream> types are in __cxx11 namespace, but typedefs aren't:
             add_one_type_printer(obj, '__cxx11::basic_' + x, ch + x)
 
     # Add type printers for typedefs regex, wregex, cmatch, wcmatch etc.
@@ -1615,6 +1675,7 @@ def build_libstdcxx_dictionary ():
     libstdcxx_printer.add_container('std::', 'map', StdMapPrinter)
     libstdcxx_printer.add_container('std::', 'multimap', StdMapPrinter)
     libstdcxx_printer.add_container('std::', 'multiset', StdSetPrinter)
+    libstdcxx_printer.add_version('std::', 'pair', StdPairPrinter)
     libstdcxx_printer.add_version('std::', 'priority_queue',
                                   StdStackOrQueuePrinter)
     libstdcxx_printer.add_version('std::', 'queue', StdStackOrQueuePrinter)
@@ -1731,21 +1792,14 @@ def build_libstdcxx_dictionary ():
                                       StdVectorIteratorPrinter)
         libstdcxx_printer.add_version('__gnu_cxx::', '_Slist_iterator',
                                       StdSlistIteratorPrinter)
+        libstdcxx_printer.add_container('std::', '_Fwd_list_iterator',
+                                        StdFwdListIteratorPrinter)
+        libstdcxx_printer.add_container('std::', '_Fwd_list_const_iterator',
+                                        StdFwdListIteratorPrinter)
 
         # Debug (compiled with -D_GLIBCXX_DEBUG) printer
-        # registrations.  The Rb_tree debug iterator when unwrapped
-        # from the encapsulating __gnu_debug::_Safe_iterator does not
-        # have the __norm namespace. Just use the existing printer
-        # registration for that.
+        # registrations.
         libstdcxx_printer.add('__gnu_debug::_Safe_iterator',
                               StdDebugIteratorPrinter)
-        libstdcxx_printer.add('std::__norm::_List_iterator',
-                              StdListIteratorPrinter)
-        libstdcxx_printer.add('std::__norm::_List_const_iterator',
-                              StdListIteratorPrinter)
-        libstdcxx_printer.add('std::__norm::_Deque_const_iterator',
-                              StdDequeIteratorPrinter)
-        libstdcxx_printer.add('std::__norm::_Deque_iterator',
-                              StdDequeIteratorPrinter)
 
 build_libstdcxx_dictionary ()

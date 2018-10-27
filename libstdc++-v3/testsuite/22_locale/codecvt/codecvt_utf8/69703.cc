@@ -68,7 +68,6 @@ test03()
   VERIFY( in[2] == U'c' );
 }
 
-
 void
 test04()
 {

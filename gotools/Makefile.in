@@ -370,12 +370,14 @@ MOSTLYCLEANFILES = \
 @NATIVE_TRUE@	export LD_LIBRARY_PATH; \
 @NATIVE_TRUE@	GOROOT=$${abs_libgodir}; \
 @NATIVE_TRUE@	export GOROOT; \
+@NATIVE_TRUE@	GOCACHE=$(abs_builddir)/gocache-test; \
+@NATIVE_TRUE@	export GOCACHE; \
 @NATIVE_TRUE@	fl1="FA"; fl2="IL"; fl="$${fl1}$${fl2}";
 
 
 # ECHO_ENV is a variant of CHECK_ENV to put into a testlog file.
 # It assumes that abs_libgodir is set.
-@NATIVE_TRUE@ECHO_ENV = PATH=`echo $(abs_builddir):$${PATH} | sed 's,::*,:,g;s,^:*,,;s,:*$$,,'` GCCGO='$(abs_builddir)/check-gccgo' CC='$(abs_builddir)/check-gcc' GCCGOTOOLDIR='$(abs_builddir)' GO_TESTING_GOTOOLS=yes LD_LIBRARY_PATH=`echo $${abs_libgodir}/.libs:$${LD_LIBRARY_PATH} | sed 's,::*,:,g;s,^:*,,;s,:*$$,,'` GOROOT=`echo $${abs_libgodir}`
+@NATIVE_TRUE@ECHO_ENV = PATH=`echo $(abs_builddir):$${PATH} | sed 's,::*,:,g;s,^:*,,;s,:*$$,,'` GCCGO='$(abs_builddir)/check-gccgo' CC='$(abs_builddir)/check-gcc' GCCGOTOOLDIR='$(abs_builddir)' GO_TESTING_GOTOOLS=yes LD_LIBRARY_PATH=`echo $${abs_libgodir}/.libs:$${LD_LIBRARY_PATH} | sed 's,::*,:,g;s,^:*,,;s,:*$$,,'` GOROOT=`echo $${abs_libgodir} GOCACHE='$(abs_builddir)/gocache-test'`
 all: all-am
 
 .SUFFIXES:
@@ -742,6 +744,7 @@ s-zdefaultcc: Makefile
 	$(STAMP) $@ 
 
 mostlyclean-local:
+	-chmod -R u+w check-go-dir
 	rm -rf check-go-dir check-runtime-dir cgo-test-dir carchive-test-dir
 
 @NATIVE_TRUE@go$(EXEEXT): $(go_cmd_go_files) $(LIBGOTOOL) $(LIBGODEP)
@@ -805,11 +808,11 @@ mostlyclean-local:
 
 # check-go-tool runs `go test cmd/go` in our environment.
 @NATIVE_TRUE@check-go-tool: go$(EXEEXT) $(noinst_PROGRAMS) check-head check-gccgo check-gcc
+@NATIVE_TRUE@	-chmod -R u+w check-go-dir
 @NATIVE_TRUE@	rm -rf check-go-dir cmd_go-testlog
 @NATIVE_TRUE@	$(MKDIR_P) check-go-dir/src/cmd/go
 @NATIVE_TRUE@	cp $(cmdsrcdir)/go/*.go check-go-dir/src/cmd/go/
 @NATIVE_TRUE@	cp -r $(cmdsrcdir)/go/internal check-go-dir/src/cmd/go/
-@NATIVE_TRUE@	cp $(libgodir)/zstdpkglist.go check-go-dir/src/cmd/go/internal/load/
 @NATIVE_TRUE@	cp $(libgodir)/zdefaultcc.go check-go-dir/src/cmd/go/internal/cfg/
 @NATIVE_TRUE@	cp -r $(cmdsrcdir)/go/testdata check-go-dir/src/cmd/go/
 @NATIVE_TRUE@	cp -r $(cmdsrcdir)/internal check-go-dir/src/cmd/
@@ -835,14 +838,14 @@ mostlyclean-local:
 @NATIVE_TRUE@	GOARCH=`$(abs_builddir)/go$(EXEEXT) env GOARCH`; \
 @NATIVE_TRUE@	GOOS=`$(abs_builddir)/go$(EXEEXT) env GOOS`; \
 @NATIVE_TRUE@	files=`$(SHELL) $(libgosrcdir)/../match.sh --goarch=$${GOARCH} --goos=$${GOOS} --srcdir=$(libgosrcdir)/runtime --extrafiles="$(libgodir)/runtime_sysinfo.go $(libgodir)/sigtab.go" --tag=libffi`; \
-@NATIVE_TRUE@	echo "$(ECHO_ENV) GC='$(abs_builddir)/check-gccgo -fgo-compiling-runtime' GOARCH=$${GOARCH} GOOS=$${GOOS} $(SHELL) $(libgosrcdir)/../testsuite/gotest --goarch=$${GOARCH} --goos=$${GOOS} --basedir=$(libgosrcdir)/.. --srcdir=$(libgosrcdir)/runtime --pkgpath=runtime --pkgfiles='$${files}' $(GOTESTFLAGS) -test.v" > runtime-testlog
+@NATIVE_TRUE@	echo "$(ECHO_ENV) GC='$(abs_builddir)/check-gccgo -fgo-compiling-runtime' GOARCH=$${GOARCH} GOOS=$${GOOS} $(SHELL) $(libgosrcdir)/../testsuite/gotest --goarch=$${GOARCH} --goos=$${GOOS} --basedir=$(libgosrcdir)/.. --srcdir=$(libgosrcdir)/runtime --pkgpath=runtime --pkgfiles='$${files}' $(GOTESTFLAGS) -test.timeout=$(GOTOOLS_TEST_TIMEOUT)s -test.v" > runtime-testlog
 @NATIVE_TRUE@	$(CHECK_ENV) \
 @NATIVE_TRUE@	GC="$${GCCGO} -fgo-compiling-runtime"; \
 @NATIVE_TRUE@	export GC; \
 @NATIVE_TRUE@	GOARCH=`$(abs_builddir)/go$(EXEEXT) env GOARCH`; \
 @NATIVE_TRUE@	GOOS=`$(abs_builddir)/go$(EXEEXT) env GOOS`; \
 @NATIVE_TRUE@	files=`$(SHELL) $(libgosrcdir)/../match.sh --goarch=$${GOARCH} --goos=$${GOOS} --srcdir=$(libgosrcdir)/runtime --extrafiles="$(libgodir)/runtime_sysinfo.go $(libgodir)/sigtab.go" --tag=libffi`; \
-@NATIVE_TRUE@	$(SHELL) $(libgosrcdir)/../testsuite/gotest --goarch=$${GOARCH} --goos=$${GOOS} --basedir=$(libgosrcdir)/.. --srcdir=$(libgosrcdir)/runtime --pkgpath=runtime --pkgfiles="$${files}" $(GOTESTFLAGS) -test.v >> runtime-testlog 2>&1 || echo "--- $${fl}: go test runtime (0.00s)" >> runtime-testlog
+@NATIVE_TRUE@	$(SHELL) $(libgosrcdir)/../testsuite/gotest --goarch=$${GOARCH} --goos=$${GOOS} --basedir=$(libgosrcdir)/.. --srcdir=$(libgosrcdir)/runtime --pkgpath=runtime --pkgfiles="$${files}" $(GOTESTFLAGS) -test.timeout=$(GOTOOLS_TEST_TIMEOUT)s -test.v >> runtime-testlog 2>&1 || echo "--- $${fl}: go test runtime (0.00s)" >> runtime-testlog
 @NATIVE_TRUE@	grep '^--- ' runtime-testlog | sed -e 's/^--- \(.*\) ([^)]*)$$/\1/' | sort -k 2
 
 # check-cgo-test runs `go test misc/cgo/test` in our environment.
@@ -875,8 +878,10 @@ mostlyclean-local:
 # check-vet runs `go test cmd/vet` in our environment.
 @NATIVE_TRUE@check-vet: go$(EXEEXT) $(noinst_PROGRAMS) check-head check-gccgo check-gcc
 @NATIVE_TRUE@	rm -rf check-vet-dir cmd_vet-testlog
-@NATIVE_TRUE@	$(MKDIR_P) check-vet-dir/src/cmd
+@NATIVE_TRUE@	$(MKDIR_P) check-vet-dir/src/cmd/internal
 @NATIVE_TRUE@	cp -r $(cmdsrcdir)/vet check-vet-dir/src/cmd/
+@NATIVE_TRUE@	cp -r $(cmdsrcdir)/internal/objabi check-vet-dir/src/cmd/internal
+@NATIVE_TRUE@	cp $(libgodir)/objabi.go check-vet-dir/src/cmd/internal/objabi/
 @NATIVE_TRUE@	@abs_libgodir=`cd $(libgodir) && $(PWD_COMMAND)`; \
 @NATIVE_TRUE@	abs_checkdir=`cd check-vet-dir && $(PWD_COMMAND)`; \
 @NATIVE_TRUE@	echo "cd check-vet-dir/src/cmd/vet && $(ECHO_ENV) GOPATH=$${abs_checkdir} $(abs_builddir)/go$(EXEEXT) test -test.short -test.timeout=$(GOTOOLS_TEST_TIMEOUT)s -test.v" > cmd_vet-testlog

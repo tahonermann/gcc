@@ -3501,7 +3501,12 @@ expand_omp_for_static_nochunk (struct omp_region *region,
   t = fold_convert (itype, s0);
   t = fold_build2 (MULT_EXPR, itype, t, step);
   if (POINTER_TYPE_P (type))
-    t = fold_build_pointer_plus (n1, t);
+    {
+      t = fold_build_pointer_plus (n1, t);
+      if (!POINTER_TYPE_P (TREE_TYPE (startvar))
+	  && TYPE_PRECISION (TREE_TYPE (startvar)) > TYPE_PRECISION (type))
+	t = fold_convert (signed_type_for (type), t);
+    }
   else
     t = fold_build2 (PLUS_EXPR, type, t, n1);
   t = fold_convert (TREE_TYPE (startvar), t);
@@ -3515,7 +3520,12 @@ expand_omp_for_static_nochunk (struct omp_region *region,
   t = fold_convert (itype, e0);
   t = fold_build2 (MULT_EXPR, itype, t, step);
   if (POINTER_TYPE_P (type))
-    t = fold_build_pointer_plus (n1, t);
+    {
+      t = fold_build_pointer_plus (n1, t);
+      if (!POINTER_TYPE_P (TREE_TYPE (startvar))
+	  && TYPE_PRECISION (TREE_TYPE (startvar)) > TYPE_PRECISION (type))
+	t = fold_convert (signed_type_for (type), t);
+    }
   else
     t = fold_build2 (PLUS_EXPR, type, t, n1);
   t = fold_convert (TREE_TYPE (startvar), t);
@@ -4000,7 +4010,12 @@ expand_omp_for_static_chunk (struct omp_region *region,
   t = fold_convert (itype, s0);
   t = fold_build2 (MULT_EXPR, itype, t, step);
   if (POINTER_TYPE_P (type))
-    t = fold_build_pointer_plus (n1, t);
+    {
+      t = fold_build_pointer_plus (n1, t);
+      if (!POINTER_TYPE_P (TREE_TYPE (startvar))
+	  && TYPE_PRECISION (TREE_TYPE (startvar)) > TYPE_PRECISION (type))
+	t = fold_convert (signed_type_for (type), t);
+    }
   else
     t = fold_build2 (PLUS_EXPR, type, t, n1);
   t = fold_convert (TREE_TYPE (startvar), t);
@@ -4014,7 +4029,12 @@ expand_omp_for_static_chunk (struct omp_region *region,
   t = fold_convert (itype, e0);
   t = fold_build2 (MULT_EXPR, itype, t, step);
   if (POINTER_TYPE_P (type))
-    t = fold_build_pointer_plus (n1, t);
+    {
+      t = fold_build_pointer_plus (n1, t);
+      if (!POINTER_TYPE_P (TREE_TYPE (startvar))
+	  && TYPE_PRECISION (TREE_TYPE (startvar)) > TYPE_PRECISION (type))
+	t = fold_convert (signed_type_for (type), t);
+    }
   else
     t = fold_build2 (PLUS_EXPR, type, t, n1);
   t = fold_convert (TREE_TYPE (startvar), t);
@@ -5438,6 +5458,14 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 	  body_bb = split->src;
 
 	  split->flags ^= EDGE_FALLTHRU | EDGE_TRUE_VALUE;
+
+	  /* Add a dummy exit for the tiled block when cont_bb is missing.  */
+	  if (cont_bb == NULL)
+	    {
+	      edge e = make_edge (body_bb, exit_bb, EDGE_FALSE_VALUE);
+	      e->probability = profile_probability::even ();
+	      split->probability = profile_probability::even ();
+	    }
 
 	  /* Initialize the user's loop vars.  */
 	  gsi = gsi_start_bb (elem_body_bb);
@@ -7601,7 +7629,7 @@ grid_expand_target_grid_body (struct omp_region *target)
   SET_DECL_ASSEMBLER_NAME (kern_fndecl, DECL_NAME (kern_fndecl));
   tree tgtblock = gimple_block (tgt_stmt);
   tree fniniblock = make_node (BLOCK);
-  BLOCK_ABSTRACT_ORIGIN (fniniblock) = tgtblock;
+  BLOCK_ABSTRACT_ORIGIN (fniniblock) = BLOCK_ORIGIN (tgtblock);
   BLOCK_SOURCE_LOCATION (fniniblock) = BLOCK_SOURCE_LOCATION (tgtblock);
   BLOCK_SOURCE_END_LOCATION (fniniblock) = BLOCK_SOURCE_END_LOCATION (tgtblock);
   BLOCK_SUPERCONTEXT (fniniblock) = kern_fndecl;

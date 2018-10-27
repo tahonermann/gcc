@@ -31,7 +31,6 @@ extern unsigned long sparc_type_code (tree);
 #endif /* TREE_CODE */
 
 extern void order_regs_for_local_alloc (void);
-extern HOST_WIDE_INT sparc_compute_frame_size (HOST_WIDE_INT, int);
 extern int sparc_initial_elimination_offset (int);
 extern void sparc_expand_prologue (void);
 extern void sparc_flat_expand_prologue (void);
@@ -44,6 +43,7 @@ extern void sparc_override_options (void);
 extern void sparc_output_scratch_registers (FILE *);
 extern void sparc_target_macros (void);
 extern void sparc_emit_membar_for_model (enum memmodel, int, int);
+extern int sparc_branch_cost (bool, bool);
 
 #ifdef RTX_CODE
 extern machine_mode select_cc_mode (enum rtx_code, rtx, rtx);

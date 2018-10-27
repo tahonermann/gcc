@@ -371,6 +371,10 @@ func (b *intWithPtrMarshalText) UnmarshalText(data []byte) error {
 	return (*intWithMarshalText)(b).UnmarshalText(data)
 }
 
+type mapStringToStringData struct {
+	Data map[string]string `json:"data"`
+}
+
 type unmarshalTest struct {
 	in                    string
 	ptr                   interface{}
@@ -401,6 +405,7 @@ var unmarshalTests = []unmarshalTest{
 	{in: `"invalid: \uD834x\uDD1E"`, ptr: new(string), out: "invalid: \uFFFDx\uFFFD"},
 	{in: "null", ptr: new(interface{}), out: nil},
 	{in: `{"X": [1,2,3], "Y": 4}`, ptr: new(T), out: T{Y: 4}, err: &UnmarshalTypeError{"array", reflect.TypeOf(""), 7, "T", "X"}},
+	{in: `{"X": 23}`, ptr: new(T), out: T{}, err: &UnmarshalTypeError{"number", reflect.TypeOf(""), 8, "T", "X"}}, {in: `{"x": 1}`, ptr: new(tx), out: tx{}},
 	{in: `{"x": 1}`, ptr: new(tx), out: tx{}},
 	{in: `{"x": 1}`, ptr: new(tx), err: fmt.Errorf("json: unknown field \"x\""), disallowUnknownFields: true},
 	{in: `{"F1":1,"F2":2,"F3":3}`, ptr: new(V), out: V{F1: float64(1), F2: int32(2), F3: Number("3")}},
@@ -615,9 +620,9 @@ var unmarshalTests = []unmarshalTest{
 		out: S5{S8: S8{S9: S9{Y: 2}}},
 	},
 	{
-		in:  `{"X": 1,"Y":2}`,
-		ptr: new(S5),
-		err: fmt.Errorf("json: unknown field \"X\""),
+		in:                    `{"X": 1,"Y":2}`,
+		ptr:                   new(S5),
+		err:                   fmt.Errorf("json: unknown field \"X\""),
 		disallowUnknownFields: true,
 	},
 	{
@@ -626,9 +631,9 @@ var unmarshalTests = []unmarshalTest{
 		out: S10{S13: S13{S8: S8{S9: S9{Y: 2}}}},
 	},
 	{
-		in:  `{"X": 1,"Y":2}`,
-		ptr: new(S10),
-		err: fmt.Errorf("json: unknown field \"X\""),
+		in:                    `{"X": 1,"Y":2}`,
+		ptr:                   new(S10),
+		err:                   fmt.Errorf("json: unknown field \"X\""),
 		disallowUnknownFields: true,
 	},
 
@@ -835,8 +840,8 @@ var unmarshalTests = []unmarshalTest{
 			"Q": 18,
 			"extra": true
 		}`,
-		ptr: new(Top),
-		err: fmt.Errorf("json: unknown field \"extra\""),
+		ptr:                   new(Top),
+		err:                   fmt.Errorf("json: unknown field \"extra\""),
 		disallowUnknownFields: true,
 	},
 	{
@@ -862,9 +867,21 @@ var unmarshalTests = []unmarshalTest{
 			"Z": 17,
 			"Q": 18
 		}`,
-		ptr: new(Top),
-		err: fmt.Errorf("json: unknown field \"extra\""),
+		ptr:                   new(Top),
+		err:                   fmt.Errorf("json: unknown field \"extra\""),
 		disallowUnknownFields: true,
+	},
+	// issue 26444
+	// UnmarshalTypeError without field & struct values
+	{
+		in:  `{"data":{"test1": "bob", "test2": 123}}`,
+		ptr: new(mapStringToStringData),
+		err: &UnmarshalTypeError{Value: "number", Type: reflect.TypeOf(""), Offset: 37, Struct: "mapStringToStringData", Field: "data"},
+	},
+	{
+		in:  `{"data":{"test1": 123, "test2": "bob"}}`,
+		ptr: new(mapStringToStringData),
+		err: &UnmarshalTypeError{Value: "number", Type: reflect.TypeOf(""), Offset: 21, Struct: "mapStringToStringData", Field: "data"},
 	},
 }
 
@@ -2089,10 +2106,14 @@ func TestInvalidStringOption(t *testing.T) {
 	}
 }
 
-// Test unmarshal behavior with regards to embedded pointers to unexported structs.
-// If unallocated, this returns an error because unmarshal cannot set the field.
-// Issue 21357.
-func TestUnmarshalEmbeddedPointerUnexported(t *testing.T) {
+// Test unmarshal behavior with regards to embedded unexported structs.
+//
+// (Issue 21357) If the embedded struct is a pointer and is unallocated,
+// this returns an error because unmarshal cannot set the field.
+//
+// (Issue 24152) If the embedded struct is given an explicit name,
+// ensure that the normal unmarshal logic does not panic in reflect.
+func TestUnmarshalEmbeddedUnexported(t *testing.T) {
 	type (
 		embed1 struct{ Q int }
 		embed2 struct{ Q int }
@@ -2118,6 +2139,18 @@ func TestUnmarshalEmbeddedPointerUnexported(t *testing.T) {
 		S5 struct {
 			*embed3
 			R int
+		}
+		S6 struct {
+			embed1 `json:"embed1"`
+		}
+		S7 struct {
+			embed1 `json:"embed1"`
+			embed2
+		}
+		S8 struct {
+			embed1 `json:"embed1"`
+			embed2 `json:"embed2"`
+			Q      int
 		}
 	)
 
@@ -2154,6 +2187,32 @@ func TestUnmarshalEmbeddedPointerUnexported(t *testing.T) {
 		ptr: new(S5),
 		out: &S5{R: 2},
 		err: fmt.Errorf("json: cannot set embedded pointer to unexported struct: json.embed3"),
+	}, {
+		// Issue 24152, ensure decodeState.indirect does not panic.
+		in:  `{"embed1": {"Q": 1}}`,
+		ptr: new(S6),
+		out: &S6{embed1{1}},
+	}, {
+		// Issue 24153, check that we can still set forwarded fields even in
+		// the presence of a name conflict.
+		//
+		// This relies on obscure behavior of reflect where it is possible
+		// to set a forwarded exported field on an unexported embedded struct
+		// even though there is a name conflict, even when it would have been
+		// impossible to do so according to Go visibility rules.
+		// Go forbids this because it is ambiguous whether S7.Q refers to
+		// S7.embed1.Q or S7.embed2.Q. Since embed1 and embed2 are unexported,
+		// it should be impossible for an external package to set either Q.
+		//
+		// It is probably okay for a future reflect change to break this.
+		in:  `{"embed1": {"Q": 1}, "Q": 2}`,
+		ptr: new(S7),
+		out: &S7{embed1{1}, embed2{2}},
+	}, {
+		// Issue 24153, similar to the S7 case.
+		in:  `{"embed1": {"Q": 1}, "embed2": {"Q": 2}, "Q": 3}`,
+		ptr: new(S8),
+		out: &S8{embed1{1}, embed2{2}, 3},
 	}}
 
 	for i, tt := range tests {
@@ -2165,4 +2224,18 @@ func TestUnmarshalEmbeddedPointerUnexported(t *testing.T) {
 			t.Errorf("#%d: mismatch\ngot:  %#+v\nwant: %#+v", i, tt.ptr, tt.out)
 		}
 	}
+}
+
+type unmarshalPanic struct{}
+
+func (unmarshalPanic) UnmarshalJSON([]byte) error { panic(0xdead) }
+
+func TestUnmarshalPanic(t *testing.T) {
+	defer func() {
+		if got := recover(); !reflect.DeepEqual(got, 0xdead) {
+			t.Errorf("panic() = (%T)(%v), want 0xdead", got, got)
+		}
+	}()
+	Unmarshal([]byte("{}"), &unmarshalPanic{})
+	t.Fatalf("Unmarshal should have panicked")
 }

@@ -290,7 +290,7 @@ do {						\
 
 #undef ASM_OUTPUT_ALIGN
 #define ASM_OUTPUT_ALIGN(FILE,LOG)	\
-    if ((LOG)!=0) fprintf ((FILE), "\t.align %d\n", 1<<(LOG))
+    if ((LOG) != 0) fprintf ((FILE), "\t.align %d\n", 1 << (LOG))
 
 /* Windows uses explicit import from shared libraries.  */
 #define MULTIPLE_SYMBOL_SPACES 1
@@ -312,9 +312,26 @@ do {						\
 #define ASM_DECLARE_FUNCTION_NAME(FILE, NAME, DECL) \
   i386_pe_start_function (FILE, NAME, DECL)
 
+/* Write the extra assembler code needed to declare the name of a
+   cold function partition properly.  */
+
+#undef ASM_DECLARE_COLD_FUNCTION_NAME
+#define ASM_DECLARE_COLD_FUNCTION_NAME(FILE, NAME, DECL)	\
+  do								\
+    {								\
+      i386_pe_declare_function_type (FILE, NAME, 0);		\
+      i386_pe_seh_cold_init (FILE, NAME);			\
+      ASM_OUTPUT_LABEL (FILE, NAME);				\
+    }								\
+  while (0)
+
 #undef ASM_DECLARE_FUNCTION_SIZE
 #define ASM_DECLARE_FUNCTION_SIZE(FILE,NAME,DECL) \
   i386_pe_end_function (FILE, NAME, DECL)
+
+#undef ASM_DECLARE_COLD_FUNCTION_SIZE
+#define ASM_DECLARE_COLD_FUNCTION_SIZE(FILE,NAME,DECL) \
+  i386_pe_end_cold_function (FILE, NAME, DECL)
 
 /* Add an external function to the list of functions to be declared at
    the end of the file.  */
@@ -339,6 +356,12 @@ do {						\
 #undef TARGET_ASM_FILE_END
 #define TARGET_ASM_FILE_END i386_pe_file_end
 
+/* Kludge because of missing PE-COFF support for early LTO debug.  */
+#undef  TARGET_ASM_LTO_START
+#define TARGET_ASM_LTO_START i386_pe_asm_lto_start
+#undef  TARGET_ASM_LTO_END
+#define TARGET_ASM_LTO_END i386_pe_asm_lto_end
+
 #undef ASM_COMMENT_START
 #define ASM_COMMENT_START " #"
 
@@ -354,9 +377,6 @@ do {						\
 #define DWARF2_UNWIND_INFO 0
 #endif
 #endif
-
-/* Don't assume anything about the header files.  */
-#define NO_IMPLICIT_EXTERN_C
 
 #undef PROFILE_HOOK
 #define PROFILE_HOOK(LABEL)						\
@@ -468,3 +488,7 @@ do {						\
 
 /* Static stack checking is supported by means of probes.  */
 #define STACK_CHECK_STATIC_BUILTIN 1
+
+#ifndef HAVE_GAS_ALIGNED_COMM
+# define HAVE_GAS_ALIGNED_COMM 0
+#endif

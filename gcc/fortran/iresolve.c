@@ -698,7 +698,7 @@ is_trig_resolved (gfc_expr *f)
   /* We know we've already resolved the function if we see the lib call
      starting with '__'.  */
   return (f->value.function.name != NULL
-	  && strncmp ("__", f->value.function.name, 2) == 0);
+	  && gfc_str_startswith (f->value.function.name, "__"));
 }
 
 /* Return a shallow copy of the function expression f.  The original expression
@@ -1488,16 +1488,6 @@ gfc_resolve_ishftc (gfc_expr *f, gfc_expr *i, gfc_expr *shift, gfc_expr *size)
   f->ts = i->ts;
   f->value.function.name
     = gfc_get_string ("__ishftc_%d_%d_%d", i->ts.kind, shift->ts.kind, s_kind);
-}
-
-
-void
-gfc_resolve_kill (gfc_expr *f, gfc_expr *p ATTRIBUTE_UNUSED,
-		  gfc_expr *s ATTRIBUTE_UNUSED)
-{
-  f->ts.type = BT_INTEGER;
-  f->ts.kind = gfc_default_integer_kind;
-  f->value.function.name = gfc_get_string (PREFIX ("kill_i%d"), f->ts.kind);
 }
 
 
@@ -3414,6 +3404,17 @@ gfc_resolve_mvbits (gfc_code *c)
 }
 
 
+/* Set up the call to RANDOM_INIT.  */ 
+
+void
+gfc_resolve_random_init (gfc_code *c)
+{
+  const char *name;
+  name = gfc_get_string (PREFIX ("random_init"));
+  c->resolved_sym = gfc_get_intrinsic_sub_symbol (name);
+}
+
+
 void
 gfc_resolve_random_number (gfc_code *c)
 {
@@ -3446,28 +3447,13 @@ gfc_resolve_rename_sub (gfc_code *c)
   const char *name;
   int kind;
 
+  /* Find the type of status.  If not present use default integer kind.  */
   if (c->ext.actual->next->next->expr != NULL)
     kind = c->ext.actual->next->next->expr->ts.kind;
   else
     kind = gfc_default_integer_kind;
 
   name = gfc_get_string (PREFIX ("rename_i%d_sub"), kind);
-  c->resolved_sym = gfc_get_intrinsic_sub_symbol (name);
-}
-
-
-void
-gfc_resolve_kill_sub (gfc_code *c)
-{
-  const char *name;
-  int kind;
-
-  if (c->ext.actual->next->next->expr != NULL)
-    kind = c->ext.actual->next->next->expr->ts.kind;
-  else
-    kind = gfc_default_integer_kind;
-
-  name = gfc_get_string (PREFIX ("kill_i%d_sub"), kind);
   c->resolved_sym = gfc_get_intrinsic_sub_symbol (name);
 }
 

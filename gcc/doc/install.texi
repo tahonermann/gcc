@@ -366,7 +366,7 @@ download_prerequisites installs.
 @item MPFR Library version 2.4.2 (or later)
 
 Necessary to build GCC@.  It can be downloaded from
-@uref{http://www.mpfr.org/}.  If an MPFR source distribution is found
+@uref{https://www.mpfr.org}.  If an MPFR source distribution is found
 in a subdirectory of your GCC sources named @file{mpfr}, it will be
 built together with GCC.  Alternatively, if MPFR is already installed
 but it is not in your default library search path, the
@@ -378,7 +378,7 @@ download_prerequisites installs.
 @item MPC Library version 0.8.1 (or later)
 
 Necessary to build GCC@.  It can be downloaded from
-@uref{http://www.multiprecision.org/}.  If an MPC source distribution
+@uref{http://www.multiprecision.org/mpc/}.  If an MPC source distribution
 is found in a subdirectory of your GCC sources named @file{mpc}, it
 will be built together with GCC.  Alternatively, if MPC is already
 installed but it is not in your default library search path, the
@@ -1044,6 +1044,10 @@ virtual calls in verifiable mode at all.  However the libvtv library will
 still be built (see @option{--disable-libvtv} to turn off building libvtv).
 @option{--disable-vtable-verify} is the default.
 
+@item --disable-gcov
+Specify that the run-time library used for coverage analysis
+and associated host tools should not be built.
+
 @item --disable-multilib
 Specify that multiple target
 libraries to support different target variants, calling
@@ -1072,8 +1076,8 @@ sysv, aix.
 @itemx --without-multilib-list
 Specify what multilibs to build.  @var{list} is a comma separated list of
 values, possibly consisting of a single value.  Currently only implemented
-for arm*-*-*, sh*-*-* and x86-64-*-linux*.  The accepted values and meaning
-for each target is given below.
+for arm*-*-*, riscv*-*-*, sh*-*-* and x86-64-*-linux*.  The accepted
+values and meaning for each target is given below.
 
 @table @code
 @item arm*-*-*
@@ -1127,6 +1131,13 @@ and @code{rmprofile}.
 @code{-mfloat-abi=softfp}@*
 @code{-mfloat-abi=hard}
 @end multitable
+
+@item riscv*-*-*
+@var{list} is a single ABI name.  The target architecture must be either
+@code{rv32gc} or @code{rv64gc}.  This will build a single multilib for the
+specified architecture and ABI pair.  If @code{--with-multilib-list} is not
+given, then a default set of multilibs is selected based on the value of
+@option{--target}.  This is usually a large set of multilibs.
 
 @item sh*-*-*
 @var{list} is a comma separated list of CPU names.  These must be of the
@@ -1402,6 +1413,11 @@ On MIPS targets, make use of copy relocations and PLTs.
 These features are extensions to the traditional
 SVR4-based MIPS ABIs and require support from GNU binutils
 and the runtime C library.
+
+@item --with-stack-clash-protection-guard-size=@var{size}
+On certain targets this option sets the default stack clash protection guard
+size as a power of two in bytes.  On AArch64 @var{size} is required to be either
+12 (4KB) or 16 (64KB).
 
 @item --enable-__cxa_atexit
 Define if you want to use __cxa_atexit, rather than atexit, to
@@ -1717,6 +1733,14 @@ Using the GNU Compiler Collection (GCC)},
 @ifhtml
 See ``i386 and x86-64 Options'' in the main manual
 @end ifhtml
+
+@item --enable-large-address-aware
+The @option{--enable-large-address-aware} option arranges for MinGW
+executables to be linked using the @option{--large-address-aware}
+option, that enables the use of more than 2GB of memory.  If GCC is
+configured with this option, its effects can be reversed by passing the
+@option{-Wl,--disable-large-address-aware} option to the so-configured
+compiler driver.
 
 @item --enable-win32-registry
 @itemx --enable-win32-registry=@var{key}
@@ -2103,10 +2127,11 @@ instrumentation, see @option{-fcf-protection} option.  When
 to add @option{-fcf-protection} and, if needed, other target
 specific options to a set of building options.
 
-The option is enabled by default on Linux/x86 if target binutils
-supports @code{Intel CET} instructions.  In this case the target
-libraries are configured to get additional @option{-fcf-protection}
-and @option{-mcet} options.
+The option is disabled by default.  When @code{--enable-cet=auto}
+is used, it is enabled on Linux/x86 if target binutils
+supports @code{Intel CET} instructions and disabled otherwise.
+In this case the target libraries are configured to get additional
+@option{-fcf-protection} option.
 @end table
 
 @subheading Cross-Compiler-Specific Options
@@ -2518,7 +2543,7 @@ must be used along with @code{bootstrap-debug-lean} and
 @item @samp{bootstrap-cet}
 This option enables Intel CET for host tools during bootstrapping.
 @samp{BUILD_CONFIG=bootstrap-cet} is equivalent to adding
-@option{-fcf-protection -mcet} to @samp{BOOT_CFLAGS}.  This option
+@option{-fcf-protection} to @samp{BOOT_CFLAGS}.  This option
 assumes that the host supports Intel CET (e.g. GNU assembler version
 2.30 or later).
 
@@ -4205,11 +4230,11 @@ Instead of GNU binutils, you will need to install
 Tell GCC where to find it:
 @option{--with-build-time-tools=[install-nvptx-tools]/nvptx-none/bin}.
 
-A nvptx port of newlib is available at
-@uref{https://github.com/MentorEmbedded/nvptx-newlib/,,nvptx-newlib}.
-It can be automatically built together with GCC@.  For this, add a
-symbolic link to nvptx-newlib's @file{newlib} directory to the
-directory containing the GCC sources.
+You will need newlib 3.0 git revision
+cd31fbb2aea25f94d7ecedc9db16dfc87ab0c316 or later.  It can be
+automatically built together with GCC@.  For this, add a symbolic link
+to nvptx-newlib's @file{newlib} directory to the directory containing
+the GCC sources.
 
 Use the @option{--disable-sjlj-exceptions} and
 @option{--enable-newlib-io-long-long} options when configuring.
@@ -4383,9 +4408,11 @@ supported as cross-compilation target only.
 @c alone is too unspecific and must be avoided.
 @anchor{x-x-solaris2}
 @heading *-*-solaris2*
-Support for Solaris 9 has been removed in GCC 5.  Support for Solaris
-8 has been removed in GCC 4.8.  Support for Solaris 7 has been removed
-in GCC 4.6.
+Support for Solaris 10 has been obsoleted in GCC 9, but can still be
+enabled by configuring with @option{--enable-obsolete}.  Support will be
+removed in GCC 10.  Support for Solaris 9 has been removed in GCC 5.
+Support for Solaris 8 has been removed in GCC 4.8.  Support for Solaris
+7 has been removed in GCC 4.6.
 
 Sun does not ship a C compiler with Solaris 2 before Solaris 10, though
 you can download the Sun Studio compilers for free.  In Solaris 10 and

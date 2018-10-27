@@ -30,6 +30,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #include <string.h>
 #include <ctype.h>
 #include <assert.h>
+#include "async.h"
 
 typedef unsigned char uchar;
 
@@ -42,6 +43,7 @@ typedef unsigned char uchar;
 void
 set_integer (void *dest, GFC_INTEGER_LARGEST value, int length)
 {
+  NOTE ("set_integer: %lld %p", (long long int) value, dest);
   switch (length)
     {
 #ifdef HAVE_GFC_INTEGER_16
@@ -1093,7 +1095,7 @@ exponent:
   if (w == 0)
     {
       /* Extension: allow default exponent of 0 when omitted.  */
-      if (dtp->common.flags & IOPARM_DT_DEFAULT_EXP)
+      if (dtp->common.flags & IOPARM_DT_DEC_EXT)
 	goto done;
       else
 	goto bad_float;

@@ -111,13 +111,21 @@ mark_use (tree expr, bool rvalue_p, bool read_p,
     {
     case VAR_DECL:
     case PARM_DECL:
-      if (rvalue_p && is_capture_proxy_with_ref (expr))
+      if (rvalue_p && is_normal_capture_proxy (expr))
 	{
 	  /* Look through capture by copy.  */
 	  tree cap = DECL_CAPTURED_VARIABLE (expr);
 	  if (TREE_CODE (TREE_TYPE (cap)) == TREE_CODE (TREE_TYPE (expr))
 	      && decl_constant_var_p (cap))
-	    return RECUR (cap);
+	    {
+	      tree val = RECUR (cap);
+	      if (!is_capture_proxy (val))
+		{
+		  tree l = current_lambda_expr ();
+		  LAMBDA_EXPR_CAPTURE_OPTIMIZED (l) = true;
+		}
+	      return val;
+	    }
 	}
       if (outer_automatic_var_p (expr)
 	  && decl_constant_var_p (expr))
@@ -131,9 +139,12 @@ mark_use (tree expr, bool rvalue_p, bool read_p,
 		  break;
 		}
 	    }
+	  temp_override<location_t> l (input_location);
+	  if (loc != UNKNOWN_LOCATION)
+	    input_location = loc;
 	  expr = process_outer_var_ref (expr, tf_warning_or_error, true);
 	  if (!(TREE_TYPE (oexpr)
-		&& TREE_CODE (TREE_TYPE (oexpr)) == REFERENCE_TYPE))
+		&& TYPE_REF_P (TREE_TYPE (oexpr))))
 	    expr = convert_from_reference (expr);
 	}
       break;
@@ -154,19 +165,35 @@ mark_use (tree expr, bool rvalue_p, bool read_p,
 	{
 	  /* Try to look through the reference.  */
 	  tree ref = TREE_OPERAND (expr, 0);
-	  if (rvalue_p && is_capture_proxy_with_ref (ref))
+	  if (rvalue_p && is_normal_capture_proxy (ref))
 	    {
 	      /* Look through capture by reference.  */
 	      tree cap = DECL_CAPTURED_VARIABLE (ref);
-	      if (TREE_CODE (TREE_TYPE (cap)) != REFERENCE_TYPE
+	      if (!TYPE_REF_P (TREE_TYPE (cap))
 		  && decl_constant_var_p (cap))
-		return RECUR (cap);
+		{
+		  tree val = RECUR (cap);
+		  if (!is_capture_proxy (val))
+		    {
+		      tree l = current_lambda_expr ();
+		      LAMBDA_EXPR_CAPTURE_OPTIMIZED (l) = true;
+		    }
+		  return val;
+		}
 	    }
 	  tree r = mark_rvalue_use (ref, loc, reject_builtin);
 	  if (r != ref)
 	    expr = convert_from_reference (r);
 	}
       break;
+
+    CASE_CONVERT:
+    case VIEW_CONVERT_EXPR:
+      if (location_wrapper_p (expr))
+	loc = EXPR_LOCATION (expr);
+      recurse_op[0] = true;
+      break;
+
     default:
       break;
     }
@@ -326,7 +353,13 @@ fold_for_warn (tree x)
   /* It's not generally safe to fully fold inside of a template, so
      call fold_non_dependent_expr instead.  */
   if (processing_template_decl)
-    return fold_non_dependent_expr (x);
+    {
+      tree f = fold_non_dependent_expr (x, tf_none);
+      if (f == error_mark_node)
+	return x;
+      else
+	return f;
+    }
 
   return c_fully_fold (x, /*for_init*/false, /*maybe_constp*/NULL);
 }

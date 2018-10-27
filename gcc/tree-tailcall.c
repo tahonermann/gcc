@@ -476,12 +476,12 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
   tail_recursion = false;
   func = gimple_call_fndecl (call);
   if (func
-      && !DECL_BUILT_IN (func)
+      && !fndecl_built_in_p (func)
       && recursive_call_p (current_function_decl, func))
     {
       tree arg;
 
-      for (param = DECL_ARGUMENTS (func), idx = 0;
+      for (param = DECL_ARGUMENTS (current_function_decl), idx = 0;
 	   param && idx < gimple_call_num_args (call);
 	   param = DECL_CHAIN (param), idx ++)
 	{

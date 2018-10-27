@@ -588,7 +588,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
 #if __cplusplus > 201402L
       template<typename, typename, typename>
-	friend class _Hash_merge_helper;
+	friend class std::_Hash_merge_helper;
 
       template<typename _H2, typename _P2>
 	void
@@ -666,6 +666,17 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       size_type
       count(const key_type& __x) const
       { return _M_h.count(__x); }
+
+#if __cplusplus > 201703L
+      /**
+       *  @brief  Finds whether an element with the given key exists.
+       *  @param  __x  Key of elements to be located.
+       *  @return  True if there is any element with the specified key.
+       */
+      bool
+      contains(const key_type& __x) const
+      { return _M_h.find(__x) != _M_h.end(); }
+#endif
 
       //@{
       /**
@@ -1368,7 +1379,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
 #if __cplusplus > 201402L
       template<typename, typename, typename>
-	friend class _Hash_merge_helper;
+	friend class std::_Hash_merge_helper;
 
       template<typename _H2, typename _P2>
 	void
@@ -1444,6 +1455,17 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       size_type
       count(const key_type& __x) const
       { return _M_h.count(__x); }
+
+#if __cplusplus > 201703L
+      /**
+       *  @brief  Finds whether an element with the given key exists.
+       *  @param  __x  Key of elements to be located.
+       *  @return  True if there is any element with the specified key.
+       */
+      bool
+      contains(const key_type& __x) const
+      { return _M_h.find(__x) != _M_h.end(); }
+#endif
 
       //@{
       /**

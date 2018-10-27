@@ -205,6 +205,11 @@ no)	;;
 *)	gcc_gxx_include_dir=$with_gxx_include_dir ;;
 esac])
 
+# If both --with-sysroot and --with-gxx-include-dir are passed, we interpolate
+# the former in the latter and, upon success, compute gcc_gxx_include_dir as
+# relative to the sysroot.
+gcc_gxx_include_dir_add_sysroot=0
+
 # This logic must match libstdc++-v3/acinclude.m4:GLIBCXX_EXPORT_INSTALL_INFO.
 if test x${gcc_gxx_include_dir} = x; then
   if test x${enable_version_specific_runtime_libs} = xyes; then
@@ -216,15 +221,10 @@ if test x${gcc_gxx_include_dir} = x; then
     fi
     gcc_gxx_include_dir="\$(libsubdir)/\$(libsubdir_to_prefix)$libstdcxx_incdir"
   fi
-fi
-
-gcc_gxx_include_dir_add_sysroot=0
-if test "${with_sysroot+set}" = set; then
+elif test "${with_sysroot+set}" = set; then
   gcc_gxx_without_sysroot=`expr "${gcc_gxx_include_dir}" : "${with_sysroot}"'\(.*\)'`
   if test "${gcc_gxx_without_sysroot}"; then
-    if test x${with_sysroot} != x/; then
-      gcc_gxx_include_dir="${gcc_gxx_without_sysroot}"
-    fi
+    gcc_gxx_include_dir="${gcc_gxx_without_sysroot}"
     gcc_gxx_include_dir_add_sysroot=1
   fi
 fi
@@ -811,6 +811,29 @@ AC_MSG_RESULT($enable_multiarch$ma_msg_suffix)
 AC_SUBST(with_cpu)
 AC_SUBST(with_float)
 
+# default stack clash protection guard size as power of twos in bytes.
+# Please keep these in sync with params.def.
+stk_clash_min=12
+stk_clash_max=30
+
+# Keep the default value when the option is not used to 0, this allows us to
+# distinguish between the cases where the user specifially set a value via
+# configure and when the normal default value is used.
+AC_ARG_WITH(stack-clash-protection-guard-size,
+[AS_HELP_STRING([--with-stack-clash-protection-guard-size=size],
+[Set the default stack clash protection guard size for specific targets as a power of two in bytes.])],
+[DEFAULT_STK_CLASH_GUARD_SIZE="$with_stack_clash_protection_guard_size"], [DEFAULT_STK_CLASH_GUARD_SIZE=0])
+if test $DEFAULT_STK_CLASH_GUARD_SIZE -ne 0 \
+     && (test $DEFAULT_STK_CLASH_GUARD_SIZE -lt $stk_clash_min \
+	 || test $DEFAULT_STK_CLASH_GUARD_SIZE -gt $stk_clash_max); then
+  AC_MSG_ERROR(m4_normalize([
+		Invalid value $DEFAULT_STK_CLASH_GUARD_SIZE for --with-stack-clash-protection-guard-size. \
+		Must be between $stk_clash_min and $stk_clash_max.]))
+fi
+
+AC_DEFINE_UNQUOTED(DEFAULT_STK_CLASH_GUARD_SIZE, $DEFAULT_STK_CLASH_GUARD_SIZE,
+	[Define to larger than zero set the default stack clash protector size.])
+
 # Enable __cxa_atexit for C++.
 AC_ARG_ENABLE(__cxa_atexit,
 [AS_HELP_STRING([--enable-__cxa_atexit], [enable __cxa_atexit for C++])],
@@ -920,6 +943,11 @@ AC_ARG_ENABLE(shared,
   esac
 ], [enable_shared=yes])
 AC_SUBST(enable_shared)
+
+AC_ARG_ENABLE(gcov,
+[  --disable-gcov          don't provide libgcov and related host tools],
+[], [enable_gcov=yes])
+AC_SUBST(enable_gcov)
 
 AC_ARG_WITH(specs,
   [AS_HELP_STRING([--with-specs=SPECS],
@@ -1739,7 +1767,10 @@ changequote(,)dnl
 if test -f configargs.h ; then
 	# Being re-configured.
 	gcc_config_arguments=`grep configuration_arguments configargs.h | sed -e 's/.*"\([^"]*\)".*/\1/'`
-	gcc_config_arguments="$gcc_config_arguments : (reconfigured) $TOPLEVEL_CONFIGURE_ARGUMENTS"
+	gcc_reconf_arguments=`echo "$gcc_config_arguments" | sed -e 's/^.*\( : (reconfigured) .*$\)/\1/'`
+	if [ "$gcc_reconf_arguments" != " : (reconfigured) $TOPLEVEL_CONFIGURE_ARGUMENTS" ]; then
+		gcc_config_arguments="$gcc_config_arguments : (reconfigured) $TOPLEVEL_CONFIGURE_ARGUMENTS"
+	fi
 else
 	gcc_config_arguments="$TOPLEVEL_CONFIGURE_ARGUMENTS"
 fi
@@ -1820,6 +1851,13 @@ AS_IF([test x"$enable_mingw_wildcard" != xplatform ],
       [AC_DEFINE_UNQUOTED(MINGW_DOWILDCARD,
 		 $(test x"$enable_mingw_wildcard" = xno; echo $?),
 		 [Value to set mingw's _dowildcard to.])])
+
+AC_ARG_ENABLE(large-address-aware,
+[AS_HELP_STRING([--enable-large-address-aware],
+		[Link mingw executables with --large-address-aware])])
+AS_IF([test x"$enable_large_address_aware" = xyes],
+  [AC_DEFINE([MINGW_DEFAULT_LARGE_ADDR_AWARE], 1,
+    [Define if we should link mingw executables with --large-address-aware])])
 
 AC_ARG_ENABLE(leading-mingw64-underscores,
   AS_HELP_STRING([--enable-leading-mingw64-underscores],
@@ -2953,6 +2991,34 @@ if test $gcc_cv_as_eh_frame = buggy; then
   [Define if your assembler mis-optimizes .eh_frame data.])
 fi
 
+# Test if the assembler supports the section flag 'e' or #exclude for
+# specifying an excluded section.
+gcc_GAS_CHECK_FEATURE([section exclude flag], gcc_cv_as_section_exclude_e,
+ [2,22,51], [--fatal-warnings],
+ [.section foo1,"e"
+  .byte 0,0,0,0])
+if test $gcc_cv_as_section_exclude_e = no; then
+  case "${target}" in
+    # Solaris as uses #exclude instead.
+    *-*-solaris2*)
+      case "${target}" in
+	sparc*-*-solaris2*)
+	  conftest_s='.section "foo1", #exclude'
+	  ;;
+	i?86-*-solaris2* | x86_64-*-solaris2*)
+	  conftest_s='.section foo1, #exclude'
+	  ;;      
+      esac
+      ;;
+    esac
+  gcc_GAS_CHECK_FEATURE([section exclude flag], gcc_cv_as_section_exclude_hash,,,
+    [$conftest_s
+     .byte 0,0,0,0])
+fi
+AC_DEFINE_UNQUOTED(HAVE_GAS_SECTION_EXCLUDE,
+  [`if test $gcc_cv_as_section_exclude_e = yes || test $gcc_cv_as_section_exclude_hash = yes; then echo 1; else echo 0; fi`],
+[Define if your assembler supports specifying the exclude section flag.])
+
 gcc_GAS_CHECK_FEATURE(section merging support, gcc_cv_as_shf_merge,
  [elf,2,12,0], [--fatal-warnings],
  [.section .rodata.str, "aMS", @progbits, 1])
@@ -2972,6 +3038,28 @@ esac
 AC_DEFINE_UNQUOTED(HAVE_GAS_SHF_MERGE,
   [`if test $gcc_cv_as_shf_merge = yes; then echo 1; else echo 0; fi`],
 [Define 0/1 if your assembler supports marking sections with SHF_MERGE flag.])
+
+gcc_cv_ld_aligned_shf_merge=yes
+case "$target" in
+  # While Solaris 10/SPARC ld isn't affected, disable to avoid problems
+  # relinking on Solaris 11 < 11.4.
+  sparc*-*-solaris2.10*)
+    if test x"$gnu_ld" = xno; then
+      gcc_cv_ld_aligned_shf_merge=no
+    fi
+    ;;
+  # SHF_MERGE support is broken in Solaris ld up to Solaris 11.3/SPARC for
+  # alignment > 1.
+  sparc*-*-solaris2.11*)
+    if test x"$gnu_ld" = xno \
+       && test "$ld_vers_major" -lt 2 && test "$ld_vers_minor" -lt 3159; then
+      gcc_cv_ld_aligned_shf_merge=no
+    fi
+    ;;
+esac
+AC_DEFINE_UNQUOTED(HAVE_LD_ALIGNED_SHF_MERGE,
+  [`if test $gcc_cv_ld_aligned_shf_merge = yes; then echo 1; else echo 0; fi`],
+[Define 0/1 if your linker supports the SHF_MERGE flag with section alignment > 1.])
 
 gcc_GAS_CHECK_FEATURE([stabs directive], gcc_cv_as_stabs_directive, ,,
 [.stabs "gcc2_compiled.",60,0,0,0],,
@@ -3109,6 +3197,15 @@ case "${target}" in
     [Define 0/1 if your linker supports hidden thunks in linkonce sections.])
   ;;
 esac
+
+gcc_GAS_CHECK_FEATURE([line table is_stmt support],
+ gcc_cv_as_is_stmt,
+ [2,16,92],,
+[	.text
+	.file 1 "conf.c"
+	.loc 1 1 0 is_stmt 1],,
+[AC_DEFINE(HAVE_GAS_LOC_STMT, 1,
+  [Define if your assembler supports the .loc is_stmt sub-directive.])])
 
 gcc_GAS_CHECK_FEATURE([line table discriminator support],
  gcc_cv_as_discriminator,
@@ -3655,6 +3752,50 @@ if test x"$gcc_cv_ld_static_dynamic" = xyes; then
 fi
 AC_MSG_RESULT($gcc_cv_ld_static_dynamic)
 
+AC_MSG_CHECKING(linker --version-script option)
+gcc_cv_ld_version_script=no
+ld_version_script_option=''
+if test $in_tree_ld = yes || test x"$gnu_ld" = xyes; then
+  gcc_cv_ld_version_script=yes
+  ld_version_script_option='--version-script'
+elif test x$gcc_cv_ld != x; then
+  case "$target" in
+    # Solaris 2 ld always supports -M.  It also supports a subset of
+    # --version-script since Solaris 11.4, but requires
+    # -z gnu-version-script-compat to activate.
+    *-*-solaris2*)
+      gcc_cv_ld_version_script=yes
+      ld_version_script_option='-M'
+      ;;
+  esac
+fi
+# Don't AC_DEFINE result, only used in jit/Make-lang.in so far.
+AC_MSG_RESULT($gcc_cv_ld_version_script)
+AC_SUBST(ld_version_script_option)
+
+AC_MSG_CHECKING(linker soname option)
+gcc_cv_ld_soname=no
+if test $in_tree_ld = yes || test x"$gnu_ld" = xyes; then
+  gcc_cv_ld_soname=yes
+  ld_soname_option='-soname'
+elif test x$gcc_cv_ld != x; then
+  case "$target" in
+    *-*-darwin*)
+      gcc_cv_ld_soname=yes
+      ld_soname_option='-install_name'
+      ;;
+    # Solaris 2 ld always supports -h.  It also supports --soname for GNU
+    # ld compatiblity since some Solaris 10 update.
+    *-*-solaris2*)
+      gcc_cv_ld_soname=yes
+      ld_soname_option='-h'
+      ;;
+  esac
+fi
+# Don't AC_DEFINE result, only used in jit/Make-lang.in so far.
+AC_MSG_RESULT($gcc_cv_ld_soname)
+AC_SUBST(ld_soname_option)
+
 if test x"$demangler_in_ld" = xyes; then
   AC_MSG_CHECKING(linker --demangle support)
   gcc_cv_ld_demangle=no
@@ -4158,16 +4299,6 @@ foo:	nop
       [AC_DEFINE(HAVE_AS_XBRACE_COMMENT_OPTION, 1,
 		[Define if your assembler supports -xbrace_comment option.])])
 
-    # Test if the assembler supports the section flag 'e' for specifying
-    # an excluded section.
-    gcc_GAS_CHECK_FEATURE([.section with e], gcc_cv_as_section_has_e,
-      [2,22,51], [--fatal-warnings],
-[.section foo1,"e"
-.byte 0,0,0,0])
-    AC_DEFINE_UNQUOTED(HAVE_GAS_SECTION_EXCLUDE,
-      [`if test $gcc_cv_as_section_has_e = yes; then echo 1; else echo 0; fi`],
-      [Define if your assembler supports specifying the section flag e.])
-
     gcc_GAS_CHECK_FEATURE([filds and fists mnemonics],
        gcc_cv_as_ix86_filds,,,
        [filds (%ebp); fists (%ebp)],,
@@ -4445,51 +4576,6 @@ gd:
 	  [Define if your assembler supports mfcr field.])])
 
     case $target in
-      *-*-aix*) conftest_s='	.machine "pwr5"
-	.csect .text[[PR]]
-	popcntb 3,3';;
-      *) conftest_s='	.machine power5
-	.text
-	popcntb 3,3';;
-    esac
-
-    gcc_GAS_CHECK_FEATURE([popcntb support],
-      gcc_cv_as_powerpc_popcntb, [2,17,0],,
-      [$conftest_s],,
-      [AC_DEFINE(HAVE_AS_POPCNTB, 1,
-	  [Define if your assembler supports popcntb field.])])
-
-    case $target in
-      *-*-aix*) conftest_s='	.machine "pwr5x"
-	.csect .text[[PR]]
-	frin 1,1';;
-      *) conftest_s='	.machine power5
-	.text
-	frin 1,1';;
-    esac
-
-    gcc_GAS_CHECK_FEATURE([fp round support],
-      gcc_cv_as_powerpc_fprnd, [2,17,0],,
-      [$conftest_s],,
-      [AC_DEFINE(HAVE_AS_FPRND, 1,
-	  [Define if your assembler supports fprnd.])])
-
-    case $target in
-      *-*-aix*) conftest_s='	.machine "pwr6"
-	.csect .text[[PR]]
-	mffgpr 1,3';;
-      *) conftest_s='	.machine power6
-	.text
-	mffgpr 1,3';;
-    esac
-
-    gcc_GAS_CHECK_FEATURE([move fp gpr support],
-      gcc_cv_as_powerpc_mfpgpr, [2,19,2],,
-      [$conftest_s],,
-      [AC_DEFINE(HAVE_AS_MFPGPR, 1,
-	  [Define if your assembler supports mffgpr and mftgpr.])])
-
-    case $target in
       *-*-aix*) conftest_s='	.csect .text[[PR]]
 LCF..0:
 	addis 11,30,_GLOBAL_OFFSET_TABLE_-LCF..0@ha';;
@@ -4509,36 +4595,6 @@ LCF0:
 	  [Define if your assembler supports R_PPC_REL16 relocs.])])
 
     case $target in
-      *-*-aix*) conftest_s='	.machine "pwr6"
-	.csect .text[[PR]]
-	cmpb 3,4,5';;
-      *) conftest_s='	.machine power6
-	.text
-	cmpb 3,4,5';;
-    esac
-
-    gcc_GAS_CHECK_FEATURE([compare bytes support],
-      gcc_cv_as_powerpc_cmpb, [2,19,2], -a32,
-      [$conftest_s],,
-      [AC_DEFINE(HAVE_AS_CMPB, 1,
-	  [Define if your assembler supports cmpb.])])
-
-    case $target in
-      *-*-aix*) conftest_s='	.machine "pwr6"
-	.csect .text[[PR]]
-	dadd 1,2,3';;
-      *) conftest_s='	.machine power6
-	.text
-	dadd 1,2,3';;
-    esac
-
-    gcc_GAS_CHECK_FEATURE([decimal float support],
-      gcc_cv_as_powerpc_dfp, [2,19,2], -a32,
-      [$conftest_s],,
-      [AC_DEFINE(HAVE_AS_DFP, 1,
-	  [Define if your assembler supports DFP instructions.])])
-
-    case $target in
       *-*-aix*) conftest_s='	.machine "pwr7"
 	.csect .text[[PR]]
 	lxvd2x 1,2,3';;
@@ -4552,75 +4608,6 @@ LCF0:
       [$conftest_s],,
       [AC_DEFINE(HAVE_AS_VSX, 1,
 	  [Define if your assembler supports VSX instructions.])])
-
-    case $target in
-      *-*-aix*) conftest_s='	.machine "pwr7"
-	.csect .text[[PR]]
-	popcntd 3,3';;
-      *) conftest_s='	.machine power7
-	.text
-	popcntd 3,3';;
-    esac
-
-    gcc_GAS_CHECK_FEATURE([popcntd support],
-      gcc_cv_as_powerpc_popcntd, [2,19,2], -a32,
-      [$conftest_s],,
-      [AC_DEFINE(HAVE_AS_POPCNTD, 1,
-	  [Define if your assembler supports POPCNTD instructions.])])
-
-    case $target in
-      *-*-aix*) conftest_s='	.machine "pwr8"
-	.csect .text[[PR]]';;
-      *) conftest_s='	.machine power8
-	.text';;
-    esac
-
-    gcc_GAS_CHECK_FEATURE([power8 support],
-      gcc_cv_as_powerpc_power8, [2,19,2], -a32,
-      [$conftest_s],,
-      [AC_DEFINE(HAVE_AS_POWER8, 1,
-	  [Define if your assembler supports POWER8 instructions.])])
-
-    case $target in
-      *-*-aix*) conftest_s='	.machine "pwr9"
-	.csect .text[[PR]]';;
-      *) conftest_s='	.machine power9
-	.text';;
-    esac
-
-    gcc_GAS_CHECK_FEATURE([power9 support],
-      gcc_cv_as_powerpc_power9, [2,19,2], -a32,
-      [$conftest_s],,
-      [AC_DEFINE(HAVE_AS_POWER9, 1,
-	  [Define if your assembler supports POWER9 instructions.])])
-
-    case $target in
-      *-*-aix*) conftest_s='	.csect .text[[PR]]
-	lwsync';;
-      *) conftest_s='	.text
-	lwsync';;
-    esac
-
-    gcc_GAS_CHECK_FEATURE([lwsync support],
-      gcc_cv_as_powerpc_lwsync, [2,19,2], -a32,
-      [$conftest_s],,
-      [AC_DEFINE(HAVE_AS_LWSYNC, 1,
-	  [Define if your assembler supports LWSYNC instructions.])])
-
-    case $target in
-      *-*-aix*) conftest_s='	.machine "476"
-	.csect .text[[PR]]
-	dci 0';;
-      *) conftest_s='	.machine "476"
-	.text
-	dci 0';;
-    esac
-
-    gcc_GAS_CHECK_FEATURE([data cache invalidate support],
-      gcc_cv_as_powerpc_dci, [9,99,0], -a32,
-      [$conftest_s],,
-      [AC_DEFINE(HAVE_AS_DCI, 1,
-	  [Define if your assembler supports the DCI/ICI instructions.])])
 
     gcc_GAS_CHECK_FEATURE([.gnu_attribute support],
       gcc_cv_as_powerpc_gnu_attribute, [2,18,0],,
@@ -4865,7 +4852,7 @@ esac
 # ??? Once 2.11 is released, probably need to add first known working
 # version to the per-target configury.
 case "$cpu_type" in
-  aarch64 | alpha | arc | arm | avr | bfin | cris | i386 | m32c | m68k \
+  aarch64 | alpha | arc | arm | avr | bfin | cris | csky | i386 | m32c | m68k \
   | microblaze | mips | nios2 | pa | riscv | rs6000 | score | sparc | spu \
   | tilegx | tilepro | visium | xstormy16 | xtensa)
     insn="nop"
@@ -5473,11 +5460,25 @@ if test $in_tree_ld = yes ; then
   if test "$gcc_cv_gld_major_version" -eq 2 -a "$gcc_cv_gld_minor_version" -ge 16 -o "$gcc_cv_gld_major_version" -gt 2 \
      && test $in_tree_ld_is_elf = yes; then
     gcc_cv_ld_as_needed=yes
+    if test "$gcc_cv_gld_major_version" -eq 2 -a "$gcc_cv_gld_minor_version" -ge 28; then
+      gcc_cv_ld_as_needed_option='--push-state --as-needed'
+      gcc_cv_ld_no_as_needed_option='--pop-state'
+    fi
   fi
 elif test x$gcc_cv_ld != x; then
   # Check if linker supports --as-needed and --no-as-needed options
   if $gcc_cv_ld --help 2>&1 | grep as-needed > /dev/null; then
     gcc_cv_ld_as_needed=yes
+    if $gcc_cv_ld --help 2>&1 | grep push-state > /dev/null \
+       && $gcc_cv_ld --help 2>&1 | grep pop-state > /dev/null \
+       && echo "$ld_ver" | grep GNU > /dev/null \
+       && test "$ld_vers_major" -eq 2 -a "$ld_vers_minor" -ge 28; then
+      # Use these options only when both ld.bfd and ld.gold support
+      # --push-state/--pop-state, which unfortunately wasn't added
+      # at the same time.
+      gcc_cv_ld_as_needed_option='--push-state --as-needed'
+      gcc_cv_ld_no_as_needed_option='--pop-state'
+    fi
   fi
   case "$target:$gnu_ld" in
     *-*-solaris2*:no)
@@ -6215,6 +6216,12 @@ do
 	check_languages="$check_languages check-$language"
 done
 
+selftest_languages=
+for language in $all_selected_languages
+do
+	selftest_languages="$selftest_languages selftest-$language"
+done
+
 # We link each language in with a set of hooks, reached indirectly via
 # lang.${target}.  Only do so for selected languages.
 
@@ -6298,6 +6305,7 @@ AC_SUBST(build_xm_include_list)
 AC_SUBST(build_xm_defines)
 AC_SUBST(build_file_translate)
 AC_SUBST(check_languages)
+AC_SUBST(selftest_languages)
 AC_SUBST(cpp_install_dir)
 AC_SUBST(xmake_file)
 AC_SUBST(tmake_file)
@@ -6455,8 +6463,10 @@ AC_DEFINE_UNQUOTED(DIAGNOSTICS_COLOR_DEFAULT, $DIAGNOSTICS_COLOR_DEFAULT,
 
 # Generate gcc-driver-name.h containing GCC_DRIVER_NAME for the benefit
 # of jit/jit-playback.c.
+gcc_driver_version=`eval "${get_gcc_base_ver} $srcdir/BASE-VER"`
+echo "gcc_driver_version: ${gcc_driver_version}"
 cat > gcc-driver-name.h <<EOF
-#define GCC_DRIVER_NAME "${target_noncanonical}-gcc-${gcc_BASEVER}${exeext}"
+#define GCC_DRIVER_NAME "${target_noncanonical}-gcc-${gcc_driver_version}${exeext}"
 EOF
 
 # Check whether --enable-default-pie was given.

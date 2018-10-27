@@ -357,7 +357,7 @@ extern bool loop_exit_edge_p (const struct loop *, const_edge);
 extern bool loop_exits_to_bb_p (struct loop *, basic_block);
 extern bool loop_exits_from_bb_p (struct loop *, basic_block);
 extern void mark_loop_exit_edges (void);
-extern location_t get_loop_location (struct loop *loop);
+extern dump_user_location_t get_loop_location (struct loop *loop);
 
 /* Loops & cfg manipulation.  */
 extern basic_block *get_loop_body (const struct loop *);
@@ -388,7 +388,7 @@ extern void verify_loop_structure (void);
 /* Loop analysis.  */
 extern bool just_once_each_iteration_p (const struct loop *, const_basic_block);
 gcov_type expected_loop_iterations_unbounded (const struct loop *,
-					      bool *read_profile_p = NULL);
+					      bool *read_profile_p = NULL, bool by_profile_only = false);
 extern unsigned expected_loop_iterations (struct loop *);
 extern rtx doloop_condition_get (rtx_insn *);
 

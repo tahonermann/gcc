@@ -65,7 +65,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-dfa.h"
 #include "cfgloop.h"
 #include "tree-scalar-evolution.h"
-#include "tree-chkp.h"
 #include "tree-ssa-propagate.h"
 #include "gimple-fold.h"
 
@@ -196,7 +195,7 @@ mark_stmt_if_obviously_necessary (gimple *stmt, bool aggressive)
      throw.  If a statement could throw, it can be deemed necessary.  */
   if (cfun->can_throw_non_call_exceptions
       && !cfun->can_delete_dead_exceptions
-      && stmt_could_throw_p (stmt))
+      && stmt_could_throw_p (cfun, stmt))
     {
       mark_stmt_necessary (stmt, true);
       return;
@@ -225,7 +224,7 @@ mark_stmt_if_obviously_necessary (gimple *stmt, bool aggressive)
       {
 	tree callee = gimple_call_fndecl (stmt);
 	if (callee != NULL_TREE
-	    && DECL_BUILT_IN_CLASS (callee) == BUILT_IN_NORMAL)
+	    && fndecl_built_in_p (callee, BUILT_IN_NORMAL))
 	  switch (DECL_FUNCTION_CODE (callee))
 	    {
 	    case BUILT_IN_MALLOC:
@@ -474,7 +473,7 @@ mark_aliased_reaching_defs_necessary_1 (ao_ref *ref, tree vdef, void *data)
          ???  We only need to care about the RHS throwing.  For aggregate
 	 assignments or similar calls and non-call exceptions the LHS
 	 might throw as well.  */
-      && !stmt_can_throw_internal (def_stmt))
+      && !stmt_can_throw_internal (cfun, def_stmt))
     {
       tree base, lhs = gimple_get_lhs (def_stmt);
       poly_int64 size, offset, max_size;
@@ -566,7 +565,7 @@ mark_all_reaching_defs_necessary_1 (ao_ref *ref ATTRIBUTE_UNUSED,
     {
       tree callee = gimple_call_fndecl (def_stmt);
       if (callee != NULL_TREE
-	  && DECL_BUILT_IN_CLASS (callee) == BUILT_IN_NORMAL)
+	  && fndecl_built_in_p (callee, BUILT_IN_NORMAL))
 	switch (DECL_FUNCTION_CODE (callee))
 	  {
 	  case BUILT_IN_MALLOC:
@@ -778,21 +777,7 @@ propagate_necessity (bool aggressive)
 		  && (DECL_FUNCTION_CODE (def_callee) == BUILT_IN_ALIGNED_ALLOC
 		      || DECL_FUNCTION_CODE (def_callee) == BUILT_IN_MALLOC
 		      || DECL_FUNCTION_CODE (def_callee) == BUILT_IN_CALLOC))
-		{
-		  gimple *bounds_def_stmt;
-		  tree bounds;
-
-		  /* For instrumented calls we should also check used
-		     bounds are returned by the same allocation call.  */
-		  if (!gimple_call_with_bounds_p (stmt)
-		      || ((bounds = gimple_call_arg (stmt, 1))
-			  && TREE_CODE (bounds) == SSA_NAME
-			  && (bounds_def_stmt = SSA_NAME_DEF_STMT (bounds))
-			  && chkp_gimple_call_builtin_p (bounds_def_stmt,
-							 BUILT_IN_CHKP_BNDRET)
-			  && gimple_call_arg (bounds_def_stmt, 0) == ptr))
-		    continue;
-		}
+		continue;
 	    }
 
 	  FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
@@ -1276,23 +1261,6 @@ eliminate_unnecessary_stmts (void)
 		      && !gimple_plf (def_stmt, STMT_NECESSARY))
 		    gimple_set_plf (stmt, STMT_NECESSARY, false);
 		}
-	      /* We did not propagate necessity for free calls fed
-		 by allocation function to allow unnecessary
-		 alloc-free sequence elimination.  For instrumented
-		 calls it also means we did not mark bounds producer
-		 as necessary and it is time to do it in case free
-		 call is not removed.  */
-	      if (gimple_call_with_bounds_p (stmt))
-		{
-		  gimple *bounds_def_stmt;
-		  tree bounds = gimple_call_arg (stmt, 1);
-		  gcc_assert (TREE_CODE (bounds) == SSA_NAME);
-		  bounds_def_stmt = SSA_NAME_DEF_STMT (bounds);
-		  if (bounds_def_stmt
-		      && !gimple_plf (bounds_def_stmt, STMT_NECESSARY))
-		    gimple_set_plf (bounds_def_stmt, STMT_NECESSARY,
-				    gimple_plf (stmt, STMT_NECESSARY));
-		}
 	    }
 
 	  /* If GSI is not necessary then remove it.  */
@@ -1341,9 +1309,7 @@ eliminate_unnecessary_stmts (void)
 			  && DECL_FUNCTION_CODE (call) != BUILT_IN_MALLOC
 			  && DECL_FUNCTION_CODE (call) != BUILT_IN_CALLOC
 			  && !ALLOCA_FUNCTION_CODE_P
-			      (DECL_FUNCTION_CODE (call))))
-		  /* Avoid doing so for bndret calls for the same reason.  */
-		  && !chkp_gimple_call_builtin_p (stmt, BUILT_IN_CHKP_BNDRET))
+			      (DECL_FUNCTION_CODE (call)))))
 		{
 		  something_changed = true;
 		  if (dump_file && (dump_flags & TDF_DETAILS))

@@ -113,6 +113,11 @@ gfc_arith_error (arith code)
       p =
 	_("Integer outside symmetric range implied by Standard Fortran at %L");
       break;
+    case ARITH_WRONGCONCAT:
+      p =
+	_("Illegal type in character concatenation at %L");
+      break;
+
     default:
       gfc_internal_error ("gfc_arith_error(): Bad error code");
     }
@@ -555,10 +560,10 @@ check_result (arith rc, gfc_expr *x, gfc_expr *r, gfc_expr **rp)
       val = ARITH_OK;
     }
 
-  if (val != ARITH_OK)
-    gfc_free_expr (r);
-  else
+  if (val == ARITH_OK || val == ARITH_OVERFLOW)
     *rp = r;
+  else
+    gfc_free_expr (r);
 
   return val;
 }
@@ -982,7 +987,12 @@ gfc_arith_concat (gfc_expr *op1, gfc_expr *op2, gfc_expr **resultp)
   gfc_expr *result;
   size_t len;
 
-  gcc_assert (op1->ts.kind == op2->ts.kind);
+  /* By cleverly playing around with constructors, is is possible
+     to get mismaching types here.  */
+  if (op1->ts.type != BT_CHARACTER || op2->ts.type != BT_CHARACTER
+      || op1->ts.kind != op2->ts.kind)
+    return ARITH_WRONGCONCAT;
+
   result = gfc_get_constant_expr (BT_CHARACTER, op1->ts.kind,
 				  &op1->where);
 
@@ -1603,8 +1613,12 @@ eval_intrinsic (gfc_intrinsic_op op,
   if (rc != ARITH_OK)
     {
       gfc_error (gfc_arith_error (rc), &op1->where);
+      if (rc == ARITH_OVERFLOW)
+	goto done;
       return NULL;
     }
+
+done:
 
   gfc_free_expr (op1);
   gfc_free_expr (op2);

@@ -55,6 +55,8 @@
    UNSPECV_CAS
    UNSPECV_XCHG
    UNSPECV_BARSYNC
+   UNSPECV_MEMBAR
+   UNSPECV_MEMBAR_CTA
    UNSPECV_DIM_POS
 
    UNSPECV_FORK
@@ -1099,14 +1101,14 @@
 (define_insn "trap"
   [(trap_if (const_int 1) (const_int 0))]
   ""
-  "trap;")
+  "trap; exit;")
 
 (define_insn "trap_if_true"
   [(trap_if (ne (match_operand:BI 0 "nvptx_register_operand" "R")
 		(const_int 0))
 	    (const_int 0))]
   ""
-  "%j0 trap;"
+  "%j0 trap; %j0 exit;"
   [(set_attr "predicable" "false")])
 
 (define_insn "trap_if_false"
@@ -1114,7 +1116,7 @@
 		(const_int 0))
 	    (const_int 0))]
   ""
-  "%J0 trap;"
+  "%J0 trap; %J0 exit;"
   [(set_attr "predicable" "false")])
 
 (define_expand "ctrap<mode>4"
@@ -1438,7 +1440,6 @@
 (define_code_iterator any_logic [and ior xor])
 (define_code_attr logic [(and "and") (ior "or") (xor "xor")])
 
-;; Currently disabled until we add better subtarget support - requires sm_32.
 (define_insn "atomic_fetch_<logic><mode>"
   [(set (match_operand:SDIM 1 "memory_operand" "+m")
 	(unspec_volatile:SDIM
@@ -1448,7 +1449,7 @@
 	  UNSPECV_LOCK))
    (set (match_operand:SDIM 0 "nvptx_register_operand" "=R")
 	(match_dup 1))]
-  "0"
+  "<MODE>mode == SImode || TARGET_SM35"
   "%.\\tatom%A1.b%T0.<logic>\\t%0, %1, %2;"
   [(set_attr "atomic" "true")])
 
@@ -1457,6 +1458,43 @@
 		    UNSPECV_BARSYNC)]
   ""
   "\\tbar.sync\\t%0;"
+  [(set_attr "predicable" "false")])
+
+(define_expand "memory_barrier"
+  [(set (match_dup 0)
+	(unspec_volatile:BLK [(match_dup 0)] UNSPECV_MEMBAR))]
+  ""
+{
+  operands[0] = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
+  MEM_VOLATILE_P (operands[0]) = 1;
+})
+
+;; Ptx defines the memory barriers membar.cta, membar.gl and membar.sys
+;; (corresponding to cuda functions threadfence_block, threadfence and
+;; threadfence_system).  For the insn memory_barrier we use membar.sys.  This
+;; may be overconservative, but before using membar.gl instead we'll need to
+;; explain in detail why it's safe to use.  For now, use membar.sys.
+(define_insn "*memory_barrier"
+  [(set (match_operand:BLK 0 "" "")
+	(unspec_volatile:BLK [(match_dup 0)] UNSPECV_MEMBAR))]
+  ""
+  "\\tmembar.sys;"
+  [(set_attr "predicable" "false")])
+
+(define_expand "nvptx_membar_cta"
+  [(set (match_dup 0)
+	(unspec_volatile:BLK [(match_dup 0)] UNSPECV_MEMBAR_CTA))]
+  ""
+{
+  operands[0] = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
+  MEM_VOLATILE_P (operands[0]) = 1;
+})
+
+(define_insn "*nvptx_membar_cta"
+  [(set (match_operand:BLK 0 "" "")
+	(unspec_volatile:BLK [(match_dup 0)] UNSPECV_MEMBAR_CTA))]
+  ""
+  "\\tmembar.cta;"
   [(set_attr "predicable" "false")])
 
 (define_insn "nvptx_nounroll"

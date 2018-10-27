@@ -259,11 +259,12 @@ package body Sem_Ch7 is
 
       procedure Hide_Public_Entities (Decls : List_Id) is
          function Has_Referencer
-           (Decls     : List_Id;
-            Top_Level : Boolean := False) return Boolean;
+           (Decls                                   : List_Id;
+            In_Nested_Instance                      : Boolean;
+            Has_Outer_Referencer_Of_Non_Subprograms : Boolean) return Boolean;
          --  A "referencer" is a construct which may reference a previous
          --  declaration. Examine all declarations in list Decls in reverse
-         --  and determine whether once such referencer exists. All entities
+         --  and determine whether one such referencer exists. All entities
          --  in the range Last (Decls) .. Referencer are hidden from external
          --  visibility.
 
@@ -286,14 +287,16 @@ package body Sem_Ch7 is
          --------------------
 
          function Has_Referencer
-           (Decls     : List_Id;
-            Top_Level : Boolean := False) return Boolean
+           (Decls                                   : List_Id;
+            In_Nested_Instance                      : Boolean;
+            Has_Outer_Referencer_Of_Non_Subprograms : Boolean) return Boolean
          is
             Decl    : Node_Id;
             Decl_Id : Entity_Id;
             Spec    : Node_Id;
 
-            Has_Non_Subprograms_Referencer : Boolean := False;
+            Has_Referencer_Of_Non_Subprograms : Boolean :=
+                                       Has_Outer_Referencer_Of_Non_Subprograms;
             --  Set if an inlined subprogram body was detected as a referencer.
             --  In this case, we do not return True immediately but keep hiding
             --  subprograms from external visibility.
@@ -319,13 +322,23 @@ package body Sem_Ch7 is
 
                elsif Nkind (Decl) = N_Package_Declaration then
                   Spec := Specification (Decl);
+                  Decl_Id := Defining_Entity (Spec);
 
                   --  Inspect the declarations of a non-generic package to try
                   --  and hide more entities from external visibility.
 
-                  if not Is_Generic_Unit (Defining_Entity (Spec)) then
-                     if Has_Referencer (Private_Declarations (Spec))
-                       or else Has_Referencer (Visible_Declarations (Spec))
+                  if not Is_Generic_Unit (Decl_Id) then
+                     if Has_Referencer (Private_Declarations (Spec),
+                                        In_Nested_Instance
+                                          or else
+                                        Is_Generic_Instance (Decl_Id),
+                                        Has_Referencer_Of_Non_Subprograms)
+                       or else
+                        Has_Referencer (Visible_Declarations (Spec),
+                                        In_Nested_Instance
+                                          or else
+                                        Is_Generic_Instance (Decl_Id),
+                                        Has_Referencer_Of_Non_Subprograms)
                      then
                         return True;
                      end if;
@@ -354,7 +367,12 @@ package body Sem_Ch7 is
                   --  Inspect the declarations of a non-generic package body to
                   --  try and hide more entities from external visibility.
 
-                  elsif Has_Referencer (Declarations (Decl)) then
+                  elsif Has_Referencer (Declarations (Decl),
+                                        In_Nested_Instance
+                                          or else
+                                        Is_Generic_Instance (Decl_Id),
+                                        Has_Referencer_Of_Non_Subprograms)
+                  then
                      return True;
                   end if;
 
@@ -382,7 +400,7 @@ package body Sem_Ch7 is
                      if Is_Inlined (Decl_Id)
                        or else Has_Pragma_Inline (Decl_Id)
                      then
-                        Has_Non_Subprograms_Referencer := True;
+                        Has_Referencer_Of_Non_Subprograms := True;
 
                         --  Inspect the statements of the subprogram body
                         --  to determine whether the body references other
@@ -401,7 +419,7 @@ package body Sem_Ch7 is
                      if Is_Inlined (Decl_Id)
                        or else Has_Pragma_Inline (Decl_Id)
                      then
-                        Has_Non_Subprograms_Referencer := True;
+                        Has_Referencer_Of_Non_Subprograms := True;
 
                         --  Inspect the statements of the subprogram body
                         --  to determine whether the body references other
@@ -423,17 +441,28 @@ package body Sem_Ch7 is
                      Discard : Boolean;
                      pragma Unreferenced (Discard);
                   begin
-                     --  Inspect the actions to find references to subprograms
+                     --  Inspect the actions to find references to subprograms.
+                     --  We assume that the actions do not contain other kinds
+                     --  of references and, therefore, we do not stop the scan
+                     --  or set Has_Referencer_Of_Non_Subprograms here. Doing
+                     --  it would pessimize common cases for which the actions
+                     --  contain the declaration of an init procedure, since
+                     --  such a procedure is automatically marked inline.
 
-                     Discard := Has_Referencer (Actions (Decl));
+                     Discard :=
+                       Has_Referencer (Actions (Decl),
+                                       In_Nested_Instance,
+                                       Has_Referencer_Of_Non_Subprograms);
                   end;
 
                --  Exceptions, objects and renamings do not need to be public
                --  if they are not followed by a construct which can reference
-               --  and export them. The Is_Public flag is reset on top level
-               --  entities only as anything nested is local to its context.
-               --  Likewise for subprograms, but we work harder for them.
-
+               --  and export them. Likewise for subprograms but we work harder
+               --  for them to see whether they are referenced on an individual
+               --  basis by looking into the table of referenced subprograms.
+               --  But we cannot say anything for entities declared in nested
+               --  instances because instantiations are not done yet so the
+               --  bodies are not visible and could contain references to them.
                elsif Nkind_In (Decl, N_Exception_Declaration,
                                      N_Object_Declaration,
                                      N_Object_Renaming_Declaration,
@@ -442,12 +471,13 @@ package body Sem_Ch7 is
                then
                   Decl_Id := Defining_Entity (Decl);
 
-                  if Top_Level
+                  if not In_Nested_Instance
                     and then not Is_Imported (Decl_Id)
                     and then not Is_Exported (Decl_Id)
                     and then No (Interface_Name (Decl_Id))
                     and then
-                      (not Has_Non_Subprograms_Referencer
+                      ((Nkind (Decl) /= N_Subprogram_Declaration
+                         and then not Has_Referencer_Of_Non_Subprograms)
                         or else (Nkind (Decl) = N_Subprogram_Declaration
                                   and then not Subprogram_Table.Get (Decl_Id)))
                   then
@@ -475,7 +505,7 @@ package body Sem_Ch7 is
                Prev (Decl);
             end loop;
 
-            return Has_Non_Subprograms_Referencer;
+            return Has_Referencer_Of_Non_Subprograms;
          end Has_Referencer;
 
          -------------------------
@@ -609,7 +639,7 @@ package body Sem_Ch7 is
 
          Traversed_Table.Reset;
          Subprogram_Table.Reset;
-         Discard := Has_Referencer (Decls, Top_Level => True);
+         Discard := Has_Referencer (Decls, False, False);
       end Hide_Public_Entities;
 
       ----------------------------------
@@ -638,6 +668,7 @@ package body Sem_Ch7 is
       --  Local variables
 
       Saved_GM   : constant Ghost_Mode_Type := Ghost_Mode;
+      Saved_IGR  : constant Node_Id         := Ignored_Ghost_Region;
       Saved_ISMP : constant Boolean         :=
                      Ignore_SPARK_Mode_Pragmas_In_Instance;
       --  Save the Ghost and SPARK mode-related data to restore on exit
@@ -748,6 +779,12 @@ package body Sem_Ch7 is
       --  expansion are properly flagged as ignored Ghost.
 
       Mark_And_Set_Ghost_Body (N, Spec_Id);
+
+      --  If the body completes the initial declaration of a compilation unit
+      --  which is subject to pragma Elaboration_Checks, set the model of the
+      --  pragma because it applies to all parts of the unit.
+
+      Install_Elaboration_Model (Spec_Id);
 
       Set_Is_Compilation_Unit (Body_Id, Is_Compilation_Unit (Spec_Id));
       Style.Check_Identifier (Body_Id, Spec_Id);
@@ -1039,7 +1076,7 @@ package body Sem_Ch7 is
       end if;
 
       Ignore_SPARK_Mode_Pragmas_In_Instance := Saved_ISMP;
-      Restore_Ghost_Mode (Saved_GM);
+      Restore_Ghost_Region (Saved_GM, Saved_IGR);
    end Analyze_Package_Body_Helper;
 
    ---------------------------------
@@ -1399,10 +1436,13 @@ package body Sem_Ch7 is
 
             --  We are looking at an incomplete or private type declaration
             --  with a known_discriminant_part whose full view is an
-            --  Unchecked_Union.
+            --  Unchecked_Union. The seemingly useless check with Is_Type
+            --  prevents cascaded errors when routines defined only for type
+            --  entities are called with non-type entities.
 
             if Nkind_In (Decl, N_Incomplete_Type_Declaration,
                                N_Private_Type_Declaration)
+              and then Is_Type (Defining_Identifier (Decl))
               and then Has_Discriminants (Defining_Identifier (Decl))
               and then Present (Full_View (Defining_Identifier (Decl)))
               and then
@@ -2149,12 +2189,12 @@ package body Sem_Ch7 is
 
       Exchange_Entities (Id, Full_Id);
 
-      Set_Next_Entity (Id, Next1);
-      Set_Homonym     (Id, H1);
+      Link_Entities (Id, Next1);
+      Set_Homonym   (Id, H1);
 
-      Set_Full_View   (Full_Id, Id);
-      Set_Next_Entity (Full_Id, Next2);
-      Set_Homonym     (Full_Id, H2);
+      Set_Full_View (Full_Id, Id);
+      Link_Entities (Full_Id, Next2);
+      Set_Homonym   (Full_Id, H2);
    end Exchange_Declarations;
 
    ----------------------------

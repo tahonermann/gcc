@@ -470,7 +470,8 @@ get_rank (tree e)
 
 /* We want integer ones to end up last no matter what, since they are
    the ones we can do the most with.  */
-#define INTEGER_CONST_TYPE 1 << 3
+#define INTEGER_CONST_TYPE 1 << 4
+#define FLOAT_ONE_CONST_TYPE 1 << 3
 #define FLOAT_CONST_TYPE 1 << 2
 #define OTHER_CONST_TYPE 1 << 1
 
@@ -482,7 +483,14 @@ constant_type (tree t)
   if (INTEGRAL_TYPE_P (TREE_TYPE (t)))
     return INTEGER_CONST_TYPE;
   else if (SCALAR_FLOAT_TYPE_P (TREE_TYPE (t)))
-    return FLOAT_CONST_TYPE;
+    {
+      /* Sort -1.0 and 1.0 constants last, while in some cases
+	 const_binop can't optimize some inexact operations, multiplication
+	 by -1.0 or 1.0 can be always merged with others.  */
+      if (real_onep (t) || real_minus_onep (t))
+	return FLOAT_ONE_CONST_TYPE;
+      return FLOAT_CONST_TYPE;
+    }
   else
     return OTHER_CONST_TYPE;
 }
@@ -504,7 +512,7 @@ sort_by_operand_rank (const void *pa, const void *pb)
   if (oea->rank == 0)
     {
       if (constant_type (oeb->op) != constant_type (oea->op))
-	return constant_type (oeb->op) - constant_type (oea->op);
+	return constant_type (oea->op) - constant_type (oeb->op);
       else
 	/* To make sorting result stable, we use unique IDs to determine
 	   order.  */
@@ -610,7 +618,7 @@ is_reassociable_op (gimple *stmt, enum tree_code code, struct loop *loop)
       && has_single_use (gimple_assign_lhs (stmt)))
     {
       tree rhs1 = gimple_assign_rhs1 (stmt);
-      tree rhs2 = gimple_assign_rhs1 (stmt);
+      tree rhs2 = gimple_assign_rhs2 (stmt);
       if (TREE_CODE (rhs1) == SSA_NAME
 	  && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (rhs1))
 	return false;
@@ -1598,7 +1606,7 @@ undistribute_ops_list (enum tree_code opcode,
     {
       fprintf (dump_file, "searching for un-distribute opportunities ");
       print_generic_expr (dump_file,
-	(*ops)[bitmap_first_set_bit (candidates)]->op, 0);
+	(*ops)[bitmap_first_set_bit (candidates)]->op, TDF_NONE);
       fprintf (dump_file, " %d\n", nr_candidates);
     }
 
@@ -2160,8 +2168,13 @@ init_range_entry (struct range_entry *r, tree exp, gimple *stmt)
 	  continue;
 	CASE_CONVERT:
 	  if (is_bool)
-	    goto do_default;
-	  if (TYPE_PRECISION (TREE_TYPE (arg0)) == 1)
+	    {
+	      if ((TYPE_PRECISION (exp_type) == 1
+		   || TREE_CODE (exp_type) == BOOLEAN_TYPE)
+		  && TYPE_PRECISION (TREE_TYPE (arg0)) > 1)
+		return;
+	    }
+	  else if (TYPE_PRECISION (TREE_TYPE (arg0)) == 1)
 	    {
 	      if (TYPE_UNSIGNED (TREE_TYPE (arg0)))
 		is_bool = true;
@@ -3027,7 +3040,8 @@ optimize_range_tests_cmp_bitwise (enum tree_code opcode, int first, int length,
 static bool
 optimize_range_tests_var_bound (enum tree_code opcode, int first, int length,
 				vec<operand_entry *> *ops,
-				struct range_entry *ranges)
+				struct range_entry *ranges,
+				basic_block first_bb)
 {
   int i;
   bool any_changes = false;
@@ -3135,6 +3149,76 @@ optimize_range_tests_var_bound (enum tree_code opcode, int first, int length,
       if (idx == NULL)
 	continue;
 
+      /* maybe_optimize_range_tests allows statements without side-effects
+	 in the basic blocks as long as they are consumed in the same bb.
+	 Make sure rhs2's def stmt is not among them, otherwise we can't
+	 use safely get_nonzero_bits on it.  E.g. in:
+	  # RANGE [-83, 1] NONZERO 173
+	  # k_32 = PHI <k_47(13), k_12(9)>
+	 ...
+	  if (k_32 >= 0)
+	    goto <bb 5>; [26.46%]
+	  else
+	    goto <bb 9>; [73.54%]
+
+	  <bb 5> [local count: 140323371]:
+	  # RANGE [0, 1] NONZERO 1
+	  _5 = (int) k_32;
+	  # RANGE [0, 4] NONZERO 4
+	  _21 = _5 << 2;
+	  # RANGE [0, 4] NONZERO 4
+	  iftmp.0_44 = (char) _21;
+	  if (k_32 < iftmp.0_44)
+	    goto <bb 6>; [84.48%]
+	  else
+	    goto <bb 9>; [15.52%]
+	 the ranges on _5/_21/iftmp.0_44 are flow sensitive, assume that
+	 k_32 >= 0.  If we'd optimize k_32 >= 0 to true and k_32 < iftmp.0_44
+	 to (unsigned) k_32 < (unsigned) iftmp.0_44, then we would execute
+	 those stmts even for negative k_32 and the value ranges would be no
+	 longer guaranteed and so the optimization would be invalid.  */
+      while (opcode == ERROR_MARK)
+	{
+	  gimple *g = SSA_NAME_DEF_STMT (rhs2);
+	  basic_block bb2 = gimple_bb (g);
+	  if (bb2
+	      && bb2 != first_bb
+	      && dominated_by_p (CDI_DOMINATORS, bb2, first_bb))
+	    {
+	      /* As an exception, handle a few common cases.  */
+	      if (gimple_assign_cast_p (g)
+		  && INTEGRAL_TYPE_P (TREE_TYPE (gimple_assign_rhs1 (g))))
+		{
+		  tree op0 = gimple_assign_rhs1 (g);
+		  if (TYPE_UNSIGNED (TREE_TYPE (op0))
+		      && (TYPE_PRECISION (TREE_TYPE (rhs2))
+			  > TYPE_PRECISION (TREE_TYPE (op0))))
+		    /* Zero-extension is always ok.  */
+		    break;
+		  else if (TYPE_PRECISION (TREE_TYPE (rhs2))
+			   == TYPE_PRECISION (TREE_TYPE (op0))
+			   && TREE_CODE (op0) == SSA_NAME)
+		    {
+		      /* Cast from signed to unsigned or vice versa.  Retry
+			 with the op0 as new rhs2.  */
+		      rhs2 = op0;
+		      continue;
+		    }
+		}
+	      else if (is_gimple_assign (g)
+		       && gimple_assign_rhs_code (g) == BIT_AND_EXPR
+		       && TREE_CODE (gimple_assign_rhs2 (g)) == INTEGER_CST
+		       && !wi::neg_p (wi::to_wide (gimple_assign_rhs2 (g))))
+		/* Masking with INTEGER_CST with MSB clear is always ok
+		   too.  */
+		break;
+	      rhs2 = NULL_TREE;
+	    }
+	  break;
+	}
+      if (rhs2 == NULL_TREE)
+	continue;
+
       wide_int nz = get_nonzero_bits (rhs2);
       if (wi::neg_p (nz))
 	continue;
@@ -3190,10 +3274,13 @@ optimize_range_tests_var_bound (enum tree_code opcode, int first, int length,
       gimple_set_uid (g, uid);
       rhs1 = gimple_assign_lhs (g);
       gsi_insert_before (&gsi, g, GSI_SAME_STMT);
-      g = gimple_build_assign (make_ssa_name (utype), NOP_EXPR, rhs2);
-      gimple_set_uid (g, uid);
-      rhs2 = gimple_assign_lhs (g);
-      gsi_insert_before (&gsi, g, GSI_SAME_STMT);
+      if (!useless_type_conversion_p (utype, TREE_TYPE (rhs2)))
+	{
+	  g = gimple_build_assign (make_ssa_name (utype), NOP_EXPR, rhs2);
+	  gimple_set_uid (g, uid);
+	  rhs2 = gimple_assign_lhs (g);
+	  gsi_insert_before (&gsi, g, GSI_SAME_STMT);
+	}
       if (tree_swap_operands_p (rhs1, rhs2))
 	{
 	  std::swap (rhs1, rhs2);
@@ -3261,11 +3348,12 @@ optimize_range_tests_var_bound (enum tree_code opcode, int first, int length,
    maybe_optimize_range_tests for inter-bb range optimization.
    In that case if oe->op is NULL, oe->id is bb->index whose
    GIMPLE_COND is && or ||ed into the test, and oe->rank says
-   the actual opcode.  */
+   the actual opcode.
+   FIRST_BB is the first basic block if OPCODE is ERROR_MARK.  */
 
 static bool
 optimize_range_tests (enum tree_code opcode,
-		      vec<operand_entry *> *ops)
+		      vec<operand_entry *> *ops, basic_block first_bb)
 {
   unsigned int length = ops->length (), i, j, first;
   operand_entry *oe;
@@ -3345,7 +3433,7 @@ optimize_range_tests (enum tree_code opcode,
   any_changes |= optimize_range_tests_cmp_bitwise (opcode, first, length,
 						   ops, ranges);
   any_changes |= optimize_range_tests_var_bound (opcode, first, length, ops,
-						 ranges);
+						 ranges, first_bb);
 
   if (any_changes && opcode != ERROR_MARK)
     {
@@ -3614,7 +3702,7 @@ suitable_cond_bb (basic_block bb, basic_block test_bb, basic_block *other_bb,
       || (gimple_code (stmt) != GIMPLE_COND
 	  && (backward || !final_range_test_p (stmt)))
       || gimple_visited_p (stmt)
-      || stmt_could_throw_p (stmt)
+      || stmt_could_throw_p (cfun, stmt)
       || *other_bb == bb)
     return false;
   is_cond = gimple_code (stmt) == GIMPLE_COND;
@@ -3870,7 +3958,7 @@ maybe_optimize_range_tests (gimple *stmt)
   else
     return cfg_cleanup_needed;
 
-  if (stmt_could_throw_p (stmt))
+  if (stmt_could_throw_p (cfun, stmt))
     return cfg_cleanup_needed;
 
   /* As relative ordering of post-dominator sons isn't fixed,
@@ -4092,7 +4180,7 @@ maybe_optimize_range_tests (gimple *stmt)
 	break;
     }
   if (ops.length () > 1)
-    any_changes = optimize_range_tests (ERROR_MARK, &ops);
+    any_changes = optimize_range_tests (ERROR_MARK, &ops, first_bb);
   if (any_changes)
     {
       unsigned int idx, max_idx = 0;
@@ -5021,14 +5109,14 @@ linearize_expr_tree (vec<operand_entry *> *ops, gimple *stmt,
     {
       binlhsdef = SSA_NAME_DEF_STMT (binlhs);
       binlhsisreassoc = (is_reassociable_op (binlhsdef, rhscode, loop)
-			 && !stmt_could_throw_p (binlhsdef));
+			 && !stmt_could_throw_p (cfun, binlhsdef));
     }
 
   if (TREE_CODE (binrhs) == SSA_NAME)
     {
       binrhsdef = SSA_NAME_DEF_STMT (binrhs);
       binrhsisreassoc = (is_reassociable_op (binrhsdef, rhscode, loop)
-			 && !stmt_could_throw_p (binrhsdef));
+			 && !stmt_could_throw_p (cfun, binrhsdef));
     }
 
   /* If the LHS is not reassociable, but the RHS is, we need to swap
@@ -5763,7 +5851,7 @@ reassociate_bb (basic_block bb)
       stmt = gsi_stmt (gsi);
 
       if (is_gimple_assign (stmt)
-	  && !stmt_could_throw_p (stmt))
+	  && !stmt_could_throw_p (cfun, stmt))
 	{
 	  tree lhs, rhs1, rhs2;
 	  enum tree_code rhs_code = gimple_assign_rhs_code (stmt);
@@ -5847,7 +5935,7 @@ reassociate_bb (basic_block bb)
 		  if (is_vector)
 		    optimize_vec_cond_expr (rhs_code, &ops);
 		  else
-		    optimize_range_tests (rhs_code, &ops);
+		    optimize_range_tests (rhs_code, &ops, NULL);
 	        }
 
 	      if (rhs_code == MULT_EXPR && !is_vector)

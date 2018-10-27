@@ -339,13 +339,16 @@ struct source_info
 
   coverage_info coverage;
 
+  /* Maximum line count in the source file.  */
+  unsigned int maximum_count;
+
   /* Functions in this source file.  These are in ascending line
      number order.  */
   vector <function_info *> functions;
 };
 
 source_info::source_info (): index (0), name (NULL), file_time (),
-  lines (), coverage (), functions ()
+  lines (), coverage (), maximum_count (0), functions ()
 {
 }
 
@@ -408,10 +411,13 @@ static vector<source_info> sources;
 /* Mapping of file names to sources */
 static vector<name_map> names;
 
+/* Record all processed files in order to warn about
+   a file being read multiple times.  */
+static vector<char *> processed_files;
+
 /* This holds data summary information.  */
 
 static unsigned object_runs;
-static unsigned program_count;
 
 static unsigned total_lines;
 static unsigned total_executed;
@@ -431,6 +437,9 @@ static unsigned bbg_stamp;
 
 /* Supports has_unexecuted_blocks functionality.  */
 static unsigned bbg_supports_has_unexecuted_blocks;
+
+/* Working directory in which a TU was compiled.  */
+static const char *bbg_cwd;
 
 /* Name and file pointer of the input file for the count data (gcda).  */
 
@@ -458,6 +467,10 @@ static int flag_unconditional = 0;
    be turned off by the -n option.  */
 
 static int flag_gcov_file = 1;
+
+/* Output to stdout instead to a gcov file.  */
+
+static int flag_use_stdout = 0;
 
 /* Output progress indication if this is true.  This is off by default
    and can be turned on by the -d option.  */
@@ -490,6 +503,10 @@ static int flag_verbose = 0;
 /* Print colored output.  */
 
 static int flag_use_colors = 0;
+
+/* Use perf-like colors to indicate hot lines.  */
+
+static int flag_use_hotness_colors = 0;
 
 /* Output count information for every basic block, not merely those
    that contain line number information.  */
@@ -536,6 +553,7 @@ static int process_args (int, char **);
 static void print_usage (int) ATTRIBUTE_NORETURN;
 static void print_version (void) ATTRIBUTE_NORETURN;
 static void process_file (const char *);
+static void process_all_functions (void);
 static void generate_results (const char *);
 static void create_file_names (const char *);
 static char *canonicalize_name (const char *);
@@ -791,6 +809,7 @@ main (int argc, char **argv)
 
       if (flag_intermediate_format || argno == argc - 1)
 	{
+	  process_all_functions ();
 	  generate_results (argv[argno]);
 	  release_structures ();
 	}
@@ -826,8 +845,10 @@ print_usage (int error_p)
   fnotice (file, "  -n, --no-output                 Do not create an output file\n");
   fnotice (file, "  -o, --object-directory DIR|FILE Search for object files in DIR or called FILE\n");
   fnotice (file, "  -p, --preserve-paths            Preserve all pathname components\n");
+  fnotice (file, "  -q, --use-hotness-colors        Emit perf-like colored output for hot lines\n");
   fnotice (file, "  -r, --relative-only             Only show data for relative sources\n");
   fnotice (file, "  -s, --source-prefix DIR         Source prefix to elide\n");
+  fnotice (file, "  -t, --stdout                    Output to stdout instead of a file\n");
   fnotice (file, "  -u, --unconditional-branches    Show unconditional branch counts too\n");
   fnotice (file, "  -v, --version                   Print version number, then exit\n");
   fnotice (file, "  -w, --verbose                   Print verbose informations\n");
@@ -871,10 +892,12 @@ static const struct option options[] =
   { "object-directory",     required_argument, NULL, 'o' },
   { "object-file",          required_argument, NULL, 'o' },
   { "source-prefix",        required_argument, NULL, 's' },
+  { "stdout",		    no_argument,       NULL, 't' },
   { "unconditional-branches", no_argument,     NULL, 'u' },
   { "display-progress",     no_argument,       NULL, 'd' },
   { "hash-filenames",	    no_argument,       NULL, 'x' },
   { "use-colors",	    no_argument,       NULL, 'k' },
+  { "use-hotness-colors",   no_argument,       NULL, 'q' },
   { 0, 0, 0, 0 }
 };
 
@@ -885,7 +908,7 @@ process_args (int argc, char **argv)
 {
   int opt;
 
-  const char *opts = "abcdfhijklmno:prs:uvwx";
+  const char *opts = "abcdfhijklmno:pqrs:tuvwx";
   while ((opt = getopt_long (argc, argv, opts, options, NULL)) != -1)
     {
       switch (opt)
@@ -913,6 +936,9 @@ process_args (int argc, char **argv)
 	  break;
 	case 'k':
 	  flag_use_colors = 1;
+	  break;
+	case 'q':
+	  flag_use_hotness_colors = 1;
 	  break;
 	case 'm':
 	  flag_demangled_names = 1;
@@ -948,6 +974,9 @@ process_args (int argc, char **argv)
 	  break;
 	case 'w':
 	  flag_verbose = 1;
+	  break;
+	case 't':
+	  flag_use_stdout = 1;
 	  break;
 	case 'v':
 	  print_version ();
@@ -1037,6 +1066,7 @@ output_intermediate_file (FILE *gcov_file, source_info *src)
 {
   fprintf (gcov_file, "version:%s\n", version_string);
   fprintf (gcov_file, "file:%s\n", src->name);    /* source file name */
+  fprintf (gcov_file, "cwd:%s\n", bbg_cwd);
 
   std::sort (src->functions.begin (), src->functions.end (),
 	     function_line_start_cmp ());
@@ -1066,7 +1096,8 @@ output_intermediate_file (FILE *gcov_file, source_info *src)
 	}
 
       /* Follow with lines associated with the source file.  */
-      output_intermediate_line (gcov_file, &src->lines[line_num], line_num);
+      if (line_num < src->lines.size ())
+	output_intermediate_line (gcov_file, &src->lines[line_num], line_num);
     }
 }
 
@@ -1131,12 +1162,26 @@ static void
 process_file (const char *file_name)
 {
   create_file_names (file_name);
+
+  for (unsigned i = 0; i < processed_files.size (); i++)
+    if (strcmp (da_file_name, processed_files[i]) == 0)
+      {
+	fnotice (stderr, "'%s' file is already processed\n",
+		 file_name);
+	return;
+      }
+
+  processed_files.push_back (xstrdup (da_file_name));
+
   read_graph_file ();
-  if (functions.empty ())
-    return;
-
   read_count_file ();
+}
 
+/* Process all functions in all files.  */
+
+static void
+process_all_functions (void)
+{
   hash_map<function_start_pair_hash, function_info *> fn_map;
 
   /* Identify group functions.  */
@@ -1151,7 +1196,6 @@ process_file (const char *file_name)
 	function_info **slot = fn_map.get (needle);
 	if (slot)
 	  {
-	    gcc_assert ((*slot)->end_line == (*it)->end_line);
 	    (*slot)->is_group = 1;
 	    (*it)->is_group = 1;
 	  }
@@ -1213,7 +1257,6 @@ process_file (const char *file_name)
 	     and end_line information of the function.  */
 	  if (fn->is_group)
 	    fn->lines.resize (fn->end_line - fn->start_line + 1);
-
 
 	  solve_flow_graph (fn);
 	  if (fn->has_catch)
@@ -1290,7 +1333,7 @@ generate_results (const char *file_name)
 	file_name = canonicalize_name (file_name);
     }
 
-  if (flag_gcov_file && flag_intermediate_format)
+  if (flag_gcov_file && flag_intermediate_format && !flag_use_stdout)
     {
       /* Open the intermediate file.  */
       gcov_intermediate_filename = get_gcov_intermediate_filename (file_name);
@@ -1322,7 +1365,9 @@ generate_results (const char *file_name)
 	}
 
       accumulate_line_counts (src);
-      function_summary (&src->coverage, "File");
+
+      if (!flag_use_stdout)
+	function_summary (&src->coverage, "File");
       total_lines += src->coverage.lines;
       total_executed += src->coverage.lines_executed;
       if (flag_gcov_file)
@@ -1330,14 +1375,25 @@ generate_results (const char *file_name)
 	  if (flag_intermediate_format)
 	    /* Output the intermediate format without requiring source
 	       files.  This outputs a section to a *single* file.  */
-	    output_intermediate_file (gcov_intermediate_file, src);
+	    output_intermediate_file ((flag_use_stdout
+				       ? stdout : gcov_intermediate_file), src);
 	  else
-	    output_gcov_file (file_name, src);
-	  fnotice (stdout, "\n");
+	    {
+	      if (flag_use_stdout)
+		{
+		  if (src->coverage.lines)
+		    output_lines (stdout, src);
+		}
+	      else
+		{
+		  output_gcov_file (file_name, src);
+		  fnotice (stdout, "\n");
+		}
+	    }
 	}
     }
 
-  if (flag_gcov_file && flag_intermediate_format)
+  if (flag_gcov_file && flag_intermediate_format && !flag_use_stdout)
     {
       /* Now we've finished writing the intermediate file.  */
       fclose (gcov_intermediate_file);
@@ -1551,6 +1607,7 @@ read_graph_file (void)
 	       bbg_file_name, v, e);
     }
   bbg_stamp = gcov_read_unsigned ();
+  bbg_cwd = xstrdup (gcov_read_string ());
   bbg_supports_has_unexecuted_blocks = gcov_read_unsigned ();
 
   function_info *fn = NULL;
@@ -1771,12 +1828,11 @@ read_count_file (void)
       unsigned length = gcov_read_unsigned ();
       unsigned long base = gcov_position ();
 
-      if (tag == GCOV_TAG_PROGRAM_SUMMARY)
+      if (tag == GCOV_TAG_OBJECT_SUMMARY)
 	{
 	  struct gcov_summary summary;
 	  gcov_read_summary (&summary);
-	  object_runs += summary.ctrs[GCOV_COUNTER_ARCS].runs;
-	  program_count++;
+	  object_runs = summary.runs;
 	}
       else if (tag == GCOV_TAG_FUNCTION && !length)
 	; /* placeholder  */
@@ -2171,56 +2227,30 @@ format_count (gcov_type count)
       if (count + divisor / 2 < 1000 * divisor)
 	break;
     }
-  gcov_type r  = (count + divisor / 2) / divisor;
-  sprintf (buffer, "%" PRId64 "%c", r, units[i]);
+  float r = 1.0f * count / divisor;
+  sprintf (buffer, "%.1f%c", r, units[i]);
   return buffer;
 }
 
 /* Format a GCOV_TYPE integer as either a percent ratio, or absolute
-   count.  If dp >= 0, format TOP/BOTTOM * 100 to DP decimal places.
-   If DP is zero, no decimal point is printed. Only print 100% when
-   TOP==BOTTOM and only print 0% when TOP=0.  If dp < 0, then simply
+   count.  If DECIMAL_PLACES >= 0, format TOP/BOTTOM * 100 to DECIMAL_PLACES.
+   If DECIMAL_PLACES is zero, no decimal point is printed. Only print 100% when
+   TOP==BOTTOM and only print 0% when TOP=0.  If DECIMAL_PLACES < 0, then simply
    format TOP.  Return pointer to a static string.  */
 
 static char const *
-format_gcov (gcov_type top, gcov_type bottom, int dp)
+format_gcov (gcov_type top, gcov_type bottom, int decimal_places)
 {
   static char buffer[20];
 
-  /* Handle invalid values that would result in a misleading value.  */
-  if (bottom != 0 && top > bottom && dp >= 0)
+  if (decimal_places >= 0)
     {
-      sprintf (buffer, "NAN %%");
-      return buffer;
-    }
+      float ratio = bottom ? 100.0f * top / bottom: 0;
 
-  if (dp >= 0)
-    {
-      float ratio = bottom ? (float)top / bottom : 0;
-      int ix;
-      unsigned limit = 100;
-      unsigned percent;
-
-      for (ix = dp; ix--; )
-	limit *= 10;
-
-      percent = (unsigned) (ratio * limit + (float)0.5);
-      if (percent <= 0 && top)
-	percent = 1;
-      else if (percent >= limit && top != bottom)
-	percent = limit - 1;
-      ix = sprintf (buffer, "%.*u%%", dp + 1, percent);
-      if (dp)
-	{
-	  dp++;
-	  do
-	    {
-	      buffer[ix+1] = buffer[ix];
-	      ix--;
-	    }
-	  while (dp--);
-	  buffer[ix + 1] = '.';
-	}
+      /* Round up to 1% if there's a small non-zero value.  */
+      if (ratio > 0.0f && ratio < 0.5f && decimal_places == 0)
+	ratio = 1.0f;
+      sprintf (buffer, "%.*f%%", decimal_places, ratio);
     }
   else
     return format_count (top);
@@ -2435,42 +2465,7 @@ mangle_name (char const *base, char *ptr)
       ptr += len;
     }
   else
-    {
-      /* Convert '/' to '#', convert '..' to '^',
-	 convert ':' to '~' on DOS based file system.  */
-      const char *probe;
-
-#if HAVE_DOS_BASED_FILE_SYSTEM
-      if (base[0] && base[1] == ':')
-	{
-	  ptr[0] = base[0];
-	  ptr[1] = '~';
-	  ptr += 2;
-	  base += 2;
-	}
-#endif
-      for (; *base; base = probe)
-	{
-	  size_t len;
-
-	  for (probe = base; *probe; probe++)
-	    if (*probe == '/')
-	      break;
-	  len = probe - base;
-	  if (len == 2 && base[0] == '.' && base[1] == '.')
-	    *ptr++ = '^';
-	  else
-	    {
-	      memcpy (ptr, base, len);
-	      ptr += len;
-	    }
-	  if (*probe)
-	    {
-	      *ptr++ = '#';
-	      probe++;
-	    }
-	}
-    }
+    ptr = mangle_path (base);
 
   return ptr;
 }
@@ -2596,6 +2591,9 @@ static void accumulate_line_info (line_info *line, source_info *src,
       /* Now, add the count of loops entirely on this line.  */
       count += get_cycles_count (*line);
       line->count = count;
+
+      if (line->count > src->maximum_count)
+	src->maximum_count = line->count;
     }
 
   if (line->exists && add_coverage)
@@ -2772,7 +2770,8 @@ output_line_beginning (FILE *f, bool exists, bool unexceptional,
 		       bool has_unexecuted_block,
 		       gcov_type count, unsigned line_num,
 		       const char *exceptional_string,
-		       const char *unexceptional_string)
+		       const char *unexceptional_string,
+		       unsigned int maximum_count)
 {
   string s;
   if (exists)
@@ -2822,7 +2821,23 @@ output_line_beginning (FILE *f, bool exists, bool unexceptional,
       pad_count_string (s);
     }
 
-  fprintf (f, "%s:%5u", s.c_str (), line_num);
+  /* Format line number in output.  */
+  char buffer[16];
+  sprintf (buffer, "%5u", line_num);
+  string linestr (buffer);
+
+  if (flag_use_hotness_colors && maximum_count)
+    {
+      if (count * 2 > maximum_count) /* > 50%.  */
+	linestr.insert (0, SGR_SEQ (COLOR_BG_RED));
+      else if (count * 5 > maximum_count) /* > 20%.  */
+	linestr.insert (0, SGR_SEQ (COLOR_BG_YELLOW));
+      else if (count * 10 > maximum_count) /* > 10%.  */
+	linestr.insert (0, SGR_SEQ (COLOR_BG_GREEN));
+      linestr += SGR_RESET;
+    }
+
+  fprintf (f, "%s:%s", s.c_str (), linestr.c_str ());
 }
 
 static void
@@ -2855,7 +2870,7 @@ output_line_details (FILE *f, const line_info *line, unsigned line_num)
 	      output_line_beginning (f, line->exists,
 				     (*it)->exceptional, false,
 				     (*it)->count, line_num,
-				     "%%%%%", "$$$$$");
+				     "%%%%%", "$$$$$", 0);
 	      fprintf (f, "-block %2d", ix++);
 	      if (flag_verbose)
 		fprintf (f, " (BB %u)", (*it)->id);
@@ -2918,6 +2933,25 @@ output_lines (FILE *gcov_file, const source_info *src)
   FILE *source_file;
   const char *retval;
 
+  /* Print colorization legend.  */
+  if (flag_use_colors)
+    fprintf (gcov_file, "%s",
+	     DEFAULT_LINE_START "Colorization: profile count: " \
+	     SGR_SEQ (COLOR_BG_CYAN) "zero coverage (exceptional)" SGR_RESET \
+	     " " \
+	     SGR_SEQ (COLOR_BG_RED) "zero coverage (unexceptional)" SGR_RESET \
+	     " " \
+	     SGR_SEQ (COLOR_BG_MAGENTA) "unexecuted block" SGR_RESET "\n");
+
+  if (flag_use_hotness_colors)
+    fprintf (gcov_file, "%s",
+	     DEFAULT_LINE_START "Colorization: line numbers: hotness: " \
+	     SGR_SEQ (COLOR_BG_RED) "> 50%" SGR_RESET " " \
+	     SGR_SEQ (COLOR_BG_YELLOW) "> 20%" SGR_RESET " " \
+	     SGR_SEQ (COLOR_BG_GREEN) "> 10%" SGR_RESET "\n");
+
+  fprintf (gcov_file, DEFAULT_LINE_START "Source:%s\n", src->coverage.name);
+
   fprintf (gcov_file, DEFAULT_LINE_START "Source:%s\n", src->coverage.name);
   if (!multiple_files)
     {
@@ -2926,7 +2960,6 @@ output_lines (FILE *gcov_file, const source_info *src)
 	       no_data_file ? "-" : da_file_name);
       fprintf (gcov_file, DEFAULT_LINE_START "Runs:%u\n", object_runs);
     }
-  fprintf (gcov_file, DEFAULT_LINE_START "Programs:%u\n", program_count);
 
   source_file = fopen (src->name, "r");
   if (!source_file)
@@ -2957,7 +2990,14 @@ output_lines (FILE *gcov_file, const source_info *src)
 	{
 	  fns = src->get_functions_at_location (line_num);
 	  if (fns.size () > 1)
-	    line_start_group = fns[0]->end_line;
+	    {
+	      /* It's possible to have functions that partially overlap,
+		 thus take the maximum end_line of functions starting
+		 at LINE_NUM.  */
+	      for (unsigned i = 0; i < fns.size (); i++)
+		if (fns[i]->end_line > line_start_group)
+		  line_start_group = fns[i]->end_line;
+	    }
 	  else if (fns.size () == 1)
 	    {
 	      function_info *fn = fns[0];
@@ -2973,7 +3013,7 @@ output_lines (FILE *gcov_file, const source_info *src)
 	 line so that tabs won't be messed up.  */
       output_line_beginning (gcov_file, line->exists, line->unexceptional,
 			     line->has_unexecuted_block, line->count,
-			     line_num, "=====", "#####");
+			     line_num, "=====", "#####", src->maximum_count);
 
       print_source_line (gcov_file, source_lines, line_num);
       output_line_details (gcov_file, line, line_num);
@@ -3018,7 +3058,8 @@ output_lines (FILE *gcov_file, const source_info *src)
 					 line->unexceptional,
 					 line->has_unexecuted_block,
 					 line->count,
-					 l, "=====", "#####");
+					 l, "=====", "#####",
+					 src->maximum_count);
 
 		  print_source_line (gcov_file, source_lines, l);
 		  output_line_details (gcov_file, line, l);

@@ -141,9 +141,6 @@ extern const char *arc_cpu_to_as (int argc, const char **argv);
 /* Should we try to unalign likely taken branches without a delay slot.  */
 #define TARGET_UNALIGN_BRANCH (TARGET_ARC700 && !optimize_size)
 
-/* Should we upsize short delayed branches with a short delay insn?  */
-#define TARGET_UPSIZE_DBR (TARGET_ARC700 && !optimize_size)
-
 /* Should we add padding before a return insn to avoid mispredict?  */
 #define TARGET_PAD_RETURN (TARGET_ARC700 && !optimize_size)
 
@@ -1224,7 +1221,15 @@ extern char rname56[], rname57[], rname58[], rname59[];
 {						\
   {"ilink",  29},				\
   {"r29",    29},				\
-  {"r30",    30}				\
+  {"r30",    30},				\
+  {"r40",    40},				\
+  {"r41",    41},				\
+  {"r42",    42},				\
+  {"r43",    43},				\
+  {"r56",    56},				\
+  {"r57",    57},				\
+  {"r58",    58},				\
+  {"r59",    59}				\
 }
 
 /* Entry to the insn conditionalizer.  */
@@ -1630,7 +1635,7 @@ enum
 /* Custom FP instructions used by QuarkSE EM cpu.  */
 #define TARGET_FPX_QUARK    (TARGET_EM && TARGET_SPFP		\
 			     && (arc_fpu_build == FPX_QK))
-/* DBNZ support is available for ARCv2 core3 cpus.  */
-#define TARGET_DBNZ (TARGET_V2 && (arc_tune == ARC_TUNE_CORE_3))
+/* DBNZ support is available for ARCv2 core3 and newer cpus.  */
+#define TARGET_DBNZ (TARGET_V2 && (arc_tune >= ARC_TUNE_CORE_3))
 
 #endif /* GCC_ARC_H */

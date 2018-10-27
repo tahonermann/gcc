@@ -85,7 +85,7 @@ GCC RUNTIME LIBRARY EXCEPTION
 
 Version 3.1, 31 March 2009
 
-Copyright (C) 2009 <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.fsf.org">Free Software Foundation, Inc.</link>
+Copyright (C) 2009 <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://www.fsf.org">Free Software Foundation, Inc.</link>
 
 Everyone is permitted to copy and distribute verbatim copies of this
 license document, but changing it is not allowed.
@@ -438,6 +438,17 @@ requirements of the license of GCC.
 	<emphasis>Should basic_istream::sentry's constructor ever set eofbit?</emphasis>
     </term>
     <listitem><para>Yes, it can, specifically if EOF is reached while skipping whitespace.
+    </para></listitem></varlistentry>
+
+    <varlistentry xml:id="manual.bugs.dr206"><term><link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="&DR;#206">206</link>:
+	<emphasis><code>operator new(size_t, nothrow)</code> may become
+          unlinked to ordinary <code>operator new</code> if ordinary
+          version replaced
+        </emphasis>
+    </term>
+    <listitem><para>The <code>nothrow</code> forms of new and delete were
+      changed to call the throwing forms, handling any exception by
+      catching it and returning a null pointer.
     </para></listitem></varlistentry>
 
     <varlistentry xml:id="manual.bugs.dr211"><term><link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="&DR;#211">211</link>:
@@ -1158,6 +1169,29 @@ requirements of the license of GCC.
        </emphasis>
     </term>
     <listitem><para>Add noexcept.
+    </para></listitem></varlistentry>
+
+    <varlistentry xml:id="manual.bugs.dr2993"><term><link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="&DR;#2993">2993</link>:
+       <emphasis><code>reference_wrapper&lt;T&gt;</code> conversion from <code>T&amp;&amp;</code>
+       </emphasis>
+    </term>
+    <listitem><para>Replaced the constructors with a constrained template,
+      to prevent participation in overload resolution when not valid.
+    </para></listitem></varlistentry>
+
+    <varlistentry xml:id="manual.bugs.dr3074"><term><link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="&DR;#3074">3074</link>:
+       <emphasis>Non-member functions for <code>valarray</code> should only deduce from the <code>valarray</code>
+       </emphasis>
+    </term>
+    <listitem><para>Change scalar operands to be non-deduced context, so that
+      they will allow conversions from other types to the value_type.
+    </para></listitem></varlistentry>
+
+    <varlistentry xml:id="manual.bugs.dr3076"><term><link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="&DR;#3076">3076</link>:
+       <emphasis><code>basic_string</code> CTAD ambiguity
+       </emphasis>
+    </term>
+    <listitem><para>Change constructors to constrained templates.
     </para></listitem></varlistentry>
 
   </variablelist>

@@ -65,6 +65,7 @@ static enum lto_mode_d lto_mode = LTO_MODE_NONE;
 static char *ltrans_output_file;
 static char *flto_out;
 static unsigned int nr;
+static int *ltrans_priorities;
 static char **input_names;
 static char **output_names;
 static char **offload_names;
@@ -244,6 +245,7 @@ merge_and_complain (struct cl_decoded_option **decoded_options,
 	{
 	case OPT_SPECIAL_unknown:
 	case OPT_SPECIAL_ignore:
+	case OPT_SPECIAL_deprecated:
 	case OPT_SPECIAL_program_name:
 	case OPT_SPECIAL_input_file:
 	  break;
@@ -254,6 +256,8 @@ merge_and_complain (struct cl_decoded_option **decoded_options,
 
 	  /* Fallthru.  */
 	case OPT_fdiagnostics_show_caret:
+	case OPT_fdiagnostics_show_labels:
+	case OPT_fdiagnostics_show_line_numbers:
 	case OPT_fdiagnostics_show_option:
 	case OPT_fdiagnostics_show_location_:
 	case OPT_fshow_column:
@@ -282,7 +286,6 @@ merge_and_complain (struct cl_decoded_option **decoded_options,
 
 	case OPT_fopenmp:
 	case OPT_fopenacc:
-	case OPT_fcheck_pointer_bounds:
 	  /* For selected options we can merge conservatively.  */
 	  for (j = 0; j < *decoded_options_count; ++j)
 	    if ((*decoded_options)[j].opt_index == foption->opt_index)
@@ -290,8 +293,7 @@ merge_and_complain (struct cl_decoded_option **decoded_options,
 	  if (j == *decoded_options_count)
 	    append_option (decoded_options, decoded_options_count, foption);
 	  /* -fopenmp > -fno-openmp,
-	     -fopenacc > -fno-openacc,
-	     -fcheck_pointer_bounds > -fcheck_pointer_bounds  */
+	     -fopenacc > -fno-openacc  */
 	  else if (foption->value > (*decoded_options)[j].value)
 	    (*decoded_options)[j] = *foption;
 	  break;
@@ -407,6 +409,11 @@ merge_and_complain (struct cl_decoded_option **decoded_options,
      It is a common mistake to mix few -fPIC compiled objects into otherwise
      non-PIC code.  We do not want to build everything with PIC then.
 
+     Similarly we merge PIE options, however in addition we keep
+      -fPIC + -fPIE = -fPIE
+      -fpic + -fPIE = -fpie
+      -fPIC/-fpic + -fpie = -fpie
+
      It would be good to warn on mismatches, but it is bit hard to do as
      we do not know what nothing translates to.  */
     
@@ -414,11 +421,38 @@ merge_and_complain (struct cl_decoded_option **decoded_options,
     if ((*decoded_options)[j].opt_index == OPT_fPIC
         || (*decoded_options)[j].opt_index == OPT_fpic)
       {
-	if (!pic_option
-	    || (pic_option->value > 0) != ((*decoded_options)[j].value > 0))
-	  remove_option (decoded_options, j, decoded_options_count);
-	else if (pic_option->opt_index == OPT_fPIC
-		 && (*decoded_options)[j].opt_index == OPT_fpic)
+	/* -fno-pic in one unit implies -fno-pic everywhere.  */
+	if ((*decoded_options)[j].value == 0)
+	  j++;
+	/* If we have no pic option or merge in -fno-pic, we still may turn
+	   existing pic/PIC mode into pie/PIE if -fpie/-fPIE is present.  */
+	else if ((pic_option && pic_option->value == 0)
+		 || !pic_option)
+	  {
+	    if (pie_option)
+	      {
+		bool big = (*decoded_options)[j].opt_index == OPT_fPIC
+			   && pie_option->opt_index == OPT_fPIE;
+	        (*decoded_options)[j].opt_index = big ? OPT_fPIE : OPT_fpie;
+		if (pie_option->value)
+	          (*decoded_options)[j].canonical_option[0] = big ? "-fPIE" : "-fpie";
+		else
+	          (*decoded_options)[j].canonical_option[0] = big ? "-fno-pie" : "-fno-pie";
+		(*decoded_options)[j].value = pie_option->value;
+	        j++;
+	      }
+	    else if (pic_option)
+	      {
+	        (*decoded_options)[j] = *pic_option;
+	        j++;
+	      }
+	    /* We do not know if target defaults to pic or not, so just remove
+	       option if it is missing in one unit but enabled in other.  */
+	    else
+	      remove_option (decoded_options, j, decoded_options_count);
+	  }
+	else if (pic_option->opt_index == OPT_fpic
+		 && (*decoded_options)[j].opt_index == OPT_fPIC)
 	  {
 	    (*decoded_options)[j] = *pic_option;
 	    j++;
@@ -429,11 +463,42 @@ merge_and_complain (struct cl_decoded_option **decoded_options,
    else if ((*decoded_options)[j].opt_index == OPT_fPIE
             || (*decoded_options)[j].opt_index == OPT_fpie)
       {
-	if (!pie_option
-	    || pie_option->value != (*decoded_options)[j].value)
-	  remove_option (decoded_options, j, decoded_options_count);
-	else if (pie_option->opt_index == OPT_fPIE
-		 && (*decoded_options)[j].opt_index == OPT_fpie)
+	/* -fno-pie in one unit implies -fno-pie everywhere.  */
+	if ((*decoded_options)[j].value == 0)
+	  j++;
+	/* If we have no pie option or merge in -fno-pie, we still preserve
+	   PIE/pie if pic/PIC is present.  */
+	else if ((pie_option && pie_option->value == 0)
+		 || !pie_option)
+	  {
+	    /* If -fPIC/-fpic is given, merge it with -fPIE/-fpie.  */
+	    if (pic_option)
+	      {
+		if (pic_option->opt_index == OPT_fpic
+		    && (*decoded_options)[j].opt_index == OPT_fPIE)
+		  {
+	            (*decoded_options)[j].opt_index = OPT_fpie;
+	            (*decoded_options)[j].canonical_option[0]
+			 = pic_option->value ? "-fpie" : "-fno-pie";
+		  }
+		else if (!pic_option->value)
+		  (*decoded_options)[j].canonical_option[0] = "-fno-pie";
+		(*decoded_options)[j].value = pic_option->value;
+		j++;
+	      }
+	    else if (pie_option)
+	      {
+	        (*decoded_options)[j] = *pie_option;
+		j++;
+	      }
+	    /* Because we always append pic/PIE options this code path should
+	       not happen unless the LTO object was built by old lto1 which
+	       did not contain that logic yet.  */
+	    else
+	      remove_option (decoded_options, j, decoded_options_count);
+	  }
+	else if (pie_option->opt_index == OPT_fpie
+		 && (*decoded_options)[j].opt_index == OPT_fPIE)
 	  {
 	    (*decoded_options)[j] = *pie_option;
 	    j++;
@@ -535,6 +600,8 @@ append_compiler_options (obstack *argv_obstack, struct cl_decoded_option *opts,
       switch (option->opt_index)
 	{
 	case OPT_fdiagnostics_show_caret:
+	case OPT_fdiagnostics_show_labels:
+	case OPT_fdiagnostics_show_line_numbers:
 	case OPT_fdiagnostics_show_option:
 	case OPT_fdiagnostics_show_location_:
 	case OPT_fshow_column:
@@ -552,7 +619,6 @@ append_compiler_options (obstack *argv_obstack, struct cl_decoded_option *opts,
 	case OPT_Ofast:
 	case OPT_Og:
 	case OPT_Os:
-	case OPT_fcheck_pointer_bounds:
 	  break;
 
 	default:
@@ -581,6 +647,8 @@ append_diag_options (obstack *argv_obstack, struct cl_decoded_option *opts,
 	{
 	case OPT_fdiagnostics_color_:
 	case OPT_fdiagnostics_show_caret:
+	case OPT_fdiagnostics_show_labels:
+	case OPT_fdiagnostics_show_line_numbers:
 	case OPT_fdiagnostics_show_option:
 	case OPT_fdiagnostics_show_location_:
 	case OPT_fshow_column:
@@ -748,42 +816,44 @@ compile_offload_image (const char *target, const char *compiler_path,
 	break;
       }
 
-  if (compiler)
-    {
-      /* Generate temporary output file name.  */
-      filename = make_temp_file (".target.o");
+  if (!compiler)
+    fatal_error (input_location,
+		 "could not find %s in %s (consider using '-B')\n", suffix + 1,
+		 compiler_path);
 
-      struct obstack argv_obstack;
-      obstack_init (&argv_obstack);
-      obstack_ptr_grow (&argv_obstack, compiler);
-      if (save_temps)
-	obstack_ptr_grow (&argv_obstack, "-save-temps");
-      if (verbose)
-	obstack_ptr_grow (&argv_obstack, "-v");
-      obstack_ptr_grow (&argv_obstack, "-o");
-      obstack_ptr_grow (&argv_obstack, filename);
+  /* Generate temporary output file name.  */
+  filename = make_temp_file (".target.o");
 
-      /* Append names of input object files.  */
-      for (unsigned i = 0; i < in_argc; i++)
-	obstack_ptr_grow (&argv_obstack, in_argv[i]);
+  struct obstack argv_obstack;
+  obstack_init (&argv_obstack);
+  obstack_ptr_grow (&argv_obstack, compiler);
+  if (save_temps)
+    obstack_ptr_grow (&argv_obstack, "-save-temps");
+  if (verbose)
+    obstack_ptr_grow (&argv_obstack, "-v");
+  obstack_ptr_grow (&argv_obstack, "-o");
+  obstack_ptr_grow (&argv_obstack, filename);
 
-      /* Append options from offload_lto sections.  */
-      append_compiler_options (&argv_obstack, compiler_opts,
-			       compiler_opt_count);
-      append_diag_options (&argv_obstack, linker_opts, linker_opt_count);
+  /* Append names of input object files.  */
+  for (unsigned i = 0; i < in_argc; i++)
+    obstack_ptr_grow (&argv_obstack, in_argv[i]);
 
-      /* Append options specified by -foffload last.  In case of conflicting
-	 options we expect offload compiler to choose the latest.  */
-      append_offload_options (&argv_obstack, target, compiler_opts,
-			      compiler_opt_count);
-      append_offload_options (&argv_obstack, target, linker_opts,
-			      linker_opt_count);
+  /* Append options from offload_lto sections.  */
+  append_compiler_options (&argv_obstack, compiler_opts,
+			   compiler_opt_count);
+  append_diag_options (&argv_obstack, linker_opts, linker_opt_count);
 
-      obstack_ptr_grow (&argv_obstack, NULL);
-      argv = XOBFINISH (&argv_obstack, char **);
-      fork_execute (argv[0], argv, true);
-      obstack_free (&argv_obstack, NULL);
-    }
+  /* Append options specified by -foffload last.  In case of conflicting
+     options we expect offload compiler to choose the latest.  */
+  append_offload_options (&argv_obstack, target, compiler_opts,
+			  compiler_opt_count);
+  append_offload_options (&argv_obstack, target, linker_opts,
+			  linker_opt_count);
+
+  obstack_ptr_grow (&argv_obstack, NULL);
+  argv = XOBFINISH (&argv_obstack, char **);
+  fork_execute (argv[0], argv, true);
+  obstack_free (&argv_obstack, NULL);
 
   free_array_of_ptrs ((void **) paths, n_paths);
   return filename;
@@ -963,7 +1033,7 @@ find_and_merge_options (int fd, off_t file_offset, const char *prefix,
    is returned.  Return NULL on error.  */
 
 const char *
-debug_objcopy (const char *infile)
+debug_objcopy (const char *infile, bool rename)
 {
   const char *outfile;
   const char *errmsg;
@@ -983,7 +1053,7 @@ debug_objcopy (const char *infile)
       infile = fname;
       inoff = (off_t) loffset;
     }
-  int infd = open (infile, O_RDONLY);
+  int infd = open (infile, O_RDONLY | O_BINARY);
   if (infd == -1)
     return NULL;
   simple_object_read *inobj = simple_object_start_read (infd, inoff,
@@ -1005,7 +1075,7 @@ debug_objcopy (const char *infile)
     }
 
   outfile = make_temp_file ("debugobjtem");
-  errmsg = simple_object_copy_lto_debug_sections (inobj, outfile, &err);
+  errmsg = simple_object_copy_lto_debug_sections (inobj, outfile, &err, rename);
   if (errmsg)
     {
       unlink_if_ordinary (outfile);
@@ -1018,6 +1088,13 @@ debug_objcopy (const char *infile)
   return outfile;
 }
 
+/* Helper for qsort: compare priorities for parallel compilation.  */
+
+int
+cmp_priority (const void *a, const void *b)
+{
+  return *((const int *)b)-*((const int *)a);
+}
 
 
 /* Execute gcc. ARGC is the number of arguments. ARGV contains the arguments. */
@@ -1046,6 +1123,7 @@ run_gcc (unsigned argc, char *argv[])
   bool have_offload = false;
   unsigned lto_argc = 0, ltoobj_argc = 0;
   char **lto_argv, **ltoobj_argv;
+  bool linker_output_rel = false;
   bool skip_debug = false;
   unsigned n_debugobj;
 
@@ -1098,9 +1176,15 @@ run_gcc (unsigned argc, char *argv[])
 	  file_offset = (off_t) loffset;
 	}
       fd = open (filename, O_RDONLY | O_BINARY);
+      /* Linker plugin passes -fresolution and -flinker-output options.
+	 -flinker-output is passed only when user did not specify one and thus
+	 we do not need to worry about duplicities with the option handling
+	 below. */
       if (fd == -1)
 	{
 	  lto_argv[lto_argc++] = argv[i];
+	  if (strcmp (argv[i], "-flinker-output=rel") == 0)
+	    linker_output_rel = true;
 	  continue;
 	}
 
@@ -1165,6 +1249,11 @@ run_gcc (unsigned argc, char *argv[])
 	  lto_mode = LTO_MODE_WHOPR;
 	  break;
 
+	case OPT_flinker_output_:
+	  linker_output_rel = !strcmp (option->arg, "rel");
+	  break;
+
+
 	default:
 	  break;
 	}
@@ -1180,6 +1269,9 @@ run_gcc (unsigned argc, char *argv[])
 	}
       fputc ('\n', stderr);
     }
+
+  if (linker_output_rel)
+    no_partition = true;
 
   if (no_partition)
     {
@@ -1348,7 +1440,19 @@ cont1:
 	  strcat (ltrans_output_file, ".ltrans.out");
 	}
       else
-	ltrans_output_file = make_temp_file (".ltrans.out");
+	{
+	  char *prefix = NULL;
+	  if (linker_output)
+	    {
+	      prefix = (char *) xmalloc (strlen (linker_output) + 2);
+	      strcpy (prefix, linker_output);
+	      strcat (prefix, ".");
+	    }
+
+	  ltrans_output_file = make_temp_file_with_prefix (prefix,
+							   ".ltrans.out");
+	  free (prefix);
+	}
       list_option_full = (char *) xmalloc (sizeof (char) *
 		         (strlen (ltrans_output_file) + list_option_len + 1));
       tmp = list_option_full;
@@ -1425,7 +1529,7 @@ cont1:
     for (i = 0; i < ltoobj_argc; ++i)
       {
 	const char *tem;
-	if ((tem = debug_objcopy (ltoobj_argv[i])))
+	if ((tem = debug_objcopy (ltoobj_argv[i], !linker_output_rel)))
 	  {
 	    obstack_ptr_grow (&argv_obstack, tem);
 	    n_debugobj++;
@@ -1477,6 +1581,7 @@ cont1:
       FILE *stream = fopen (ltrans_output_file, "r");
       FILE *mstream = NULL;
       struct obstack env_obstack;
+      int priority;
 
       if (!stream)
 	fatal_error (input_location, "fopen: %s: %m", ltrans_output_file);
@@ -1492,6 +1597,14 @@ cont1:
 	  size_t len;
 
 	  buf = input_name;
+          if (fscanf (stream, "%i\n", &priority) != 1)
+	    {
+	      if (!feof (stream))
+	        fatal_error (input_location,
+		             "Corrupted ltrans output file %s",
+			     ltrans_output_file);
+	      break;
+	    }
 cont:
 	  if (!fgets (buf, piece, stream))
 	    break;
@@ -1508,8 +1621,12 @@ cont:
 	    output_name = &input_name[1];
 
 	  nr++;
+	  ltrans_priorities
+	     = (int *)xrealloc (ltrans_priorities, nr * sizeof (int) * 2);
 	  input_names = (char **)xrealloc (input_names, nr * sizeof (char *));
 	  output_names = (char **)xrealloc (output_names, nr * sizeof (char *));
+	  ltrans_priorities[(nr-1)*2] = priority;
+	  ltrans_priorities[(nr-1)*2+1] = nr-1;
 	  input_names[nr-1] = input_name;
 	  output_names[nr-1] = output_name;
 	}
@@ -1521,6 +1638,7 @@ cont:
 	{
 	  makefile = make_temp_file (".mk");
 	  mstream = fopen (makefile, "w");
+	  qsort (ltrans_priorities, nr, sizeof (int) * 2, cmp_priority);
 	}
 
       /* Execute the LTRANS stage for each input file (or prepare a
@@ -1586,7 +1704,10 @@ cont:
 
 	  fprintf (mstream, "all:");
 	  for (i = 0; i < nr; ++i)
-	    fprintf (mstream, " \\\n\t%s", output_names[i]);
+	    {
+	      int j = ltrans_priorities[i*2 + 1];
+	      fprintf (mstream, " \\\n\t%s", output_names[j]);
+	    }
 	  fprintf (mstream, "\n");
 	  fclose (mstream);
 	  if (!jobserver)
@@ -1630,6 +1751,7 @@ cont:
 	  free (input_names[i]);
 	}
       nr = 0;
+      free (ltrans_priorities);
       free (output_names);
       free (input_names);
       free (list_option_full);

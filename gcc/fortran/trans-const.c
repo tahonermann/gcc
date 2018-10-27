@@ -26,7 +26,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "gfortran.h"
 #include "trans.h"
-#include "diagnostic-core.h"	/* For fatal_error.  */
 #include "fold-const.h"
 #include "stor-layout.h"
 #include "realmpfr.h"
@@ -133,7 +132,7 @@ gfc_build_localized_cstring_const (const char *msgid)
 
 
 /* Return a string constant with the given length.  Used for static
-   initializers.  The constant will be padded or truncated to match 
+   initializers.  The constant will be padded or truncated to match
    length.  */
 
 tree
@@ -303,7 +302,7 @@ gfc_conv_constant_to_tree (gfc_expr * expr)
 
   /* If it is has a prescribed memory representation, we build a string
      constant and VIEW_CONVERT to its type.  */
- 
+
   switch (expr->ts.type)
     {
     case BT_INTEGER:
@@ -368,9 +367,7 @@ gfc_conv_constant_to_tree (gfc_expr * expr)
 				     expr->representation.string);
 
     default:
-      fatal_error (input_location,
-		   "gfc_conv_constant_to_tree(): invalid type: %s",
-		   gfc_typename (&expr->ts));
+      gcc_unreachable ();
     }
 }
 
@@ -389,12 +386,12 @@ gfc_conv_constant (gfc_se * se, gfc_expr * expr)
   if (expr->ts.type == BT_DERIVED && expr->ts.u.derived
       && expr->ts.u.derived->attr.is_iso_c)
     {
-      if (expr->symtree->n.sym->intmod_sym_id == ISOCBINDING_NULL_PTR 
-          || expr->symtree->n.sym->intmod_sym_id == ISOCBINDING_NULL_FUNPTR)
-        {
-          /* Create a new EXPR_CONSTANT expression for our local uses.  */
-          expr = gfc_get_int_expr (gfc_default_integer_kind, NULL, 0);
-        }
+      if (expr->symtree->n.sym->intmod_sym_id == ISOCBINDING_NULL_PTR
+	  || expr->symtree->n.sym->intmod_sym_id == ISOCBINDING_NULL_FUNPTR)
+	{
+	  /* Create a new EXPR_CONSTANT expression for our local uses.  */
+	  expr = gfc_get_int_expr (gfc_default_integer_kind, NULL, 0);
+	}
     }
 
   if (expr->expr_type != EXPR_CONSTANT)
