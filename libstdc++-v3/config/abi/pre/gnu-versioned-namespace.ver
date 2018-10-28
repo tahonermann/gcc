@@ -302,10 +302,9 @@ CXXABI_2.0 {
     _ZTSN10__cxxabiv121__vmi_class_type_infoE;
 
     # typeinfo for char8_t
-    # FIXME: Acquire official manglings for char8_t
-    _ZTIu7char8_t;
-    _ZTIPu7char8_t;
-    _ZTIPKu7char8_t;
+    _ZTIDu;
+    _ZTIPDu;
+    _ZTIPKDu;
 
     # typeinfo for char16_t and char32_t
     _ZTIDs;

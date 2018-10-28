@@ -2057,17 +2057,15 @@ GLIBCXX_3.4.26 {
     _ZN11__gnu_debug25_Safe_local_iterator_base16_M_attach_singleEPNS_19_Safe_sequence_baseEb;
 
     # numeric_limits<char8_t>
-    # FIXME: Acquire an official mangling for char8_t.
-    _ZNSt14numeric_limitsIu7char8_tE[5-9]*;
-    _ZNSt14numeric_limitsIu7char8_tE1[0-7][hirt]*;
-    _ZNSt14numeric_limitsIu7char8_tE1[0-7]mi*;
-    _ZNSt14numeric_limitsIu7char8_tE1[0-7]max_e*;
+    _ZNSt14numeric_limitsIDuE[5-9]*;
+    _ZNSt14numeric_limitsIDuE1[0-7][hirt]*;
+    _ZNSt14numeric_limitsIDuE1[0-7]mi*;
+    _ZNSt14numeric_limitsIDuE1[0-7]max_e*;
 
     # codecvt<char16_t, char8_t, mbstate_t>, codecvt<char32_t, char8_t, mbstate_t>
-    # FIXME: Acquire an official mangling for char8_t.
-    _ZNKSt7codecvtID[is]u7char8_t*;
-    _ZNSt7codecvtID[is]u7char8_t*;
-    _ZT[ISV]St7codecvtID[is]u7char8_t*E;
+    _ZNKSt7codecvtID[is]Du*;
+    _ZNSt7codecvtID[is]Du*;
+    _ZT[ISV]St7codecvtID[is]Du*E;
 
 } GLIBCXX_3.4.25;
 
@@ -2362,11 +2360,10 @@ CXXABI_1.3.11 {
 
 CXXABI_1.3.12 {
 
-    # FIXME: Acquire official mangling for char8_t.
     # typeinfo for char8_t
-    _ZTIu7char8_t;
-    _ZTIPu7char8_t;
-    _ZTIPKu7char8_t;
+    _ZTIDu;
+    _ZTIPDu;
+    _ZTIPKDu;
 
 } CXXABI_1.3.11;
 
