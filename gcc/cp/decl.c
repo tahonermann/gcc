@@ -10713,9 +10713,8 @@ grokdeclarator (const cp_declarator *declarator,
 	  richloc.add_range (declspecs->locations[ds_short]);
 	  error_at (&richloc, "%<long%> and %<short%> specified together");
 	}
-      else if ((flag_char8_t && type == char8_type_node) ||
-               type == char16_type_node || type == char32_type_node)
       else if (TREE_CODE (type) != INTEGER_TYPE
+	       || (flag_char8_t && type == char8_type_node)
 	       || type == char16_type_node || type == char32_type_node
 	       || ((long_p || short_p)
 		   && (explicit_char || explicit_intN)))
