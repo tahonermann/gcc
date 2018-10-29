@@ -521,13 +521,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     inline basic_ostream<char, _Traits>&
     operator<<(basic_ostream<char, _Traits>& __out, unsigned char __c)
     { return (__out << static_cast<char>(__c)); }
-
-#ifdef _GLIBCXX_USE_CHAR8_T
-  template<class _Traits>
-    inline basic_ostream<char, _Traits>&
-    operator<<(basic_ostream<char, _Traits>& __out, char8_t __c)
-    { return (__out << static_cast<char>(__c)); }
-#endif
   //@}
 
   //@{
@@ -583,13 +576,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     inline basic_ostream<char, _Traits> &
     operator<<(basic_ostream<char, _Traits>& __out, const unsigned char* __s)
     { return (__out << reinterpret_cast<const char*>(__s)); }
-
-#ifdef _GLIBCXX_USE_CHAR8_T
-  template<class _Traits>
-    inline basic_ostream<char, _Traits> &
-    operator<<(basic_ostream<char, _Traits>& __out, const char8_t* __s)
-    { return (__out << reinterpret_cast<const char*>(__s)); }
-#endif
   //@}
 
   // Standard basic_ostream manipulators

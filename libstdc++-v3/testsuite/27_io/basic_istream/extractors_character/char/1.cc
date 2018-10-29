@@ -19,13 +19,11 @@
 
 // 27.6.1.2.3 character extractors
 
-// { dg-options "-fchar8_t" }
-
 #include <istream>
 #include <sstream>
 #include <testsuite_hooks.h>
 
-void test01()
+void test01() 
 {
   std::string str_01;
   const std::string str_02("coltrane playing 'softly as a morning sunrise'");
@@ -88,7 +86,7 @@ void test01()
   VERIFY( array2[6] == 'y' );
   int1 = is_02.peek(); // should be ' '
   VERIFY( int1 == ' ' );
-
+  
   // template<_CharT, _Traits>
   //  basic_istream& operator>>(istream&, signed char*)
   signed char array3[n];
@@ -99,18 +97,6 @@ void test01()
   VERIFY( !static_cast<bool>(state2 & statefail) );
   VERIFY( array3[0] == 'a' );
   VERIFY( array3[1] == 's' );
-  int1 = is_02.peek(); // should be ' '
-  VERIFY( int1 == ' ' );
-
-  // template<_CharT, _Traits>
-  //  basic_istream& operator>>(istream&, char8_t*)
-  char8_t array4[n];
-  state1 = is_02.rdstate();
-  is_02 >> array4;   // should snake "a"
-  state2 = is_02.rdstate();
-  VERIFY( state1 == state2 );
-  VERIFY( !static_cast<bool>(state2 & statefail) );
-  VERIFY( array4[0] == 'a' );
   int1 = is_02.peek(); // should be ' '
   VERIFY( int1 == ' ' );
 }

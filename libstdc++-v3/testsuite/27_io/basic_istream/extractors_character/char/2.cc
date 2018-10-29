@@ -19,13 +19,11 @@
 
 // 27.6.1.2.3 character extractors
 
-// { dg-options "-fchar8_t" }
-
 #include <istream>
 #include <sstream>
 #include <testsuite_hooks.h>
 
-void test02()
+void test02() 
 {
   typedef std::ios::traits_type ctraits_type;
 
@@ -44,19 +42,19 @@ void test02()
   //  basic_istream& operator>>(istream&, _CharT&)
   char c1 = 'c', c2 = 'c';
   state1 = is_01.rdstate();
-  is_01 >> c1;
+  is_01 >> c1;   
   state2 = is_01.rdstate();
   VERIFY( state1 != state2 );
   VERIFY( c1 == c2 );
   VERIFY( static_cast<bool>(state2 & statefail) );
 
   state1 = is_02.rdstate();
-  is_02 >> c1;
+  is_02 >> c1;   
   state2 = is_02.rdstate();
   VERIFY( state1 == state2 );
   VERIFY( c1 == 'o' );
-  is_02 >> c1;
-  is_02 >> c1;
+  is_02 >> c1;   
+  is_02 >> c1;   
   VERIFY( c1 == 'c' );
   VERIFY( !static_cast<bool>(state2 & statefail) );
 
@@ -64,37 +62,25 @@ void test02()
   //  basic_istream& operator>>(istream&, unsigned char&)
   unsigned char uc1 = 'c';
   state1 = is_02.rdstate();
-  is_02 >> uc1;
+  is_02 >> uc1;   
   state2 = is_02.rdstate();
   VERIFY( state1 == state2 );
   VERIFY( uc1 == 'o' );
-  is_02 >> uc1;
-  is_02 >> uc1;
+  is_02 >> uc1;   
+  is_02 >> uc1;   
   VERIFY( uc1 == 't' );
 
   // template<_CharT, _Traits>
   //  basic_istream& operator>>(istream&, signed char&)
   signed char sc1 = 'c';
   state1 = is_02.rdstate();
-  is_02 >> sc1;
+  is_02 >> sc1;   
   state2 = is_02.rdstate();
   VERIFY( state1 == state2 );
   VERIFY( sc1 == 'r' );
-  is_02 >> sc1;
-  is_02 >> sc1;
+  is_02 >> sc1;   
+  is_02 >> sc1;   
   VERIFY( sc1 == 'n' );
-
-  // template<_CharT, _Traits>
-  //  basic_istream& operator>>(istream&, char8_t&)
-  char8_t c81 = 'c';
-  state1 = is_02.rdstate();
-  is_02 >> c81;
-  state2 = is_02.rdstate();
-  VERIFY( state1 == state2 );
-  VERIFY( c81 == 'e' );
-  is_02 >> c81;  // skips space.
-  is_02 >> c81;
-  VERIFY( c81 == 'l' );
 }
 
 int main()

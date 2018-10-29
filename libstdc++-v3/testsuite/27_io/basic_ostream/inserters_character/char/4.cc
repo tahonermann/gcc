@@ -19,8 +19,6 @@
 
 // 27.6.2.5.4 basic_ostream character inserters
 
-// { dg-options "-fchar8_t" }
-
 #include <string>
 #include <ostream>
 #include <sstream>
@@ -35,7 +33,6 @@ test04()
   const int i_max=250;
 
   std::ostringstream oss_02(str_01, std::ios_base::out);
-  std::ostringstream oss_03(std::ios_base::out);
 
   // template<_CharT, _Traits>
   //  basic_ostream& operator<<(ostream&, const char*)
@@ -46,36 +43,6 @@ test04()
   VERIFY( oss_02.good() );
   VERIFY( str_tmp != str_01 );
   VERIFY( str_tmp.size() == 2390 );
-
-  // template<_CharT, _Traits>
-  //  basic_ostream& operator<<(ostream&, const signed char*)
-  oss_03 = std::ostringstream("Test: ", std::ios_base::app);
-  const signed char sca1[] = { 's', 'i', 'g', 'n', 'e', 'd', '\0' };
-  const signed char *scp1 = sca1;
-  oss_03 << scp1 << std::endl;
-  VERIFY ( !oss_03.bad() );
-  VERIFY ( oss_03.good() );
-  VERIFY ( oss_03.str() == "Test: signed\n" );
-
-  // template<_CharT, _Traits>
-  //  basic_ostream& operator<<(ostream&, const unsigned char*)
-  oss_03 = std::ostringstream("Test: ", std::ios_base::app);
-  const unsigned char uca1[] = { 'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', '\0' };
-  const unsigned char *ucp1 = uca1;
-  oss_03 << ucp1 << std::endl;
-  VERIFY ( !oss_03.bad() );
-  VERIFY ( oss_03.good() );
-  VERIFY ( oss_03.str() == "Test: unsigned\n" );
-
-  // template<_CharT, _Traits>
-  //  basic_ostream& operator<<(ostream&, const char8_t*)
-  oss_03 = std::ostringstream("Test: ", std::ios_base::app);
-  const char8_t c8a1[] = { 'c', 'h', 'a', 'r', '8', '_', 't', '\0' };
-  const char8_t *c8p1 = c8a1;
-  oss_03 << c8p1 << std::endl;
-  VERIFY ( !oss_03.bad() );
-  VERIFY ( oss_03.good() );
-  VERIFY ( oss_03.str() == "Test: char8_t\n" );
 }
 
 int main()

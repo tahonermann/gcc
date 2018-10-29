@@ -760,13 +760,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     inline basic_istream<char, _Traits>&
     operator>>(basic_istream<char, _Traits>& __in, signed char& __c)
     { return (__in >> reinterpret_cast<char&>(__c)); }
-
-#ifdef _GLIBCXX_USE_CHAR8_T
-  template<class _Traits>
-    inline basic_istream<char, _Traits>&
-    operator>>(basic_istream<char, _Traits>& __in, char8_t& __c)
-    { return (__in >> reinterpret_cast<char&>(__c)); }
-#endif
   //@}
 
   //@{
@@ -814,13 +807,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     inline basic_istream<char, _Traits>&
     operator>>(basic_istream<char, _Traits>& __in, signed char* __s)
     { return (__in >> reinterpret_cast<char*>(__s)); }
-
-#ifdef _GLIBCXX_USE_CHAR8_T
-  template<class _Traits>
-    inline basic_istream<char, _Traits>&
-    operator>>(basic_istream<char, _Traits>& __in, char8_t* __s)
-    { return (__in >> reinterpret_cast<char*>(__s)); }
-#endif
   //@}
 
   /**
