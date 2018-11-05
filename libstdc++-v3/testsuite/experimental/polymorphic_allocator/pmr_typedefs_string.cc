@@ -16,6 +16,7 @@
 // <http://www.gnu.org/licenses/>.
 
 // { dg-do compile { target c++14 } }
+// { dg-options "-fchar8_t" }
 // { dg-require-effective-target cxx11-abi }
 
 #include <experimental/string>
@@ -36,6 +37,12 @@ static_assert(std::is_same<xpmr::string,
     std::basic_string<char, std::char_traits<char>,
 		      xpmr::polymorphic_allocator<char>>>::value,
     "pmr::string");
+#ifdef _GLIBCXX_USE_CHAR8_T
+static_assert(std::is_same<xpmr::u8string,
+    std::basic_string<char8_t, std::char_traits<char8_t>,
+		      xpmr::polymorphic_allocator<char8_t>>>::value,
+    "pmr::u8string");
+#endif
 static_assert(std::is_same<xpmr::u16string,
     std::basic_string<char16_t, std::char_traits<char16_t>,
 		      xpmr::polymorphic_allocator<char16_t>>>::value,
