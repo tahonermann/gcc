@@ -445,3 +445,11 @@
 #else
 #  error "__has_cpp_attribute"
 #endif
+
+// C++2A features:
+
+#ifndef __cpp_char8_t
+#  error "__cpp_char8_t"
+#elif __cpp_char8_t != 201803
+#  error "__cpp_char8_t != 201803"
+#endif
