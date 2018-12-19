@@ -3556,12 +3556,9 @@ c_common_get_alias_set (tree t)
   if (!TYPE_P (t))
     return -1;
 
-  /* Unlike char, char8_t doesn't alias. */
-  if (flag_char8_t && t == char8_type_node)
-    return -1;
-
   /* The C standard guarantees that any object may be accessed via an
-     lvalue that has character type.  */
+     lvalue that has narrow character type.  This does not include
+     char8_t in C++.  */
   if (t == char_type_node
       || t == signed_char_type_node
       || t == unsigned_char_type_node)
