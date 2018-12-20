@@ -13,3 +13,9 @@ const char (&rca2)[2] = u8"x";
 
 char ca1[] = "x";
 char ca2[] = u8"x";
+
+signed char sca1[] = "x";
+signed char sca2[] = u8"x";
+
+unsigned char uca1[] = "x";
+unsigned char uca2[] = u8"x";

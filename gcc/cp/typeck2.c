@@ -1061,10 +1061,23 @@ digest_init_r (tree type, tree init, int nested, int flags,
 	{
 	  tree char_type = TYPE_MAIN_VARIANT (TREE_TYPE (TREE_TYPE (init)));
 
-	  if (TYPE_PRECISION (typ1) == BITS_PER_UNIT
-	      && (typ1 == char_type_node || !flag_char8_t))
+	  if (TYPE_PRECISION (typ1) == BITS_PER_UNIT)
 	    {
-	      if (char_type != char_type_node)
+	      if (typ1 != char8_type_node && char_type == char8_type_node)
+		{
+		  if (complain & tf_error)
+		    error_at (loc, "char-array initialized from UTF-8 string");
+		  return error_mark_node;
+		}
+	      else if (typ1 == char8_type_node && char_type == char_type_node)
+		{
+		  if (complain & tf_error)
+		    error_at (loc, "char8_t-array initialized from ordinary "
+			      "string");
+		  return error_mark_node;
+		}
+	      else if (char_type != char_type_node
+		       && char_type != char8_type_node)
 		{
 		  if (complain & tf_error)
 		    error_at (loc, "char-array initialized from wide string");
