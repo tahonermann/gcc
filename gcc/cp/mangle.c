@@ -2531,7 +2531,7 @@ write_builtin_type (tree type)
 	 isn't in integer_type_nodes.  */
       if (type == wchar_type_node)
 	write_char ('w');
-      else if (flag_char8_t && type == char8_type_node)
+      else if (type == char8_type_node)
 	write_string ("Du");
       else if (type == char16_type_node)
 	write_string ("Ds");

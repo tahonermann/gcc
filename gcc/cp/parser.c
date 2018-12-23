@@ -28292,7 +28292,7 @@ cp_parser_set_decl_spec_type (cp_decl_specifier_seq *decl_specs,
   if (decl_spec_seq_has_spec_p (decl_specs, ds_typedef)
       && !type_definition_p
       && (type_spec == boolean_type_node
-	  || (flag_char8_t && type_spec == char8_type_node)
+	  || type_spec == char8_type_node
 	  || type_spec == char16_type_node
 	  || type_spec == char32_type_node
 	  || type_spec == wchar_type_node)
