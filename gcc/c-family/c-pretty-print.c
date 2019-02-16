@@ -1,5 +1,5 @@
 /* Subroutines common to both C and C++ pretty-printers.
-   Copyright (C) 2002-2018 Free Software Foundation, Inc.
+   Copyright (C) 2002-2019 Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@integrable-solutions.net>
 
 This file is part of GCC.
@@ -976,14 +976,14 @@ static void
 pp_c_enumeration_constant (c_pretty_printer *pp, tree e)
 {
   tree type = TREE_TYPE (e);
-  tree value;
+  tree value = NULL_TREE;
 
   /* Find the name of this constant.  */
-  for (value = TYPE_VALUES (type);
-       value != NULL_TREE
-	&& !tree_int_cst_equal (DECL_INITIAL (TREE_VALUE (value)), e);
-       value = TREE_CHAIN (value))
-    ;
+  if ((pp->flags & pp_c_flag_gnu_v3) == 0)
+    for (value = TYPE_VALUES (type); value != NULL_TREE;
+	 value = TREE_CHAIN (value))
+      if (tree_int_cst_equal (DECL_INITIAL (TREE_VALUE (value)), e))
+	break;
 
   if (value != NULL_TREE)
     pp->id_expression (TREE_PURPOSE (value));
@@ -1260,9 +1260,14 @@ c_pretty_printer::primary_expression (tree e)
 
     default:
       /* FIXME:  Make sure we won't get into an infinite loop.  */
-      pp_c_left_paren (this);
-      expression (e);
-      pp_c_right_paren (this);
+      if (location_wrapper_p (e))
+	expression (e);
+      else
+	{
+	  pp_c_left_paren (this);
+	  expression (e);
+	  pp_c_right_paren (this);
+	}
       break;
     }
 }

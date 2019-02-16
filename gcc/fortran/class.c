@@ -1,5 +1,5 @@
 /* Implementation of Fortran 2003 Polymorphism.
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2019 Free Software Foundation, Inc.
    Contributed by Paul Richard Thomas <pault@gcc.gnu.org>
    and Janus Weil <janus@gcc.gnu.org>
 
@@ -72,14 +72,18 @@ along with GCC; see the file COPYING3.  If not see
 static void
 insert_component_ref (gfc_typespec *ts, gfc_ref **ref, const char * const name)
 {
-  gfc_symbol *type_sym;
   gfc_ref *new_ref;
+  int wcnt, ecnt;
 
   gcc_assert (ts->type == BT_DERIVED || ts->type == BT_CLASS);
-  type_sym = ts->u.derived;
 
-  gfc_find_component (type_sym, name, true, true, &new_ref);
+  gfc_find_component (ts->u.derived, name, true, true, &new_ref);
+
+  gfc_get_errors (&wcnt, &ecnt);
+  if (ecnt > 0 && !new_ref)
+    return;
   gcc_assert (new_ref->u.c.component);
+
   while (new_ref->next)
     new_ref = new_ref->next;
   new_ref->next = *ref;
@@ -626,7 +630,7 @@ gfc_build_class_symbol (gfc_typespec *ts, symbol_attribute *attr,
 		   || attr->select_type_temporary || attr->associate_var;
 
   if (!attr->class_ok)
-    /* We can not build the class container yet.  */
+    /* We cannot build the class container yet.  */
     return true;
 
   /* Determine the name of the encapsulating type.  */
@@ -2462,6 +2466,7 @@ gfc_find_derived_vtab (gfc_symbol *derived)
 		goto cleanup;
 	      c->attr.proc_pointer = 1;
 	      c->attr.access = ACCESS_PRIVATE;
+	      c->attr.artificial = 1;
 	      c->tb = XCNEW (gfc_typebound_proc);
 	      c->tb->ppc = 1;
 	      generate_finalization_wrapper (derived, ns, tname, c);
@@ -2758,9 +2763,9 @@ find_intrinsic_vtab (gfc_typespec *ts)
 	      /* This is elemental so that arrays are automatically
 		 treated correctly by the scalarizer.  */
 	      copy->attr.elemental = 1;
-	      if (ns->proc_name->attr.flavor == FL_MODULE)
+	      if (ns->proc_name && ns->proc_name->attr.flavor == FL_MODULE)
 		copy->module = ns->proc_name->name;
-		  gfc_set_sym_referenced (copy);
+	      gfc_set_sym_referenced (copy);
 	      /* Set up formal arguments.  */
 	      gfc_get_symbol ("src", sub_ns, &src);
 	      src->ts.type = ts->type;
@@ -2794,6 +2799,7 @@ find_intrinsic_vtab (gfc_typespec *ts)
 		goto cleanup;
 	      c->attr.proc_pointer = 1;
 	      c->attr.access = ACCESS_PRIVATE;
+	      c->attr.artificial = 1;
 	      c->tb = XCNEW (gfc_typebound_proc);
 	      c->tb->ppc = 1;
 	      c->initializer = gfc_get_null_expr (NULL);
@@ -2840,7 +2846,10 @@ gfc_find_vtab (gfc_typespec *ts)
     case BT_DERIVED:
       return gfc_find_derived_vtab (ts->u.derived);
     case BT_CLASS:
-      return gfc_find_derived_vtab (ts->u.derived->components->ts.u.derived);
+      if (ts->u.derived->components && ts->u.derived->components->ts.u.derived)
+	return gfc_find_derived_vtab (ts->u.derived->components->ts.u.derived);
+      else
+	return NULL;
     default:
       return find_intrinsic_vtab (ts);
     }

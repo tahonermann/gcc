@@ -1,6 +1,6 @@
 // unique_ptr implementation -*- C++ -*-
 
-// Copyright (C) 2008-2018 Free Software Foundation, Inc.
+// Copyright (C) 2008-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -707,41 +707,41 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Tp, typename _Dp,
 	   typename _Up, typename _Ep>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator==(const unique_ptr<_Tp, _Dp>& __x,
 	       const unique_ptr<_Up, _Ep>& __y)
     { return __x.get() == __y.get(); }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator==(const unique_ptr<_Tp, _Dp>& __x, nullptr_t) noexcept
     { return !__x; }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator==(nullptr_t, const unique_ptr<_Tp, _Dp>& __x) noexcept
     { return !__x; }
 
   template<typename _Tp, typename _Dp,
 	   typename _Up, typename _Ep>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator!=(const unique_ptr<_Tp, _Dp>& __x,
 	       const unique_ptr<_Up, _Ep>& __y)
     { return __x.get() != __y.get(); }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator!=(const unique_ptr<_Tp, _Dp>& __x, nullptr_t) noexcept
     { return (bool)__x; }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator!=(nullptr_t, const unique_ptr<_Tp, _Dp>& __x) noexcept
     { return (bool)__x; }
 
   template<typename _Tp, typename _Dp,
 	   typename _Up, typename _Ep>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<(const unique_ptr<_Tp, _Dp>& __x,
 	      const unique_ptr<_Up, _Ep>& __y)
     {
@@ -752,67 +752,67 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<(const unique_ptr<_Tp, _Dp>& __x, nullptr_t)
     { return std::less<typename unique_ptr<_Tp, _Dp>::pointer>()(__x.get(),
 								 nullptr); }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<(nullptr_t, const unique_ptr<_Tp, _Dp>& __x)
     { return std::less<typename unique_ptr<_Tp, _Dp>::pointer>()(nullptr,
 								 __x.get()); }
 
   template<typename _Tp, typename _Dp,
 	   typename _Up, typename _Ep>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<=(const unique_ptr<_Tp, _Dp>& __x,
 	       const unique_ptr<_Up, _Ep>& __y)
     { return !(__y < __x); }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<=(const unique_ptr<_Tp, _Dp>& __x, nullptr_t)
     { return !(nullptr < __x); }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<=(nullptr_t, const unique_ptr<_Tp, _Dp>& __x)
     { return !(__x < nullptr); }
 
   template<typename _Tp, typename _Dp,
 	   typename _Up, typename _Ep>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>(const unique_ptr<_Tp, _Dp>& __x,
 	      const unique_ptr<_Up, _Ep>& __y)
     { return (__y < __x); }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>(const unique_ptr<_Tp, _Dp>& __x, nullptr_t)
     { return std::less<typename unique_ptr<_Tp, _Dp>::pointer>()(nullptr,
 								 __x.get()); }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>(nullptr_t, const unique_ptr<_Tp, _Dp>& __x)
     { return std::less<typename unique_ptr<_Tp, _Dp>::pointer>()(__x.get(),
 								 nullptr); }
 
   template<typename _Tp, typename _Dp,
 	   typename _Up, typename _Ep>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>=(const unique_ptr<_Tp, _Dp>& __x,
 	       const unique_ptr<_Up, _Ep>& __y)
     { return !(__x < __y); }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>=(const unique_ptr<_Tp, _Dp>& __x, nullptr_t)
     { return !(__x < nullptr); }
 
   template<typename _Tp, typename _Dp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>=(nullptr_t, const unique_ptr<_Tp, _Dp>& __x)
     { return !(nullptr < __x); }
 

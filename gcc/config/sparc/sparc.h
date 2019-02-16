@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for Sun SPARC.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2019 Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com).
    64-bit SPARC-V9 support by Michael Tiemann, Jim Wilson, and Doug Evans,
    at Cygnus Support.
@@ -26,6 +26,9 @@ along with GCC; see the file COPYING3.  If not see
    whatever definitions are necessary.  */
 
 #define TARGET_CPU_CPP_BUILTINS() sparc_target_macros ()
+
+/* Target CPU versions for D.  */
+#define TARGET_D_CPU_VERSIONS sparc_d_target_versions
 
 /* Specify this in a cover file to provide bi-architecture (32/64) support.  */
 /* #define SPARC_BI_ARCH */
@@ -362,11 +365,7 @@ extern enum cmodel sparc_cmodel;
    This is what GAS uses.  Add %(asm_arch) to ASM_SPEC to enable.  */
 
 #define ASM_ARCH32_SPEC "-32"
-#ifdef HAVE_AS_REGISTER_PSEUDO_OP
 #define ASM_ARCH64_SPEC "-64 -no-undeclared-regs"
-#else
-#define ASM_ARCH64_SPEC "-64"
-#endif
 #define ASM_ARCH_DEFAULT_SPEC \
 (DEFAULT_ARCH32_P ? ASM_ARCH32_SPEC : ASM_ARCH64_SPEC)
 
@@ -805,7 +804,6 @@ extern enum cmodel sparc_cmodel;
 #define STATIC_CHAIN_REGNUM (TARGET_ARCH64 ? 5 : 2)
 
 /* Register which holds the global offset table, if any.  */
-
 #define GLOBAL_OFFSET_TABLE_REGNUM 23
 
 /* Register which holds offset table for position-independent data references.
@@ -813,7 +811,6 @@ extern enum cmodel sparc_cmodel;
    so we use a pseudo-register to make sure it is properly saved and restored
    around calls to setjmp.  Now the ABI of VxWorks RTP makes it live on entry
    to PLT entries so we use the canonical GOT register in this case.  */
-
 #define PIC_OFFSET_TABLE_REGNUM \
   (TARGET_VXWORKS_RTP && flag_pic ? GLOBAL_OFFSET_TABLE_REGNUM : INVALID_REGNUM)
 
@@ -823,7 +820,6 @@ extern enum cmodel sparc_cmodel;
    Originally it was -1, but later on the container of options changed to
    unsigned byte, so we decided to pick 127 as default value, which does
    reflect an undefined default value in case of 0/1.  */
-
 #define DEFAULT_PCC_STRUCT_RETURN 127
 
 /* Functions which return large structures get the address
@@ -1194,7 +1190,6 @@ init_cumulative_args (& (CUM), (FNTYPE), (LIBNAME), (FNDECL));
 
 extern GTY(()) char sparc_hard_reg_printed[8];
 
-#ifdef HAVE_AS_REGISTER_PSEUDO_OP
 #define ASM_DECLARE_REGISTER_GLOBAL(FILE, DECL, REGNO, NAME)		\
 do {									\
   if (TARGET_ARCH64)							\
@@ -1213,8 +1208,6 @@ do {									\
 	  }								\
     }									\
 } while (0)
-#endif
-
 
 /* Emit rtl for profiling.  */
 #define PROFILE_HOOK(LABEL)   sparc_profile_hook (LABEL)

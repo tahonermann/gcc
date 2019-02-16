@@ -1,6 +1,6 @@
 // unordered_set implementation -*- C++ -*-
 
-// Copyright (C) 2010-2018 Free Software Foundation, Inc.
+// Copyright (C) 2010-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -294,7 +294,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       // size and capacity:
 
       ///  Returns true if the %unordered_set is empty.
-      bool
+      _GLIBCXX_NODISCARD bool
       empty() const noexcept
       { return _M_h.empty(); }
 
@@ -1102,7 +1102,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       // size and capacity:
 
       ///  Returns true if the %unordered_multiset is empty.
-      bool
+      _GLIBCXX_NODISCARD bool
       empty() const noexcept
       { return _M_h.empty(); }
 

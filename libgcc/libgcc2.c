@@ -1,6 +1,6 @@
 /* More subroutines needed by GCC output code on some machines.  */
 /* Compile this one with gcc.  */
-/* Copyright (C) 1989-2018 Free Software Foundation, Inc.
+/* Copyright (C) 1989-2019 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -1684,7 +1684,7 @@ FUNC (DWtype u)
 
   /* No leading bits means u == minimum.  */
   if (count == 0)
-    return -(Wtype_MAXp1_F * (Wtype_MAXp1_F / 2));
+    return Wtype_MAXp1_F * (FSTYPE) (hi | ((UWtype) u != 0));
 
   shift = 1 + W_TYPE_SIZE - count;
 

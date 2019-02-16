@@ -1,5 +1,5 @@
 /* Control flow functions for trees.
-   Copyright (C) 2001-2018 Free Software Foundation, Inc.
+   Copyright (C) 2001-2019 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
 This file is part of GCC.
@@ -2136,7 +2136,7 @@ gimple_merge_blocks (basic_block a, basic_block b)
 	     a situation where we have a forced label in block B
 	     However, the label at the start of block B might still be
 	     used in other ways (think about the runtime checking for
-	     Fortran assigned gotos).  So we can not just delete the
+	     Fortran assigned gotos).  So we cannot just delete the
 	     label.  Instead we move the label to the start of block A.  */
 	  if (FORCED_LABEL (label))
 	    {
@@ -2359,7 +2359,7 @@ find_taken_edge (basic_block bb, tree val)
   if (computed_goto_p (stmt))
     {
       /* Only optimize if the argument is a label, if the argument is
-	 not a label then we can not construct a proper CFG.
+	 not a label then we cannot construct a proper CFG.
 
          It may be the case that we only need to allow the LABEL_REF to
          appear inside an ADDR_EXPR, but we also allow the LABEL_REF to
@@ -2569,9 +2569,9 @@ dump_cfg_stats (FILE *file)
   long num_edges;
   basic_block bb;
   const char * const fmt_str   = "%-30s%-13s%12s\n";
-  const char * const fmt_str_1 = "%-30s%13d%11lu%c\n";
-  const char * const fmt_str_2 = "%-30s%13ld%11lu%c\n";
-  const char * const fmt_str_3 = "%-43s%11lu%c\n";
+  const char * const fmt_str_1 = "%-30s%13d" PRsa (11) "\n";
+  const char * const fmt_str_2 = "%-30s%13ld" PRsa (11) "\n";
+  const char * const fmt_str_3 = "%-43s" PRsa (11) "\n";
   const char *funcname = current_function_name ();
 
   fprintf (file, "\nCFG Statistics for %s\n\n", funcname);
@@ -2584,18 +2584,18 @@ dump_cfg_stats (FILE *file)
   size = n_basic_blocks_for_fn (cfun) * sizeof (struct basic_block_def);
   total += size;
   fprintf (file, fmt_str_1, "Basic blocks", n_basic_blocks_for_fn (cfun),
-	   SCALE (size), LABEL (size));
+	   SIZE_AMOUNT (size));
 
   num_edges = 0;
   FOR_EACH_BB_FN (bb, cfun)
     num_edges += EDGE_COUNT (bb->succs);
   size = num_edges * sizeof (struct edge_def);
   total += size;
-  fprintf (file, fmt_str_2, "Edges", num_edges, SCALE (size), LABEL (size));
+  fprintf (file, fmt_str_2, "Edges", num_edges, SIZE_AMOUNT (size));
 
   fprintf (file, "---------------------------------------------------------\n");
-  fprintf (file, fmt_str_3, "Total memory used by CFG data", SCALE (total),
-	   LABEL (total));
+  fprintf (file, fmt_str_3, "Total memory used by CFG data",
+	   SIZE_AMOUNT (total));
   fprintf (file, "---------------------------------------------------------\n");
   fprintf (file, "\n");
 
@@ -3116,6 +3116,12 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 	    {
 	      error ("mode size of non-integral result does not "
 		     "match field size of BIT_FIELD_REF");
+	      return true;
+	    }
+	  if (INTEGRAL_TYPE_P (TREE_TYPE (op))
+	      && !type_has_mode_precision_p (TREE_TYPE (op)))
+	    {
+	      error ("BIT_FIELD_REF of non-mode-precision operand");
 	      return true;
 	    }
 	  if (!AGGREGATE_TYPE_P (TREE_TYPE (op))
@@ -4317,6 +4323,12 @@ verify_gimple_assign_ternary (gassign *stmt)
 	  || ! tree_fits_uhwi_p (TYPE_SIZE (rhs2_type)))
 	{
 	  error ("invalid position or size in BIT_INSERT_EXPR");
+	  return true;
+	}
+      if (INTEGRAL_TYPE_P (rhs1_type)
+	  && !type_has_mode_precision_p (rhs1_type))
+	{
+	  error ("BIT_INSERT_EXPR into non-mode-precision operand");
 	  return true;
 	}
       if (INTEGRAL_TYPE_P (rhs1_type))
@@ -7131,11 +7143,14 @@ move_block_to_fn (struct function *dest_cfun, basic_block bb,
 }
 
 /* Examine the statements in BB (which is in SRC_CFUN); find and return
-   the outermost EH region.  Use REGION as the incoming base EH region.  */
+   the outermost EH region.  Use REGION as the incoming base EH region.
+   If there is no single outermost region, return NULL and set *ALL to
+   true.  */
 
 static eh_region
 find_outermost_region_in_block (struct function *src_cfun,
-				basic_block bb, eh_region region)
+				basic_block bb, eh_region region,
+				bool *all)
 {
   gimple_stmt_iterator si;
 
@@ -7154,7 +7169,11 @@ find_outermost_region_in_block (struct function *src_cfun,
 	  else if (stmt_region != region)
 	    {
 	      region = eh_region_outermost (src_cfun, stmt_region, region);
-	      gcc_assert (region != NULL);
+	      if (region == NULL)
+		{
+		  *all = true;
+		  return NULL;
+		}
 	    }
 	}
     }
@@ -7489,12 +7508,17 @@ move_sese_region_to_fn (struct function *dest_cfun, basic_block entry_bb,
   if (saved_cfun->eh)
     {
       eh_region region = NULL;
+      bool all = false;
 
       FOR_EACH_VEC_ELT (bbs, i, bb)
-	region = find_outermost_region_in_block (saved_cfun, bb, region);
+	{
+	  region = find_outermost_region_in_block (saved_cfun, bb, region, &all);
+	  if (all)
+	    break;
+	}
 
       init_eh_for_function ();
-      if (region != NULL)
+      if (region != NULL || all)
 	{
 	  new_label_map = htab_create (17, tree_map_hash, tree_map_eq, free);
 	  eh_map = duplicate_eh_regions (saved_cfun, region, 0,
@@ -8798,23 +8822,22 @@ gimple_lv_add_condition_to_bb (basic_block first_head ATTRIBUTE_UNUSED,
 
 
 /* Do book-keeping of basic block BB for the profile consistency checker.
-   If AFTER_PASS is 0, do pre-pass accounting, or if AFTER_PASS is 1
-   then do post-pass accounting.  Store the counting in RECORD.  */
+   Store the counting in RECORD.  */
 static void
-gimple_account_profile_record (basic_block bb, int after_pass,
+gimple_account_profile_record (basic_block bb,
 			       struct profile_record *record)
 {
   gimple_stmt_iterator i;
   for (i = gsi_start_bb (bb); !gsi_end_p (i); gsi_next (&i))
     {
-      record->size[after_pass]
+      record->size
 	+= estimate_num_insns (gsi_stmt (i), &eni_size_weights);
       if (bb->count.initialized_p ())
-	record->time[after_pass]
+	record->time
 	  += estimate_num_insns (gsi_stmt (i),
 				 &eni_time_weights) * bb->count.to_gcov_type ();
       else if (profile_status_for_fn (cfun) == PROFILE_GUESSED)
-	record->time[after_pass]
+	record->time
 	  += estimate_num_insns (gsi_stmt (i),
 				 &eni_time_weights) * bb->count.to_frequency (cfun);
     }
@@ -9213,7 +9236,7 @@ public:
 unsigned int
 pass_warn_function_return::execute (function *fun)
 {
-  source_location location;
+  location_t location;
   gimple *last;
   edge e;
   edge_iterator ei;

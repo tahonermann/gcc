@@ -1,6 +1,6 @@
 # Makefile.in
 
-# Copyright (C) 2005-2018 Free Software Foundation, Inc.
+# Copyright (C) 2005-2019 Free Software Foundation, Inc.
 #
 # This file is part of GCC.
 #
@@ -899,7 +899,7 @@ LIBGCOV_PROFILER = _gcov_interval_profiler				\
 	_gcov_average_profiler_atomic					\
 	_gcov_ior_profiler						\
 	_gcov_ior_profiler_atomic					\
-	_gcov_indirect_call_profiler_v2					\
+	_gcov_indirect_call_profiler_v3					\
 	_gcov_time_profiler						\
 	_gcov_indirect_call_topn_profiler
 LIBGCOV_INTERFACE = _gcov_dump _gcov_flush _gcov_fork			\

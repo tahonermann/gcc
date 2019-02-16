@@ -1,6 +1,6 @@
 // functional_hash.h header -*- C++ -*-
 
-// Copyright (C) 2007-2018 Free Software Foundation, Inc.
+// Copyright (C) 2007-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -258,6 +258,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _GLIBCXX_PURE size_t
       operator()(long double __val) const noexcept;
     };
+
+#if __cplusplus >= 201703L
+  template<>
+    struct hash<nullptr_t> : public __hash_base<size_t, nullptr_t>
+    {
+      size_t
+      operator()(nullptr_t) const noexcept
+      { return 0; }
+    };
+#endif
 
   // @} group hashes
 

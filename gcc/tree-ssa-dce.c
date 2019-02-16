@@ -1,5 +1,5 @@
 /* Dead code elimination pass for the GNU compiler.
-   Copyright (C) 2002-2018 Free Software Foundation, Inc.
+   Copyright (C) 2002-2019 Free Software Foundation, Inc.
    Contributed by Ben Elliston <bje@redhat.com>
    and Andrew MacLeod <amacleod@redhat.com>
    Adapted to use control dependence by Steven Bosscher, SUSE Labs.
@@ -420,7 +420,7 @@ find_obviously_necessary_stmts (bool aggressive)
 	if (!finite_loop_p (loop))
 	  {
 	    if (dump_file)
-	      fprintf (dump_file, "can not prove finiteness of loop %i\n", loop->num);
+	      fprintf (dump_file, "cannot prove finiteness of loop %i\n", loop->num);
 	    mark_control_dependent_edges_necessary (loop->latch, false);
 	  }
     }

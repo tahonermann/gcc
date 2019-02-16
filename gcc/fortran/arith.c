@@ -1,5 +1,5 @@
 /* Compiler arithmetic
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2019 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -2061,7 +2061,7 @@ gfc_int2int (gfc_expr *src, int kind)
       gfc_convert_mpz_to_signed (result->value.integer,
 				 gfc_integer_kinds[k].bit_size);
 
-      if (warn_conversion && kind < src->ts.kind)
+      if (warn_conversion && !src->do_not_warn && kind < src->ts.kind)
 	gfc_warning_now (OPT_Wconversion, "Conversion from %qs to %qs at %L",
 			 gfc_typename (&src->ts), gfc_typename (&result->ts),
 			 &src->where);

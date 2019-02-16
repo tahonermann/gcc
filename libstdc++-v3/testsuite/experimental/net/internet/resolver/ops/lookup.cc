@@ -1,4 +1,4 @@
-// Copyright (C) 2015-2018 Free Software Foundation, Inc.
+// Copyright (C) 2015-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -49,7 +49,10 @@ test02()
   std::error_code ec;
   io_context ctx;
   ip::tcp::resolver resolv(ctx);
-  auto flags = ip::resolver_base::numeric_host | ip::tcp::resolver::numeric_service;
+  auto flags = ip::resolver_base::numeric_host;
+#ifdef AI_NUMERICSERV
+  flags |= ip::tcp::resolver::numeric_service;
+#endif
   auto addrs = resolv.resolve("127.0.0.1", "42", flags, ec);
   VERIFY( !ec );
   VERIFY( addrs.size() > 0 );

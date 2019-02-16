@@ -1,6 +1,5 @@
 # Process this file with autoreconf to produce a configure script.
 
-AC_PREREQ(2.64)
 AC_INIT(package-unused, version-unused,, libstdc++)
 AC_CONFIG_SRCDIR(src/shared/hashtable-aux.cc)
 AC_CONFIG_HEADER(config.h)
@@ -150,6 +149,7 @@ GLIBCXX_ENABLE_VERBOSE
 GLIBCXX_ENABLE_PCH($is_hosted)
 GLIBCXX_ENABLE_THREADS
 GLIBCXX_ENABLE_ATOMIC_BUILTINS
+GLIBCXX_ENABLE_LOCK_POLICY
 GLIBCXX_ENABLE_DECIMAL_FLOAT
 GLIBCXX_ENABLE_INT128_FLOAT128
 if test "$enable_float128" = yes; then
@@ -264,6 +264,9 @@ if $GLIBCXX_IS_NATIVE; then
   AC_CHECK_FUNCS(__cxa_thread_atexit_impl __cxa_thread_atexit)
   AC_CHECK_FUNCS(aligned_alloc posix_memalign memalign _aligned_malloc)
   AC_CHECK_FUNCS(_wfopen)
+
+  # C11 functions for C++17 library
+  AC_CHECK_FUNCS(timespec_get)
 
   # For iconv support.
   AM_ICONV

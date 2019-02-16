@@ -416,6 +416,32 @@
 #  error "__cpp_variadic_using != 201611"
 #endif
 
+#ifndef __cpp_guaranteed_copy_elision
+#  error "__cpp_guaranteed_copy_elision"
+#elif __cpp_guaranteed_copy_elision != 201606
+#  error "__cpp_guaranteed_copy_elision != 201606"
+#endif
+
+#ifndef __cpp_nontype_template_parameter_auto
+#  error "__cpp_nontype_template_parameter_auto"
+#elif __cpp_nontype_template_parameter_auto != 201606
+#  error "__cpp_nontype_template_parameter_auto != 201606"
+#endif
+
+// C++20 features
+
+#if __cpp_conditional_explicit != 201806
+# error "__cpp_conditional_explicit != 201806"
+#endif
+
+#if __cpp_nontype_template_parameter_class != 201806
+# error "__cpp_nontype_template_parameter_class != 201806"
+#endif
+
+#if __cpp_impl_destroying_delete != 201806
+# error "__cpp_impl_destroying_delete != 201806"
+#endif
+
 #ifdef __has_cpp_attribute
 
 #  if ! __has_cpp_attribute(maybe_unused)
@@ -440,6 +466,18 @@
 #    error "__has_cpp_attribute(no_unique_address)"
 #  elif __has_cpp_attribute(no_unique_address) != 201803
 #    error "__has_cpp_attribute(no_unique_address) != 201803"
+#  endif
+
+#  if ! __has_cpp_attribute(likely)
+#    error "__has_cpp_attribute(likely)"
+#  elif __has_cpp_attribute(likely) != 201803
+#    error "__has_cpp_attribute(likely) != 201803"
+#  endif
+
+#  if ! __has_cpp_attribute(unlikely)
+#    error "__has_cpp_attribute(unlikely)"
+#  elif __has_cpp_attribute(unlikely) != 201803
+#    error "__has_cpp_attribute(unlikely) != 201803"
 #  endif
 
 #else

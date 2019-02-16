@@ -1,7 +1,7 @@
 /* Scalar Replacement of Aggregates (SRA) converts some structure
    references into scalar references, exposing them to the scalar
    optimizers.
-   Copyright (C) 2008-2018 Free Software Foundation, Inc.
+   Copyright (C) 2008-2019 Free Software Foundation, Inc.
    Contributed by Martin Jambor <mjambor@suse.cz>
 
 This file is part of GCC.
@@ -5430,7 +5430,7 @@ ipa_sra_preliminary_function_checks (struct cgraph_node *node)
   if (!node->local.can_change_signature)
     {
       if (dump_file)
-	fprintf (dump_file, "Function can not change signature.\n");
+	fprintf (dump_file, "Function cannot change signature.\n");
       return false;
     }
 

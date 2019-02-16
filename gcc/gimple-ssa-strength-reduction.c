@@ -1,5 +1,5 @@
 /* Straight-line strength reduction.
-   Copyright (C) 2012-2018 Free Software Foundation, Inc.
+   Copyright (C) 2012-2019 Free Software Foundation, Inc.
    Contributed by Bill Schmidt, IBM <wschmidt@linux.ibm.com>
 
 This file is part of GCC.
@@ -1268,7 +1268,7 @@ slsr_process_mul (gimple *gs, tree rhs1, tree rhs2, bool speed)
       c->next_interp = c2->cand_num;
       c2->first_interp = c->cand_num;
     }
-  else if (TREE_CODE (rhs2) == INTEGER_CST)
+  else if (TREE_CODE (rhs2) == INTEGER_CST && !integer_zerop (rhs2))
     {
       /* Record an interpretation for the multiply-immediate.  */
       c = create_mul_imm_cand (gs, rhs1, rhs2, speed);

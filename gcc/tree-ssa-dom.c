@@ -1,5 +1,5 @@
 /* SSA Dominator optimizations for trees
-   Copyright (C) 2001-2018 Free Software Foundation, Inc.
+   Copyright (C) 2001-2019 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
 This file is part of GCC.
@@ -578,6 +578,7 @@ public:
     : dom_walker (direction, REACHABLE_BLOCKS),
       m_const_and_copies (const_and_copies),
       m_avail_exprs_stack (avail_exprs_stack),
+      evrp_range_analyzer (true),
       m_dummy_cond (dummy_cond) { }
 
   virtual edge before_dom_children (basic_block);
@@ -777,7 +778,8 @@ pass_dominator::execute (function *fun)
 	  if (bb == NULL)
 	    continue;
 	  while (single_succ_p (bb)
-		 && (single_succ_edge (bb)->flags & EDGE_EH) == 0)
+		 && (single_succ_edge (bb)->flags
+		     & (EDGE_EH|EDGE_DFS_BACK)) == 0)
 	    bb = single_succ (bb);
 	  if (bb == EXIT_BLOCK_PTR_FOR_FN (fun))
 	    continue;
@@ -1105,9 +1107,12 @@ record_equivalences_from_phis (basic_block bb)
 {
   gphi_iterator gsi;
 
-  for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+  for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); )
     {
       gphi *phi = gsi.phi ();
+
+      /* We might eliminate the PHI, so advance GSI now.  */
+      gsi_next (&gsi);
 
       tree lhs = gimple_phi_result (phi);
       tree rhs = NULL;
@@ -1131,7 +1136,7 @@ record_equivalences_from_phis (basic_block bb)
 	  t = dom_valueize (t);
 
 	  /* If T is an SSA_NAME and its associated edge is a backedge,
-	     then quit as we can not utilize this equivalence.  */
+	     then quit as we cannot utilize this equivalence.  */
 	  if (TREE_CODE (t) == SSA_NAME
 	      && (gimple_phi_arg_edge (phi, i)->flags & EDGE_DFS_BACK))
 	    break;
@@ -1158,9 +1163,26 @@ record_equivalences_from_phis (basic_block bb)
 	 this, since this is a true assignment and not an equivalence
 	 inferred from a comparison.  All uses of this ssa name are dominated
 	 by this assignment, so unwinding just costs time and space.  */
-      if (i == gimple_phi_num_args (phi)
-	  && may_propagate_copy (lhs, rhs))
-	set_ssa_name_value (lhs, rhs);
+      if (i == gimple_phi_num_args (phi))
+	{
+	  if (may_propagate_copy (lhs, rhs))
+	    set_ssa_name_value (lhs, rhs);
+	  else if (virtual_operand_p (lhs))
+	    {
+	      gimple *use_stmt;
+	      imm_use_iterator iter;
+	      use_operand_p use_p;
+	      /* For virtual operands we have to propagate into all uses as
+	         otherwise we will create overlapping life-ranges.  */
+	      FOR_EACH_IMM_USE_STMT (use_stmt, iter, lhs)
+	        FOR_EACH_IMM_USE_ON_STMT (use_p, iter)
+	          SET_USE (use_p, rhs);
+	      if (SSA_NAME_OCCURS_IN_ABNORMAL_PHI (lhs))
+	        SSA_NAME_OCCURS_IN_ABNORMAL_PHI (rhs) = 1;
+	      gimple_stmt_iterator tmp_gsi = gsi_for_stmt (phi);
+	      remove_phi_node (&tmp_gsi, true);
+	    }
+	}
     }
 }
 
@@ -1354,7 +1376,7 @@ cprop_into_successor_phis (basic_block bb,
 	continue;
 
       /* We may have an equivalence associated with this edge.  While
-	 we can not propagate it into non-dominated blocks, we can
+	 we cannot propagate it into non-dominated blocks, we can
 	 propagate them into PHIs in non-dominated blocks.  */
 
       /* Push the unwind marker so we can reset the const and copies
@@ -1499,7 +1521,7 @@ eliminate_redundant_computations (gimple_stmt_iterator* gsi,
   else
     def = gimple_get_lhs (stmt);
 
-  /* Certain expressions on the RHS can be optimized away, but can not
+  /* Certain expressions on the RHS can be optimized away, but cannot
      themselves be entered into the hash tables.  */
   if (! def
       || TREE_CODE (def) != SSA_NAME
@@ -1907,7 +1929,7 @@ test_for_singularity (gimple *stmt, gcond *dummy_cond,
 
    3- Very simple redundant store elimination is performed.
 
-   4- We can simpify a condition to a constant or from a relational
+   4- We can simplify a condition to a constant or from a relational
       condition to an equality condition.  */
 
 edge

@@ -1,5 +1,5 @@
 /* Vectorizer
-   Copyright (C) 2003-2018 Free Software Foundation, Inc.
+   Copyright (C) 2003-2019 Free Software Foundation, Inc.
    Contributed by Dorit Naishlos <dorit@il.ibm.com>
 
 This file is part of GCC.
@@ -85,6 +85,15 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Loop or bb location, with hotness information.  */
 dump_user_location_t vect_location;
+
+/* auto_purge_vect_location's dtor: reset the vect_location
+   global, to avoid stale location_t values that could reference
+   GC-ed blocks.  */
+
+auto_purge_vect_location::~auto_purge_vect_location ()
+{
+  vect_location = dump_user_location_t ();
+}
 
 /* Dump a cost entry according to args to F.  */
 
@@ -860,6 +869,7 @@ try_vectorize_loop_1 (hash_table<simduid_to_vf> *&simduid_to_vf_htab,
 {
   unsigned ret = 0;
   vec_info_shared shared;
+  auto_purge_vect_location sentinel;
   vect_location = find_loop_location (loop);
   if (LOCATION_LOCUS (vect_location.get_location_t ()) != UNKNOWN_LOCATION
       && dump_enabled_p ())
@@ -925,8 +935,9 @@ try_vectorize_loop_1 (hash_table<simduid_to_vf> *&simduid_to_vf_htab,
 	    }
 	  if (!require_loop_vectorize && vect_slp_bb (bb))
 	    {
-	      dump_printf_loc (MSG_NOTE, vect_location,
-			       "basic block vectorized\n");
+	      if (dump_enabled_p ())
+		dump_printf_loc (MSG_NOTE, vect_location,
+				 "basic block vectorized\n");
 	      fold_loop_internal_call (loop_vectorized_call,
 				       boolean_true_node);
 	      loop_vectorized_call = NULL;
@@ -955,12 +966,15 @@ try_vectorize_loop_1 (hash_table<simduid_to_vf> *&simduid_to_vf_htab,
     set_uid_loop_bbs (loop_vinfo, loop_vectorized_call);
 
   unsigned HOST_WIDE_INT bytes;
-  if (current_vector_size.is_constant (&bytes))
-    dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, vect_location,
-		     "loop vectorized using %wu byte vectors\n", bytes);
-  else
-    dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, vect_location,
-		     "loop vectorized using variable length vectors\n");
+  if (dump_enabled_p ())
+    {
+      if (current_vector_size.is_constant (&bytes))
+	dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, vect_location,
+			 "loop vectorized using %wu byte vectors\n", bytes);
+      else
+	dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, vect_location,
+			 "loop vectorized using variable length vectors\n");
+    }
 
   loop_p new_loop = vect_transform_loop (loop_vinfo);
   (*num_vectorized_loops)++;
@@ -1265,6 +1279,7 @@ public:
 unsigned int
 pass_slp_vectorize::execute (function *fun)
 {
+  auto_purge_vect_location sentinel;
   basic_block bb;
 
   bool in_loop_pipeline = scev_initialized_p ();
@@ -1289,7 +1304,8 @@ pass_slp_vectorize::execute (function *fun)
   FOR_EACH_BB_FN (bb, fun)
     {
       if (vect_slp_bb (bb))
-	dump_printf_loc (MSG_NOTE, vect_location, "basic block vectorized\n");
+	if (dump_enabled_p ())
+	  dump_printf_loc (MSG_NOTE, vect_location, "basic block vectorized\n");
     }
 
   if (!in_loop_pipeline)
@@ -1447,7 +1463,8 @@ increase_alignment (void)
       if (alignment && vect_can_force_dr_alignment_p (decl, alignment))
         {
 	  vnode->increase_alignment (alignment);
-          dump_printf (MSG_NOTE, "Increasing alignment of decl: %T\n", decl);
+	  if (dump_enabled_p ())
+	    dump_printf (MSG_NOTE, "Increasing alignment of decl: %T\n", decl);
         }
     }
 

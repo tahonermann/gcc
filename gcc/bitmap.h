@@ -1,5 +1,5 @@
 /* Functions to support general ended bitmaps.
-   Copyright (C) 1997-2018 Free Software Foundation, Inc.
+   Copyright (C) 1997-2019 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -239,14 +239,14 @@ struct bitmap_usage: public mem_usage
   {
     char *location_string = loc->to_string ();
 
-    fprintf (stderr, "%-48s %10" PRIu64 ":%5.1f%%"
-	     "%10" PRIu64 "%10" PRIu64 ":%5.1f%%"
-	     "%12" PRIu64 "%12" PRIu64 "%10s\n",
-	     location_string, (uint64_t)m_allocated,
+    fprintf (stderr, "%-48s " PRsa (9) ":%5.1f%%"
+	     PRsa (9) PRsa (9) ":%5.1f%%"
+	     PRsa (11) PRsa (11) "%10s\n",
+	     location_string, SIZE_AMOUNT (m_allocated),
 	     get_percent (m_allocated, total.m_allocated),
-	     (uint64_t)m_peak, (uint64_t)m_times,
+	     SIZE_AMOUNT (m_peak), SIZE_AMOUNT (m_times),
 	     get_percent (m_times, total.m_times),
-	     m_nsearches, m_search_iter,
+	     SIZE_AMOUNT (m_nsearches), SIZE_AMOUNT (m_search_iter),
 	     loc->m_ggc ? "ggc" : "heap");
 
     free (location_string);
@@ -288,10 +288,10 @@ typedef unsigned long BITMAP_WORD;
 #define BITMAP_ELEMENT_ALL_BITS (BITMAP_ELEMENT_WORDS * BITMAP_WORD_BITS)
 
 /* Obstack for allocating bitmaps and elements from.  */
-struct GTY (()) bitmap_obstack {
+struct bitmap_obstack {
   struct bitmap_element *elements;
   struct bitmap_head *heads;
-  struct obstack GTY ((skip)) obstack;
+  struct obstack obstack;
 };
 
 /* Bitmap set element.  We use a linked list to hold only the bits that
@@ -306,7 +306,7 @@ struct GTY (()) bitmap_obstack {
    bitmap_elt_clear_from to be implemented in unit time rather than
    linear in the number of elements to be freed.  */
 
-struct GTY((chain_next ("%h.next"), chain_prev ("%h.prev"))) bitmap_element {
+struct GTY((chain_next ("%h.next"))) bitmap_element {
   /* In list form, the next element in the linked list;
      in tree form, the left child node in the tree.  */
   struct bitmap_element *next;
@@ -323,6 +323,12 @@ struct GTY((chain_next ("%h.next"), chain_prev ("%h.prev"))) bitmap_element {
    already pointed to by the chain started by first, so GTY((skip)) it.  */
 
 struct GTY(()) bitmap_head {
+  static bitmap_obstack crashme;
+  /* Poison obstack to not make it not a valid initialized GC bitmap.  */
+  CONSTEXPR bitmap_head()
+    : indx(0), tree_form(false), first(NULL), current(NULL),
+      obstack (&crashme)
+  {}
   /* Index of last element looked at.  */
   unsigned int indx;
   /* False if the bitmap is in list form; true if the bitmap is in tree form.
@@ -334,7 +340,7 @@ struct GTY(()) bitmap_head {
   /* Last element looked at.  */
   bitmap_element * GTY((skip(""))) current;
   /* Obstack to allocate elements from.  If NULL, then use GGC allocation.  */
-  bitmap_obstack *obstack;
+  bitmap_obstack * GTY((skip(""))) obstack;
   void dump ();
 };
 
@@ -439,6 +445,18 @@ bitmap_initialize (bitmap head, bitmap_obstack *obstack CXX_MEM_STAT_INFO)
   head->obstack = obstack;
   if (GATHER_STATISTICS)
     bitmap_register (head PASS_MEM_STAT);
+}
+
+/* Release a bitmap (but not its head).  This is suitable for pairing with
+   bitmap_initialize.  */
+
+static inline void
+bitmap_release (bitmap head)
+{
+  bitmap_clear (head);
+  /* Poison the obstack pointer so the obstack can be safely released.
+     Do not zero it as the bitmap then becomes initialized GC.  */
+  head->obstack = &bitmap_head::crashme;
 }
 
 /* Allocate and free bitmaps from obstack, malloc and gc'd memory.  */

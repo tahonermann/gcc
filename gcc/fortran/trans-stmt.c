@@ -1,5 +1,5 @@
 /* Statement translation -- generate GCC trees from gfc_code.
-   Copyright (C) 2002-2018 Free Software Foundation, Inc.
+   Copyright (C) 2002-2019 Free Software Foundation, Inc.
    Contributed by Paul Brook <paul@nowt.org>
    and Steven Bosscher <s.bosscher@student.tudelft.nl>
 
@@ -6303,7 +6303,7 @@ gfc_trans_allocate (gfc_code * code)
 	al_len = se.string_length;
 
       al_len_needs_set = al_len != NULL_TREE;
-      /* When allocating an array one can not use much of the
+      /* When allocating an array one cannot use much of the
 	 pre-evaluated expr3 expressions, because for most of them the
 	 scalarizer is needed which is not available in the pre-evaluation
 	 step.  Therefore gfc_array_allocate () is responsible (and able)
@@ -6554,7 +6554,7 @@ gfc_trans_allocate (gfc_code * code)
 		 information in future loop iterations.  */
 	      if (tmp_expr3_len_flag)
 		/* No need to reset tmp_expr3_len_flag, because the
-		   presence of an expr3 can not change within in the
+		   presence of an expr3 cannot change within in the
 		   loop.  */
 		expr3_len = NULL_TREE;
 	    }

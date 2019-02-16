@@ -3,7 +3,7 @@
    building RTL.  These routines are used both during actual parsing
    and during the instantiation of template functions.
 
-   Copyright (C) 1998-2018 Free Software Foundation, Inc.
+   Copyright (C) 1998-2019 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -262,6 +262,10 @@ is_capture_proxy (tree decl)
 	  && DECL_HAS_VALUE_EXPR_P (decl)
 	  && !DECL_ANON_UNION_VAR_P (decl)
 	  && !DECL_DECOMPOSITION_P (decl)
+	  && !DECL_FNAME_P (decl)
+	  && !(DECL_ARTIFICIAL (decl)
+	       && DECL_LANG_SPECIFIC (decl)
+	       && DECL_OMP_PRIVATIZED_MEMBER (decl))
 	  && LAMBDA_FUNCTION_P (DECL_CONTEXT (decl)));
 }
 
@@ -1094,8 +1098,10 @@ maybe_add_lambda_conv_op (tree type)
 	 implementation of the conversion operator.  */
 
       tree instance = cp_build_fold_indirect_ref (thisarg);
-      tree objfn = build_min (COMPONENT_REF, NULL_TREE,
-			      instance, DECL_NAME (callop), NULL_TREE);
+      tree objfn = lookup_template_function (DECL_NAME (callop),
+					     DECL_TI_ARGS (callop));
+      objfn = build_min (COMPONENT_REF, NULL_TREE,
+			 instance, objfn, NULL_TREE);
       int nargs = list_length (DECL_ARGUMENTS (callop)) - 1;
 
       call = prepare_op_call (objfn, nargs);
@@ -1124,6 +1130,9 @@ maybe_add_lambda_conv_op (tree type)
       {
 	tree new_node = copy_node (src);
 
+	/* Clear TREE_ADDRESSABLE on thunk arguments.  */
+	TREE_ADDRESSABLE (new_node) = 0;
+
 	if (!fn_args)
 	  fn_args = tgt = new_node;
 	else
@@ -1136,18 +1145,21 @@ maybe_add_lambda_conv_op (tree type)
 
 	if (generic_lambda_p)
 	  {
-	    /* Avoid capturing variables in this context.  */
-	    ++cp_unevaluated_operand;
-	    tree a = forward_parm (tgt);
-	    --cp_unevaluated_operand;
-
+	    tree a = tgt;
+	    if (DECL_PACK_P (tgt))
+	      {
+		a = make_pack_expansion (a);
+		PACK_EXPANSION_LOCAL_P (a) = true;
+	      }
 	    CALL_EXPR_ARG (call, ix) = a;
-	    if (decltype_call)
-	      CALL_EXPR_ARG (decltype_call, ix) = unshare_expr (a);
 
-	    if (PACK_EXPANSION_P (a))
-	      /* Set this after unsharing so it's not in decltype_call.  */
-	      PACK_EXPANSION_LOCAL_P (a) = true;
+	    if (decltype_call)
+	      {
+		/* Avoid capturing variables in this context.  */
+		++cp_unevaluated_operand;
+		CALL_EXPR_ARG (decltype_call, ix) = forward_parm (tgt);
+		--cp_unevaluated_operand;
+	      }
 
 	    ++ix;
 	  }
@@ -1479,8 +1491,10 @@ mark_const_cap_r (tree *t, int *walk_subtrees, void *data)
     {
       tree decl = DECL_EXPR_DECL (*t);
       if (is_constant_capture_proxy (decl))
-	var = DECL_CAPTURED_VARIABLE (decl);
-      *walk_subtrees = 0;
+	{
+	  var = DECL_CAPTURED_VARIABLE (decl);
+	  *walk_subtrees = 0;
+	}
     }
   else if (is_constant_capture_proxy (*t))
     var = DECL_CAPTURED_VARIABLE (*t);

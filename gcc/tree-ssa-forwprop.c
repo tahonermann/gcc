@@ -1,5 +1,5 @@
 /* Forward propagation of expressions for single use variables.
-   Copyright (C) 2004-2018 Free Software Foundation, Inc.
+   Copyright (C) 2004-2019 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -280,7 +280,7 @@ can_propagate_from (gimple *def_stmt)
     return false;
 
   /* If the definition is a conversion of a pointer to a function type,
-     then we can not apply optimizations as some targets require
+     then we cannot apply optimizations as some targets require
      function pointers to be canonicalized and in this case this
      optimization could eliminate a necessary canonicalization.  */
   if (CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (def_stmt)))

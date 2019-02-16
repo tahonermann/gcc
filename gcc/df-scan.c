@@ -1,5 +1,5 @@
 /* Scanning of rtl for dataflow analysis.
-   Copyright (C) 1999-2018 Free Software Foundation, Inc.
+   Copyright (C) 1999-2019 Free Software Foundation, Inc.
    Originally contributed by Michael P. Hayes
              (m.hayes@elec.canterbury.ac.nz, mhayes@redhat.com)
    Major rewrite contributed by Danny Berlin (dberlin@dberlin.org)
@@ -2982,7 +2982,7 @@ df_uses_record (struct df_collection_rec *collection_rec,
 	   scanned and regs_asm_clobbered is filled out.
 
 	   For all ASM_OPERANDS, we must traverse the vector of input
-	   operands.  We can not just fall through here since then we
+	   operands.  We cannot just fall through here since then we
 	   would be confused by the ASM_INPUT rtx inside ASM_OPERANDS,
 	   which do not indicate traditional asms unlike their normal
 	   usage.  */

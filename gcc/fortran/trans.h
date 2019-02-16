@@ -1,5 +1,5 @@
 /* Header for code translation functions
-   Copyright (C) 2002-2018 Free Software Foundation, Inc.
+   Copyright (C) 2002-2019 Free Software Foundation, Inc.
    Contributed by Paul Brook
 
 This file is part of GCC.
@@ -801,6 +801,8 @@ extern GTY(()) tree gfor_fndecl_ctime;
 extern GTY(()) tree gfor_fndecl_fdate;
 extern GTY(()) tree gfor_fndecl_in_pack;
 extern GTY(()) tree gfor_fndecl_in_unpack;
+extern GTY(()) tree gfor_fndecl_cfi_to_gfc;
+extern GTY(()) tree gfor_fndecl_gfc_to_cfi;
 extern GTY(()) tree gfor_fndecl_associated;
 extern GTY(()) tree gfor_fndecl_system_clock4;
 extern GTY(()) tree gfor_fndecl_system_clock8;
@@ -907,6 +909,7 @@ extern GTY(()) tree gfor_fndecl_size1;
 extern GTY(()) tree gfor_fndecl_iargc;
 extern GTY(()) tree gfor_fndecl_kill;
 extern GTY(()) tree gfor_fndecl_kill_sub;
+extern GTY(()) tree gfor_fndecl_is_contiguous0;
 
 /* Implemented in Fortran.  */
 extern GTY(()) tree gfor_fndecl_sc_kind;

@@ -33,6 +33,7 @@ GCC_SRC_DIR=../../gcc
 LIST = aarch64-elf aarch64-linux-gnu aarch64-rtems \
   alpha-linux-gnu alpha-netbsd alpha-openbsd \
   alpha64-dec-vms alpha-dec-vms \
+  amdgcn-amdhsa \
   arc-elf32OPT-with-cpu=arc600 arc-elf32OPT-with-cpu=arc700 \
   arc-linux-uclibcOPT-with-cpu=arc700 arceb-linux-uclibcOPT-with-cpu=arc700 \
   arm-wrs-vxworks arm-netbsdelf \
@@ -73,9 +74,9 @@ LIST = aarch64-elf aarch64-linux-gnu aarch64-rtems \
   pdp11-aout \
   powerpc-darwin8 \
   powerpc-darwin7 powerpc64-darwin powerpc-freebsd6 powerpc-netbsd \
-  powerpc-eabispe powerpc-eabisimaltivec powerpc-eabisim ppc-elf \
+  powerpc-eabisimaltivec powerpc-eabisim ppc-elf \
   powerpc-eabialtivec powerpc-xilinx-eabi powerpc-eabi \
-  powerpc-rtems powerpc-linux_spe \
+  powerpc-rtems \
   powerpc64-linux_altivec \
   powerpc-wrs-vxworks powerpc-wrs-vxworksae powerpc-wrs-vxworksmils \
   powerpc-lynxos powerpcle-elf \
