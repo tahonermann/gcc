@@ -326,6 +326,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     std::wstring   wstring() const;
 #endif
 #ifdef _GLIBCXX_USE_CHAR8_T
+    __attribute__((__abi_tag__("__u8")))
     std::u8string  u8string() const;
 #else
     std::string    u8string() const;
@@ -344,6 +345,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     std::wstring   generic_wstring() const;
 #endif
 #ifdef _GLIBCXX_USE_CHAR8_T
+    __attribute__((__abi_tag__("__u8")))
     std::u8string  generic_u8string() const;
 #else
     std::string    generic_u8string() const;

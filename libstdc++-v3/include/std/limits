@@ -731,61 +731,63 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<>
     struct numeric_limits<char8_t>
     {
-      static constexpr bool is_specialized = true;
+      static _GLIBCXX_USE_CONSTEXPR bool is_specialized = true;
 
-      static constexpr char8_t
-      min() noexcept { return __glibcxx_min (char8_t); }
+      static _GLIBCXX_CONSTEXPR char8_t
+      min() _GLIBCXX_USE_NOEXCEPT { return __glibcxx_min (char8_t); }
 
-      static constexpr char8_t
-      max() noexcept { return __glibcxx_max (char8_t); }
+      static _GLIBCXX_CONSTEXPR char8_t
+      max() _GLIBCXX_USE_NOEXCEPT { return __glibcxx_max (char8_t); }
 
-      static constexpr char8_t
-      lowest() noexcept { return min(); }
+      static _GLIBCXX_CONSTEXPR char8_t
+      lowest() _GLIBCXX_USE_NOEXCEPT { return min(); }
 
-      static constexpr int digits = __glibcxx_digits (char8_t);
-      static constexpr int digits10 = __glibcxx_digits10 (char8_t);
-      static constexpr int max_digits10 = 0;
-      static constexpr bool is_signed = __glibcxx_signed (char8_t);
-      static constexpr bool is_integer = true;
-      static constexpr bool is_exact = true;
-      static constexpr int radix = 2;
+      static _GLIBCXX_USE_CONSTEXPR int digits = __glibcxx_digits (char8_t);
+      static _GLIBCXX_USE_CONSTEXPR int digits10 = __glibcxx_digits10 (char8_t);
+      static _GLIBCXX_USE_CONSTEXPR int max_digits10 = 0;
+      static _GLIBCXX_USE_CONSTEXPR bool is_signed = __glibcxx_signed (char8_t);
+      static _GLIBCXX_USE_CONSTEXPR bool is_integer = true;
+      static _GLIBCXX_USE_CONSTEXPR bool is_exact = true;
+      static _GLIBCXX_USE_CONSTEXPR int radix = 2;
 
-      static constexpr char8_t
-      epsilon() noexcept { return 0; }
+      static _GLIBCXX_CONSTEXPR char8_t
+      epsilon() _GLIBCXX_USE_NOEXCEPT { return 0; }
 
-      static constexpr char8_t
-      round_error() noexcept { return 0; }
+      static _GLIBCXX_CONSTEXPR char8_t
+      round_error() _GLIBCXX_USE_NOEXCEPT { return 0; }
 
-      static constexpr int min_exponent = 0;
-      static constexpr int min_exponent10 = 0;
-      static constexpr int max_exponent = 0;
-      static constexpr int max_exponent10 = 0;
+      static _GLIBCXX_USE_CONSTEXPR int min_exponent = 0;
+      static _GLIBCXX_USE_CONSTEXPR int min_exponent10 = 0;
+      static _GLIBCXX_USE_CONSTEXPR int max_exponent = 0;
+      static _GLIBCXX_USE_CONSTEXPR int max_exponent10 = 0;
 
-      static constexpr bool has_infinity = false;
-      static constexpr bool has_quiet_NaN = false;
-      static constexpr bool has_signaling_NaN = false;
-      static constexpr float_denorm_style has_denorm = denorm_absent;
-      static constexpr bool has_denorm_loss = false;
+      static _GLIBCXX_USE_CONSTEXPR bool has_infinity = false;
+      static _GLIBCXX_USE_CONSTEXPR bool has_quiet_NaN = false;
+      static _GLIBCXX_USE_CONSTEXPR bool has_signaling_NaN = false;
+      static _GLIBCXX_USE_CONSTEXPR float_denorm_style has_denorm
+	= denorm_absent;
+      static _GLIBCXX_USE_CONSTEXPR bool has_denorm_loss = false;
 
-      static constexpr char8_t
-      infinity() noexcept { return char8_t(); }
+      static _GLIBCXX_CONSTEXPR char8_t
+      infinity() _GLIBCXX_USE_NOEXCEPT { return char8_t(); }
 
-      static constexpr char8_t
-      quiet_NaN() noexcept { return char8_t(); }
+      static _GLIBCXX_CONSTEXPR char8_t
+      quiet_NaN() _GLIBCXX_USE_NOEXCEPT { return char8_t(); }
 
-      static constexpr char8_t
-      signaling_NaN() noexcept { return char8_t(); }
+      static _GLIBCXX_CONSTEXPR char8_t
+      signaling_NaN() _GLIBCXX_USE_NOEXCEPT { return char8_t(); }
 
-      static constexpr char8_t
-      denorm_min() noexcept { return char8_t(); }
+      static _GLIBCXX_CONSTEXPR char8_t
+      denorm_min() _GLIBCXX_USE_NOEXCEPT { return char8_t(); }
 
-      static constexpr bool is_iec559 = false;
-      static constexpr bool is_bounded = true;
-      static constexpr bool is_modulo = !is_signed;
+      static _GLIBCXX_USE_CONSTEXPR bool is_iec559 = false;
+      static _GLIBCXX_USE_CONSTEXPR bool is_bounded = true;
+      static _GLIBCXX_USE_CONSTEXPR bool is_modulo = !is_signed;
 
-      static constexpr bool traps = __glibcxx_integral_traps;
-      static constexpr bool tinyness_before = false;
-      static constexpr float_round_style round_style = round_toward_zero;
+      static _GLIBCXX_USE_CONSTEXPR bool traps = __glibcxx_integral_traps;
+      static _GLIBCXX_USE_CONSTEXPR bool tinyness_before = false;
+      static _GLIBCXX_USE_CONSTEXPR float_round_style round_style
+	= round_toward_zero;
     };
 #endif
 
