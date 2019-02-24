@@ -1,4 +1,3 @@
-// { dg-options "-fchar8_t" }
 // { dg-do compile { target c++14 } }
 
 // Copyright (C) 2014-2019 Free Software Foundation, Inc.

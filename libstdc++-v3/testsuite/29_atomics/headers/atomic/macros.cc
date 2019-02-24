@@ -1,5 +1,4 @@
 // { dg-do preprocess { target c++11 } }
-// { dg-options "-fchar8_t" }
 
 // Copyright (C) 2008-2019 Free Software Foundation, Inc.
 //
@@ -32,10 +31,12 @@
 # error "ATOMIC_CHAR_LOCK_FREE must be 1 or 2"
 #endif
 
-#ifndef ATOMIC_CHAR8_T_LOCK_FREE
-# error "ATOMIC_CHAR8_T_LOCK_FREE must be a macro"
-#elif ATOMIC_CHAR8_T_LOCK_FREE != 1 && ATOMIC_CHAR8_T_LOCK_FREE != 2
-# error "ATOMIC_CHAR8_T_LOCK_FREE must be 1 or 2"
+#ifdef _GLIBCXX_USE_CHAR8_T
+# ifndef ATOMIC_CHAR8_T_LOCK_FREE
+#  error "ATOMIC_CHAR8_T_LOCK_FREE must be a macro"
+# elif ATOMIC_CHAR8_T_LOCK_FREE != 1 && ATOMIC_CHAR8_T_LOCK_FREE != 2
+#  error "ATOMIC_CHAR8_T_LOCK_FREE must be 1 or 2"
+# endif
 #endif
 
 #ifndef ATOMIC_CHAR16_T_LOCK_FREE 

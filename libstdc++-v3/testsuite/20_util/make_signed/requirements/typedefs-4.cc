@@ -1,6 +1,4 @@
 // { dg-do compile { target c++11 } }
-// { dg-require-cstdint "" }
-// { dg-options "-fchar8_t" }
 
 // Copyright (C) 2014-2019 Free Software Foundation, Inc.
 //

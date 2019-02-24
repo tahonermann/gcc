@@ -1,5 +1,4 @@
 // { dg-do compile { target c++11 } }
-// { dg-options "-fchar8_t" }
 
 // Copyright (C) 2009-2019 Free Software Foundation, Inc.
 //
@@ -46,7 +45,6 @@ void test01()
   using atomic_llong;		// { dg-error "expected nested-name-specifier" }
   using atomic_ullong;		// { dg-error "expected nested-name-specifier" }
   using atomic_wchar_t;		// { dg-error "expected nested-name-specifier" }
-  using atomic_char8_t;		// { dg-error "expected nested-name-specifier" }
   using atomic_char16_t;	// { dg-error "expected nested-name-specifier" }
   using atomic_char32_t;	// { dg-error "expected nested-name-specifier" }
 

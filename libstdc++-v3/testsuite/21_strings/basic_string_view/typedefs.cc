@@ -1,4 +1,4 @@
-// { dg-options "-std=gnu++17 -fchar8_t" }
+// { dg-options "-std=gnu++17" }
 // { dg-do compile }
 
 // Copyright (C) 2014-2019 Free Software Foundation, Inc.

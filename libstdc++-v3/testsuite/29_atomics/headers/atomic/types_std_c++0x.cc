@@ -1,6 +1,5 @@
 // { dg-do compile { target c++11 } }
 // { dg-require-cstdint "" }
-// { dg-options "-fchar8_t" }
 
 // Copyright (C) 2008-2019 Free Software Foundation, Inc.
 //
@@ -47,7 +46,9 @@ void test01()
   using std::atomic_llong;
   using std::atomic_ullong;
   using std::atomic_wchar_t;
+#ifdef _GLIBCXX_USE_CHAR8_T
   using std::atomic_char8_t;
+#endif
   using std::atomic_char16_t;
   using std::atomic_char32_t;
 

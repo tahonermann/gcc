@@ -1,6 +1,5 @@
 // { dg-do run { target c++11 } }
 // { dg-require-effective-target dfp }
-// { dg-options "-fchar8_t" }
 
 // 2011-02-23  Benjamin Kosnik  <bkoz@redhat.com>
 //

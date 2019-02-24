@@ -1,6 +1,5 @@
 // { dg-do run { target c++11 } }
 // { dg-add-options ieee }
-// { dg-options "-fchar8_t" }
 
 // 2010-02-25  Ed Smith-Rowland
 

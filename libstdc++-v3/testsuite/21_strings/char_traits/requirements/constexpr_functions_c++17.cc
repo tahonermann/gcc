@@ -1,4 +1,4 @@
-// { dg-options "-std=gnu++17 -fchar8_t" }
+// { dg-options "-std=gnu++17" }
 // { dg-do compile { target c++17 } }
 
 // Copyright (C) 2017-2019 Free Software Foundation, Inc.

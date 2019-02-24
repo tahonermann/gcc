@@ -1,5 +1,4 @@
 // { dg-do run { target c++11 } }
-// { dg-options "-fchar8_t" }
 
 // 2010-02-17  Paolo Carlini  <paolo.carlini@oracle.com>
 //
