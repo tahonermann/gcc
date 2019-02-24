@@ -4474,7 +4474,7 @@ gfc_simplify_len (gfc_expr *e, gfc_expr *kind)
     /* The expression in assoc->target points to a ref to the _data component
        of the unlimited polymorphic entity.  To get the _len component the last
        _data ref needs to be stripped and a ref to the _len component added.  */
-    return gfc_get_len_component (e->symtree->n.sym->assoc->target);
+    return gfc_get_len_component (e->symtree->n.sym->assoc->target, k);
   else
     return NULL;
 }
@@ -6061,8 +6061,8 @@ norm2_add_squared (gfc_expr *result, gfc_expr *e)
 
   gfc_set_model_kind (result->ts.kind);
   int index = gfc_validate_kind (BT_REAL, result->ts.kind, false);
-  mpfr_exp_t exp;
-  if (mpfr_regular_p (result->value.real))
+  mp_exp_t exp;
+  if (mpfr_number_p (result->value.real) && !mpfr_zero_p (result->value.real))
     {
       exp = mpfr_get_exp (result->value.real);
       /* If result is getting close to overflowing, scale down.  */
@@ -6076,7 +6076,7 @@ norm2_add_squared (gfc_expr *result, gfc_expr *e)
     }
 
   mpfr_init (tmp);
-  if (mpfr_regular_p (e->value.real))
+  if (mpfr_number_p (e->value.real) && !mpfr_zero_p (e->value.real))
     {
       exp = mpfr_get_exp (e->value.real);
       /* If e**2 would overflow or close to overflowing, scale down.  */
@@ -6117,7 +6117,9 @@ norm2_do_sqrt (gfc_expr *result, gfc_expr *e)
   if (result != e)
     mpfr_set (result->value.real, e->value.real, GFC_RND_MODE);
   mpfr_sqrt (result->value.real, result->value.real, GFC_RND_MODE);
-  if (norm2_scale && mpfr_regular_p (result->value.real))
+  if (norm2_scale
+      && mpfr_number_p (result->value.real)
+      && !mpfr_zero_p (result->value.real))
     {
       mpfr_t tmp;
       mpfr_init (tmp);
@@ -6156,7 +6158,9 @@ gfc_simplify_norm2 (gfc_expr *e, gfc_expr *dim)
       result = simplify_transformation_to_scalar (result, e, NULL,
 						  norm2_add_squared);
       mpfr_sqrt (result->value.real, result->value.real, GFC_RND_MODE);
-      if (norm2_scale && mpfr_regular_p (result->value.real))
+      if (norm2_scale
+	  && mpfr_number_p (result->value.real)
+	  && !mpfr_zero_p (result->value.real))
 	{
 	  mpfr_t tmp;
 	  mpfr_init (tmp);

@@ -15,7 +15,7 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++17 -fchar8_t" }
+// { dg-options "-std=gnu++17" }
 // { dg-do compile { target c++17 } }
 // { dg-xfail-if "COW string missing deduction guides" { ! cxx11-abi } }
 
@@ -123,6 +123,7 @@ test04()
 void
 test05()
 {
+#ifdef _GLIBCXX_USE_CHAR8_T
   char8_t a[1] = {};
   input_iterator_seq<char8_t> seq(a);
 
@@ -137,6 +138,7 @@ test05()
 
   std::basic_string s4((char8_t)1, u8'a', std::allocator<char8_t>());
   check_type<std::u8string>(s4);
+#endif
 }
 
 void

@@ -15,7 +15,7 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++17 -fchar8_t" }
+// { dg-options "-std=gnu++17" }
 // { dg-do compile { target c++17 } }
 
 #include <string_view>
@@ -60,6 +60,9 @@ static_assert( get() == get() );
 
 #ifdef _GLIBCXX_USE_CHAR8_T
 using std::u8string_view;
+#else
+using u8string_view = std::basic_string_view<char>;
+#endif
 
 constexpr
 u8string_view get8()
@@ -73,7 +76,6 @@ u8string_view get8()
 }
 
 static_assert( get8() == get8() );
-#endif
 
 using std::u16string_view;
 

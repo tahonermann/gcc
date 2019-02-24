@@ -1,3 +1,89 @@
+2019-02-23  Jerry DeLisle <jvdelisle@gcc.gnu.org>
+
+	PR fortran/84387
+	* trans-io.c (transfer_expr): Do not return if there are no
+	components to the derived type or class.
+
+2019-02-23  Paul Thomas  <pault@gcc.gnu.org>
+
+	PR fortran/88117
+	* resolve.c (deferred_op_assign): Return if the lhs expression
+	has the pointer attribute.
+	* trans-expr.c (gfc_trans_assignment_1): Do not fix the string
+	length if the lhs expression has the pointer attribute.
+
+2019-02-23  Paul Thomas  <pault@gcc.gnu.org>
+
+	PR fortran/89385
+	PR fortran/89366
+	* decl.c (gfc_verify_c_interop_param): Restriction on string
+	length being one is lifted for F2018.
+	* trans-expr.c (gfc_conv_gfc_desc_to_cfi_desc): For scalar
+	characters with intent in, make a temporary and copy the result
+	of the expression evaluation into it.
+	(gfc_conv_procedure_call): Set a flag for character formal args
+	having a character length that is not unity. If the procedure
+	is bind C, call gfc_conv_gfc_desc_to_cfi_desc in this case.
+	Also, extend bind C calls to unconditionally convert both
+	pointers and allocatable expressions.
+
+2019-02-23  David Malcolm  <dmalcolm@redhat.com>
+	    Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/88074
+	* simplify.c (norm2_do_sqrt, gfc_simplify_norm2): Use
+	mpfr_number_p && !mpfr_zero_p instead of mpfr_regular_p.
+	(norm2_add_squared): Likewise.  Use mp_exp_t rather than mpfr_exp_t.
+
+2019-02-22  Harald Anlauf  <anlauf@gmx.de>
+
+	PR fortran/83057
+	* io.c (gfc_match_open): Fix logic in checks of OPEN statement
+	when NEWUNIT= is specified.
+
+2019-02-22  Steven G. Kargl  <kargl@gcc.gnu.org>
+
+	PR fortran/89431
+	* gfortran.texi: Fix documentation to match the implementation.
+
+2019-02-22  Thomas Schwinge  <thomas@codesourcery.com>
+	    Cesar Philippidis  <cesar@codesourcery.com>
+
+	PR fortran/72741
+	* gfortran.h (oacc_routine_lop): New enum.
+	(symbol_attribute): Use it.
+	* openmp.c (gfc_oacc_routine_dims): Replace with...
+	(gfc_oacc_routine_lop): ... this new function.
+	(gfc_match_oacc_routine): Adjust.
+	* trans-decl.c (add_attributes_to_decl): Likewise.
+
+2019-02-22  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* openmp.c (gfc_match_oacc_declare): Revert earlier changes.
+
+2019-02-21  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	* dump-parse-tree.c (debug): Implement for gfc_expr *,
+	gfc_typespec *, gfc_typespec and gfc_symbol *.
+
+2019-02-21  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	PR fortran/86119
+	* class.c (gfc_get_len_component): Add argument k for kind.
+	If the kind of the resulting expression is not equal to k,
+	convert it.
+	* gfortran.h (gfc_len_component): Adjust prototype.
+	* simplify.c (gfc_simplify_len): Pass kind to
+	gfc_get_len_component.
+
+2019-02-20  Martin Liska  <mliska@suse.cz>
+
+	* gfortran.texi: Change singular to plural.
+
+2019-02-20  Martin Liska  <mliska@suse.cz>
+
+	* gfortran.texi: Document Fortran header directive.
+
 2019-02-19  Thomas Koenig  <tkoenig@gcc.gnu.org>
 
 	PR fortran/89384
@@ -5,7 +91,7 @@
 	argument is contiguous and the actual argument may not be,
 	use gfc_conv_subref_array_arg.
 
-2019-02-19  Chung-Lin Tang  <cltang@codesourcery.com>
+2019-02-19  Thomas Schwinge  <thomas@codesourcery.com>
 
 	PR c/87924
 	* openmp.c (gfc_match_omp_clauses): Add representation of wait clause

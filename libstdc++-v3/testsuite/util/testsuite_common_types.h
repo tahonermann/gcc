@@ -275,21 +275,21 @@ namespace __gnu_test
     typedef wchar_t 		a13;
     typedef node<_GLIBCXX_TYPELIST_CHAIN13(a1, a2, a3, a4, a5, a6, a7, a8, a9,
 					   a10, a11, a12, a13)> basic_typelist;
-#ifdef _GLIBCXX_USE_CHAR8_T
-    typedef char8_t 		a14;
-    typedef node<_GLIBCXX_TYPELIST_CHAIN1(a14)> char8_typelist;
-#else
-    typedef node<null_type> char8_typelist;
-#endif
 #if __cplusplus >= 201103L
-    typedef char16_t 		a15;
-    typedef char32_t 		a16;
-    typedef node<_GLIBCXX_TYPELIST_CHAIN2(a15, a16)> cxx11_typelist;
+    typedef char16_t 		a14;
+    typedef char32_t 		a15;
+    typedef node<_GLIBCXX_TYPELIST_CHAIN2(a14, a15)> cxx11_typelist;
 #else
     typedef node<null_type> cxx11_typelist;
 #endif
-    typedef typename append<basic_typelist, char8_typelist>::type tl1;
-    typedef typename append<tl1, cxx11_typelist>::type type;
+#ifdef _GLIBCXX_USE_CHAR8_T
+    typedef char8_t 		a16;
+    typedef node<_GLIBCXX_TYPELIST_CHAIN1(a16)> char8_typelist;
+#else
+    typedef node<null_type> char8_typelist;
+#endif
+    typedef typename append<basic_typelist, cxx11_typelist>::type tl1;
+    typedef typename append<tl1, char8_typelist>::type type;
   };
 
   // A typelist of all standard integral types + the GNU 128-bit types.
@@ -310,18 +310,18 @@ namespace __gnu_test
     typedef wchar_t 		a13;
     typedef node<_GLIBCXX_TYPELIST_CHAIN13(a1, a2, a3, a4, a5, a6, a7, a8, a9,
 					   a10, a11, a12, a13)> basic_typelist;
-#ifdef _GLIBCXX_USE_CHAR8_T
-    typedef char8_t 		a14;
-    typedef node<_GLIBCXX_TYPELIST_CHAIN1(a14)> char8_typelist;
-#else
-    typedef node<null_type> char8_typelist;
-#endif
 #if __cplusplus >= 201103L
-    typedef char16_t 		a15;
-    typedef char32_t 		a16;
-    typedef node<_GLIBCXX_TYPELIST_CHAIN2(a15, a16)> cxx11_typelist;
+    typedef char16_t 		a14;
+    typedef char32_t 		a15;
+    typedef node<_GLIBCXX_TYPELIST_CHAIN2(a14, a15)> cxx11_typelist;
 #else
     typedef node<null_type> cxx11_typelist;
+#endif
+#ifdef _GLIBCXX_USE_CHAR8_T
+    typedef char8_t 		a16;
+    typedef node<_GLIBCXX_TYPELIST_CHAIN1(a16)> char8_typelist;
+#else
+    typedef node<null_type> char8_typelist;
 #endif
 # if !defined(__STRICT_ANSI__) && defined(_GLIBCXX_USE_INT128)
     __extension__ typedef __int128            a17;
@@ -330,8 +330,8 @@ namespace __gnu_test
 #else
     typedef node<null_type> int128_typelist;
 #endif
-    typedef typename append<basic_typelist, char8_typelist>::type tl1;
-    typedef typename append<tl1, cxx11_typelist>::type            tl2;
+    typedef typename append<basic_typelist, cxx11_typelist>::type tl1;
+    typedef typename append<tl1, char8_typelist>::type            tl2;
     typedef typename append<tl2, int128_typelist>::type type;
   };
 
