@@ -205,8 +205,10 @@ integral_argument (const char *arg, int *err, bool byte_size_suffix)
 	  value = strtoull (arg, &end, 0);
 	  if (*end)
 	    {
-	      /* errno is most likely EINVAL here.  */
-	      *err = errno;
+	      if (errno)
+		*err = errno;
+	      else
+		*err = EINVAL;
 	      return -1;
 	    }
 
@@ -1232,7 +1234,7 @@ cmdline_handle_error (location_t loc, const struct cl_option *option,
 {
   if (errors & CL_ERR_DISABLED)
     {
-      error_at (loc, "command line option %qs"
+      error_at (loc, "command-line option %qs"
 		     " is not supported by this configuration", opt);
       return true;
     }
@@ -1321,7 +1323,7 @@ read_cmdline_option (struct gcc_options *opts,
   if (decoded->opt_index == OPT_SPECIAL_unknown)
     {
       if (handlers->unknown_option_callback (decoded))
-	error_at (loc, "unrecognized command line option %qs", decoded->arg);
+	error_at (loc, "unrecognized command-line option %qs", decoded->arg);
       return;
     }
 
@@ -1353,7 +1355,7 @@ read_cmdline_option (struct gcc_options *opts,
 
   if (!handle_option (opts, opts_set, decoded, lang_mask, DK_UNSPECIFIED,
 		      loc, handlers, false, dc))
-    error_at (loc, "unrecognized command line option %qs", opt);
+    error_at (loc, "unrecognized command-line option %qs", opt);
 }
 
 /* Set any field in OPTS, and OPTS_SET if not NULL, for option

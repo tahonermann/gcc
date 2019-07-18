@@ -50,8 +50,9 @@ int max_regno;
 
 /* Used to cache the results of simplifiable_subregs.  SHAPE is the input
    parameter and SIMPLIFIABLE_REGS is the result.  */
-struct simplifiable_subreg
+class simplifiable_subreg
 {
+public:
   simplifiable_subreg (const subreg_shape &);
 
   subreg_shape shape;
@@ -717,11 +718,11 @@ fix_register (const char *name, int fixed, int call_used)
 		  switch (call_used)
 		    {
 		    case 0:
-		      error ("can%'t use %qs as a call-saved register", name);
+		      error ("cannot use %qs as a call-saved register", name);
 		      break;
 
 		    case 1:
-		      error ("can%'t use %qs as a call-used register", name);
+		      error ("cannot use %qs as a call-used register", name);
 		      break;
 
 		    default:
@@ -733,7 +734,7 @@ fix_register (const char *name, int fixed, int call_used)
 		  switch (call_used)
 		    {
 		    case 1:
-		      error ("can%'t use %qs as a fixed register", name);
+		      error ("cannot use %qs as a fixed register", name);
 		      break;
 
 		    case 0:

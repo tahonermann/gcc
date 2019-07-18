@@ -482,11 +482,13 @@ AC_ARG_ENABLE(build-format-warnings,
 AS_IF([test $enable_build_format_warnings = no],
       [wf_opt=-Wno-format],[wf_opt=])
 ACX_PROG_CXX_WARNING_OPTS(
-	m4_quote(m4_do([-W -Wall -Wno-narrowing -Wwrite-strings ],
-		       [-Wcast-qual $wf_opt])), [loose_warn])
+	m4_quote(m4_do([-W -Wall -Wclass-is-pod -Wmismatched-tags ],
+		       [-Wno-narrowing -Wstruct-not-pod -Wwrite-strings ],
+		       [-Wcast-qual -Wno-error=format-diag $wf_opt])),
+		       [loose_warn])
 ACX_PROG_CC_WARNING_OPTS(
-	m4_quote(m4_do([-Wstrict-prototypes -Wmissing-prototypes])),
-	[c_loose_warn])
+	m4_quote(m4_do([-Wstrict-prototypes -Wmissing-prototypes ],
+	 	       [-Wno-error=format-diag])), [c_loose_warn])
 ACX_PROG_CXX_WARNING_OPTS(
 	m4_quote(m4_do([-Wmissing-format-attribute ],
 		       [-Woverloaded-virtual])), [strict_warn])
@@ -1257,6 +1259,72 @@ if test $gcc_cv_header_inttypes_h = yes; then
 	[Define if you have a working <inttypes.h> header file.])
 fi
 
+# Look for the ZSTD package.
+ZSTD_INCLUDE=
+ZSTD_LIB=
+AC_SUBST(ZSTD_INCLUDE)
+AC_SUBST(ZSTD_LIB)
+ZSTD_CPPFLAGS=
+ZSTD_LDFLAGS=
+AC_ARG_WITH(zstd,
+	[AS_HELP_STRING([--with-zstd=PATH],
+		[specify prefix directory for installed zstd library.
+		 Equivalent to --with-zstd-include=PATH/include
+		 plus --with-zstd-lib=PATH/lib])])
+AC_ARG_WITH(zstd-include,
+	[AS_HELP_STRING([--with-zstd-include=PATH],
+		[specify directory for installed zstd include files])])
+AC_ARG_WITH(zstd-lib,
+	[AS_HELP_STRING([--with-zstd-lib=PATH],
+		[specify directory for the installed zstd library])])
+case "x$with_zstd" in
+  x) ;;
+  xno)
+    ZSTD_INCLUDE=no
+    ZSTD_LIB=no
+    ;;
+  *) ZSTD_INCLUDE=$with_zstd/include
+     ZSTD_LIB=$with_zstd/lib
+     ;;
+esac
+if test "x$with_zstd_include" != x; then
+  ZSTD_INCLUDE=$with_zstd_include
+fi
+if test "x$with_zstd_lib" != x; then
+  ZSTD_LIB=$with_zstd_lib
+fi
+if test "x$ZSTD_INCLUDE" != x \
+   && test "x$ZSTD_INCLUDE" != xno; then
+  ZSTD_CPPFLAGS=-I$ZSTD_INCLUDE
+fi
+if test "x$ZSTD_LIB" != x \
+   && test "x$ZSTD_LIB" != xno; then
+  ZSTD_LDFLAGS=-L$ZSTD_LIB
+fi
+
+CXXFLAGS="$CXXFLAGS $ZSTD_CPPFLAGS"
+LDFLAGS="$LDFLAGS $ZSTD_LDFLAGS"
+
+AC_MSG_CHECKING(for zstd.h)
+AC_CACHE_VAL(gcc_cv_header_zstd_h,
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+[[#include <zstd.h>]])],
+  [gcc_cv_header_zstd_h=yes],
+  [gcc_cv_header_zstd_h=no])])
+AC_MSG_RESULT($gcc_cv_header_zstd_h)
+if test $gcc_cv_header_zstd_h = yes; then
+  AC_DEFINE(HAVE_ZSTD_H, 1,
+	[Define if you have a working <zstd.h> header file.])
+fi
+
+# LTO can use zstd compression algorithm
+save_LIBS="$LIBS"
+LIBS=
+AC_SEARCH_LIBS(ZSTD_compress, zstd)
+ZSTD_LIB="$LIBS"
+LIBS="$save_LIBS"
+AC_SUBST(ZSTD_LIB)
+
 dnl Disabled until we have a complete test for buggy enum bitfields.
 dnl gcc_AC_C_ENUM_BF_UNSIGNED
 
@@ -1881,12 +1949,11 @@ AC_ARG_ENABLE(cld,
 
 AC_ARG_ENABLE(frame-pointer,
 [AS_HELP_STRING([--enable-frame-pointer],
-		[enable -fno-omit-frame-pointer by default for 32bit x86])], [],
+		[enable -fno-omit-frame-pointer by default for x86])], [],
 [
 case $target_os in
-linux* | darwin[[8912]]*)
-  # Enable -fomit-frame-pointer by default for Linux and Darwin with
-  # DWARF2.
+linux* | gnu* | darwin[[8912]]* | cygwin* | mingw*)
+  # Enable -fomit-frame-pointer by default for these systems with DWARF2.
   enable_frame_pointer=no
   ;;
 *)
@@ -1894,6 +1961,17 @@ linux* | darwin[[8912]]*)
   ;;
 esac
 ])
+
+case $target in
+i[[34567]]86-*-* | x86_64-*-*)
+	if test "x$enable_cld" = xyes; then
+		tm_defines="${tm_defines} USE_IX86_CLD=1"
+	fi
+	if test "x$enable_frame_pointer" = xyes; then
+		tm_defines="${tm_defines} USE_IX86_FRAME_POINTER=1"
+	fi
+	;;
+esac
 
 # Windows32 Registry support for specifying GCC installation paths.
 AC_ARG_ENABLE(win32-registry,
@@ -2673,17 +2751,13 @@ if test $in_tree_ld != yes ; then
 	#
 	# ld: Software Generation Utilities - Solaris Link Editors: 5.11-1.1701:onnv-ab196087-6931056-03/25/10
 	#
-	# In Solaris 11.4, this was changed to
-	#
-	# ld: Solaris ELF Utilities: 11.4-1.3123
-	#
 	# ld and ld.so.1 are guaranteed to be updated in lockstep, so ld version
 	# numbers can be used in ld.so.1 feature checks even if a different
 	# linker is configured.
 	ld_ver=`$gcc_cv_ld -V 2>&1`
-	if echo "$ld_ver" | $EGREP 'Solaris Link Editors|Solaris ELF Utilities' > /dev/null; then
+	if echo "$ld_ver" | grep 'Solaris Link Editors' > /dev/null; then
 	  ld_vers=`echo $ld_ver | sed -n \
-	    -e 's,^.*: \(5\|1[0-9]\)\.[0-9][0-9]*-\([0-9]\.[0-9][0-9]*\).*$,\2,p'`
+	    -e 's,^.*: 5\.[0-9][0-9]*-\([0-9]\.[0-9][0-9]*\).*$,\1,p'`
 	  ld_vers_major=`expr "$ld_vers" : '\([0-9]*\)'`
 	  ld_vers_minor=`expr "$ld_vers" : '[0-9]*\.\([0-9]*\)'`
 	fi
@@ -2741,7 +2815,7 @@ else
       hppa64*-*-hpux* | ia64*-*-hpux*)
 	gcc_cv_ld_hidden=yes
 	;;
-      *-*-solaris2.1[0-9]*)
+      *-*-solaris2*)
 	# Support for .hidden in Sun ld appeared in Solaris 9 FCS, but
 	# .symbolic was only added in Solaris 9 12/02.
         gcc_cv_ld_hidden=yes
@@ -3065,27 +3139,12 @@ if test $gcc_cv_as_shf_merge = no; then
     [elf,2,12,0], [--fatal-warnings],
     [.section .rodata.str, "aMS", %progbits, 1])
 fi
-case "$target" in
-  i?86-*-solaris2.10* | x86_64-*-solaris2.10*)
-    # SHF_MERGE support in Solaris 10/x86 ld is broken.
-    if test x"$gnu_ld" = xno; then
-      gcc_cv_as_shf_merge=no
-    fi
-    ;;
-esac
 AC_DEFINE_UNQUOTED(HAVE_GAS_SHF_MERGE,
   [`if test $gcc_cv_as_shf_merge = yes; then echo 1; else echo 0; fi`],
 [Define 0/1 if your assembler supports marking sections with SHF_MERGE flag.])
 
 gcc_cv_ld_aligned_shf_merge=yes
 case "$target" in
-  # While Solaris 10/SPARC ld isn't affected, disable to avoid problems
-  # relinking on Solaris 11 < 11.4.
-  sparc*-*-solaris2.10*)
-    if test x"$gnu_ld" = xno; then
-      gcc_cv_ld_aligned_shf_merge=no
-    fi
-    ;;
   # SHF_MERGE support is broken in Solaris ld up to Solaris 11.3/SPARC for
   # alignment > 1.
   sparc*-*-solaris2.11*)
@@ -3131,7 +3190,7 @@ else
              foo:
 	     '
            ;;
-         i?86-*-solaris2* | x86_64-*-solaris2.1[[0-9]]*)
+         i?86-*-solaris2* | x86_64-*-solaris2*)
 	   conftest_s='
                .group foo,.text%foo,#comdat
                .section .text%foo, "ax", @progbits
@@ -3354,7 +3413,7 @@ foo:	.long	25
 	;;
   i[34567]86-*-* | x86_64-*-*)
     case "$target" in
-      i[34567]86-*-solaris2.* | x86_64-*-solaris2.1[0-9]*)
+      i[34567]86-*-solaris2.* | x86_64-*-solaris2.*)
 	on_solaris=yes
         ;;
       *)
@@ -4881,6 +4940,13 @@ pointers into PC-relative form.])
 	[Requesting --with-nan= requires assembler support for -mnan=])
     fi
     ;;
+    riscv*-*-*)
+    gcc_GAS_CHECK_FEATURE([.attribute support],
+      gcc_cv_as_riscv_attribute, [2,32,0],,
+      [.attribute stack_align,4],,
+      [AC_DEFINE(HAVE_AS_RISCV_ATTRIBUTE, 1,
+	  [Define if your assembler supports .attribute.])])
+    ;;
     s390*-*-*)
     gcc_GAS_CHECK_FEATURE([.gnu_attribute support],
       gcc_cv_as_s390_gnu_attribute, [2,18,0],,
@@ -4934,7 +5000,7 @@ esac
 # version to the per-target configury.
 case "$cpu_type" in
   aarch64 | alpha | arc | arm | avr | bfin | cris | csky | i386 | m32c | m68k \
-  | microblaze | mips | nios2 | pa | riscv | rs6000 | score | sparc | spu \
+  | microblaze | mips | nds32 | nios2 | pa | riscv | rs6000 | score | sparc | spu \
   | tilegx | tilepro | visium | xstormy16 | xtensa)
     insn="nop"
     ;;
@@ -6080,11 +6146,7 @@ fi
 AC_MSG_CHECKING(dl_iterate_phdr in target C library)
 gcc_cv_target_dl_iterate_phdr=unknown
 case "$target" in
-  # Restrict to Solaris 11+.  While most of the Solaris 11 linker changes
-  # were backported to Solaris 10 Update 10, dl_iterate_phdr only lives in
-  # libdl there, both complicating its use and breaking compatibility
-  # between Solaris 10 updates.
-  *-*-solaris2.1[[1-9]]*)
+  *-*-solaris2*)
     # <link.h> needs both a dl_iterate_phdr declaration and support for
     # compilation with largefile support.
     if grep dl_iterate_phdr $target_header_dir/link.h > /dev/null 2>&1 \

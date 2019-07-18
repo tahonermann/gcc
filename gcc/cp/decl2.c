@@ -158,8 +158,7 @@ build_memfn_type (tree fntype, tree ctype, cp_cv_quals quals,
   if (fntype == error_mark_node || ctype == error_mark_node)
     return error_mark_node;
 
-  gcc_assert (TREE_CODE (fntype) == FUNCTION_TYPE
-	      || TREE_CODE (fntype) == METHOD_TYPE);
+  gcc_assert (FUNC_OR_METHOD_TYPE_P (fntype));
 
   cp_cv_quals type_quals = quals & ~TYPE_QUAL_RESTRICT;
   ctype = cp_build_qualified_type (ctype, type_quals);
@@ -831,7 +830,8 @@ grokfield (const cp_declarator *declarator,
   if (TREE_CODE (value) == TYPE_DECL && init)
     {
       error_at (cp_expr_loc_or_loc (init, DECL_SOURCE_LOCATION (value)),
-		"typedef %qD is initialized (use decltype instead)", value);
+		"typedef %qD is initialized (use %qs instead)",
+		value, "decltype");
       init = NULL_TREE;
     }
 
@@ -920,7 +920,7 @@ grokfield (const cp_declarator *declarator,
 		  DECL_DECLARED_INLINE_P (value) = 1;
 		}
 	    }
-	  else if (TREE_CODE (init) == DEFAULT_ARG)
+	  else if (TREE_CODE (init) == DEFERRED_PARSE)
 	    error ("invalid initializer for member function %qD", value);
 	  else if (TREE_CODE (TREE_TYPE (value)) == METHOD_TYPE)
 	    {
@@ -1406,32 +1406,68 @@ cp_check_const_attributes (tree attributes)
     }
 }
 
-/* Return true if TYPE is an OpenMP mappable type.  */
-bool
-cp_omp_mappable_type (tree type)
+/* Return true if TYPE is an OpenMP mappable type.
+   If NOTES is non-zero, emit a note message for each problem.  */
+static bool
+cp_omp_mappable_type_1 (tree type, bool notes)
 {
+  bool result = true;
+
   /* Mappable type has to be complete.  */
   if (type == error_mark_node || !COMPLETE_TYPE_P (type))
-    return false;
+    {
+      if (notes && type != error_mark_node)
+	{
+	  tree decl = TYPE_MAIN_DECL (type);
+	  inform ((decl ? DECL_SOURCE_LOCATION (decl) : input_location),
+		  "incomplete type %qT is not mappable", type);
+	}
+      result = false;
+    }
   /* Arrays have mappable type if the elements have mappable type.  */
   while (TREE_CODE (type) == ARRAY_TYPE)
     type = TREE_TYPE (type);
   /* A mappable type cannot contain virtual members.  */
   if (CLASS_TYPE_P (type) && CLASSTYPE_VTABLES (type))
-    return false;
+    {
+      if (notes)
+	inform (DECL_SOURCE_LOCATION (TYPE_MAIN_DECL (type)),
+		"type %qT with virtual members is not mappable", type);
+      result = false;
+    }
   /* All data members must be non-static.  */
   if (CLASS_TYPE_P (type))
     {
       tree field;
       for (field = TYPE_FIELDS (type); field; field = DECL_CHAIN (field))
 	if (VAR_P (field))
-	  return false;
+	  {
+	    if (notes)
+	      inform (DECL_SOURCE_LOCATION (field),
+		      "static field %qD is not mappable", field);
+	    result = false;
+	  }
 	/* All fields must have mappable types.  */
 	else if (TREE_CODE (field) == FIELD_DECL
-		 && !cp_omp_mappable_type (TREE_TYPE (field)))
-	  return false;
+		 && !cp_omp_mappable_type_1 (TREE_TYPE (field), notes))
+	  result = false;
     }
-  return true;
+  return result;
+}
+
+/* Return true if TYPE is an OpenMP mappable type.  */
+bool
+cp_omp_mappable_type (tree type)
+{
+  return cp_omp_mappable_type_1 (type, false);
+}
+
+/* Return true if TYPE is an OpenMP mappable type.
+   Emit an error messages if not.  */
+bool
+cp_omp_emit_unmappable_type_notes (tree type)
+{
+  return cp_omp_mappable_type_1 (type, true);
 }
 
 /* Return the last pushed declaration for the symbol DECL or NULL
@@ -1773,12 +1809,13 @@ coerce_delete_type (tree decl, location_t loc)
       else
 	/* A destroying operator delete shall be a class member function named
 	   operator delete.  */
-	error_at (loc, "destroying operator delete must be a member function");
+	error_at (loc,
+		  "destroying %<operator delete%> must be a member function");
       const ovl_op_info_t *op = IDENTIFIER_OVL_OP_INFO (DECL_NAME (decl));
       if (op->flags & OVL_OP_FLAG_VEC)
-	error_at (loc, "operator delete[] cannot be a destroying delete");
+	error_at (loc, "%<operator delete[]%> cannot be a destroying delete");
       if (!usual_deallocation_fn_p (decl))
-	error_at (loc, "destroying operator delete must be a usual "
+	error_at (loc, "destroying %<operator delete%> must be a usual "
 		  "deallocation function");
     }
 
@@ -3442,7 +3479,7 @@ get_tls_init_fn (tree var)
    VAR and then returns a reference to VAR.  The wrapper function is used
    in place of VAR everywhere VAR is mentioned.  */
 
-tree
+static tree
 get_tls_wrapper_fn (tree var)
 {
   /* Only C++11 TLS vars need this wrapper fn.  */
@@ -3494,6 +3531,22 @@ get_tls_wrapper_fn (tree var)
       set_global_binding (fn);
     }
   return fn;
+}
+
+/* If EXPR is a thread_local variable that should be wrapped by init
+   wrapper function, return a call to that function, otherwise return
+   NULL.  */
+
+tree
+maybe_get_tls_wrapper_call (tree expr)
+{
+  if (VAR_P (expr)
+      && !processing_template_decl
+      && !cp_unevaluated_operand
+      && CP_DECL_THREAD_LOCAL_P (expr))
+    if (tree wrap = get_tls_wrapper_fn (expr))
+      return build_cxx_call (wrap, 0, NULL, tf_warning_or_error);
+  return NULL;
 }
 
 /* At EOF, generate the definition for the TLS wrapper function FN:
@@ -4232,6 +4285,8 @@ cpp_check (tree t, cpp_operation op)
 	}
       case IS_ABSTRACT:
 	return DECL_PURE_VIRTUAL_P (t);
+      case IS_ASSIGNMENT_OPERATOR:
+	return DECL_ASSIGNMENT_OPERATOR_P (t);
       case IS_CONSTRUCTOR:
 	return DECL_CONSTRUCTOR_P (t);
       case IS_DESTRUCTOR:
@@ -4608,7 +4663,7 @@ record_mangling (tree decl, bool need_warning)
       inform (DECL_SOURCE_LOCATION (*slot),
 	      "previous mangling %q#D", *slot);
       inform (DECL_SOURCE_LOCATION (decl),
-	      "a later -fabi-version= (or =0)"
+	      "a later %<-fabi-version=%> (or =0)"
 	      " avoids this error with a change in mangling");
       *slot = decl;
     }
@@ -5022,13 +5077,11 @@ c_parse_final_cleanups (void)
 	  /* Don't complain if the template was defined.  */
 	  && !(DECL_TEMPLATE_INSTANTIATION (decl)
 	       && DECL_INITIAL (DECL_TEMPLATE_RESULT
-				(template_for_substitution (decl)))))
-	{
-	  warning_at (DECL_SOURCE_LOCATION (decl), 0,
-		      "inline function %qD used but never defined", decl);
-	  /* Avoid a duplicate warning from check_global_declaration.  */
-	  TREE_NO_WARNING (decl) = 1;
-	}
+				(template_for_substitution (decl))))
+	  && warning_at (DECL_SOURCE_LOCATION (decl), 0,
+			 "inline function %qD used but never defined", decl))
+	/* Avoid a duplicate warning from check_global_declaration.  */
+	TREE_NO_WARNING (decl) = 1;
     }
 
   /* So must decls that use a type with no linkage.  */

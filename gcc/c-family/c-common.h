@@ -988,8 +988,7 @@ extern tree boolean_increment (enum tree_code, tree);
 
 extern int case_compare (splay_tree_key, splay_tree_key);
 
-extern tree c_add_case_label (location_t, splay_tree, tree, tree, tree, tree,
-			      bool *);
+extern tree c_add_case_label (location_t, splay_tree, tree, tree, tree);
 extern bool c_switch_covers_all_cases_p (splay_tree, tree);
 
 extern tree build_function_call (location_t, tree, tree);
@@ -1291,8 +1290,7 @@ extern void sizeof_pointer_memaccess_warning (location_t *, tree,
 					      bool (*) (tree, tree));
 extern void check_main_parameter_types (tree decl);
 extern void warnings_for_convert_and_check (location_t, tree, tree, tree);
-extern void c_do_switch_warnings (splay_tree, location_t, tree, tree, bool,
-				  bool);
+extern void c_do_switch_warnings (splay_tree, location_t, tree, tree, bool);
 extern void warn_for_omitted_condop (location_t, tree);
 extern bool warn_for_restrict (unsigned, tree *, unsigned);
 extern void warn_for_address_or_pointer_of_packed_member (tree, tree);
@@ -1346,6 +1344,8 @@ extern int tm_attr_to_mask (tree);
 extern tree tm_mask_to_attr (int);
 extern tree find_tm_attribute (tree);
 extern const struct attribute_spec::exclusions attr_cold_hot_exclusions[];
+extern const struct attribute_spec::exclusions attr_noreturn_exclusions[];
+extern tree handle_noreturn_attribute (tree *, tree, tree, int, bool *);
 
 /* In c-format.c.  */
 extern bool valid_format_string_type_p (tree);
@@ -1372,7 +1372,8 @@ extern void maybe_add_include_fixit (rich_location *, const char *, bool);
 extern void maybe_suggest_missing_token_insertion (rich_location *richloc,
 						   enum cpp_ttype token_type,
 						   location_t prev_token_loc);
-extern tree braced_list_to_string (tree, tree);
+extern tree braced_lists_to_strings (tree, tree);
+
 extern bool has_attribute (location_t, tree, tree, tree (*)(tree));
 
 #if CHECKING_P

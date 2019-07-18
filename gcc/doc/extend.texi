@@ -47,6 +47,7 @@ extensions, accepted by GCC in C90 mode and in C++.
 * Escaped Newlines::    Slightly looser rules for escaped newlines.
 * Subscripting::        Any array can be subscripted, even if not an lvalue.
 * Pointer Arith::       Arithmetic on @code{void}-pointers and function pointers.
+* Variadic Pointer Args::  Pointer arguments to variadic functions.
 * Pointers to Arrays::  Pointers to arrays with qualifiers work as expected.
 * Initializers::        Non-constant initializers.
 * Compound Literals::   Compound literals give structures, unions
@@ -141,12 +142,34 @@ follows:
 @cindex side effects, macro argument
 But this definition computes either @var{a} or @var{b} twice, with bad
 results if the operand has side effects.  In GNU C, if you know the
-type of the operands (here taken as @code{int}), you can define
-the macro safely as follows:
+type of the operands (here taken as @code{int}), you can avoid this
+problem by defining the macro as follows:
 
 @smallexample
 #define maxint(a,b) \
   (@{int _a = (a), _b = (b); _a > _b ? _a : _b; @})
+@end smallexample
+
+Note that introducing variable declarations (as we do in @code{maxint}) can
+cause variable shadowing, so while this example using the @code{max} macro
+produces correct results:
+@smallexample
+int _a = 1, _b = 2, c;
+c = max (_a, _b);
+@end smallexample
+@noindent
+this example using maxint will not:
+@smallexample
+int _a = 1, _b = 2, c;
+c = maxint (_a, _b);
+@end smallexample
+
+This problem may for instance occur when we use this pattern recursively, like
+so:
+
+@smallexample
+#define maxint3(a, b, c) \
+  (@{int _a = (a), _b = (b), _c = (c); maxint (maxint (_a, _b), _c); @})
 @end smallexample
 
 Embedded statements are not allowed in constant expressions, such as
@@ -1944,6 +1967,22 @@ and on function types, and returns 1.
 The option @option{-Wpointer-arith} requests a warning if these extensions
 are used.
 
+@node Variadic Pointer Args
+@section Pointer Arguments in Variadic Functions
+@cindex pointer arguments in variadic functions
+@cindex variadic functions, pointer arguments
+
+Standard C requires that pointer types used with @code{va_arg} in
+functions with variable argument lists either must be compatible with
+that of the actual argument, or that one type must be a pointer to
+@code{void} and the other a pointer to a character type.  GNU C
+implements the POSIX XSI extension that additionally permits the use
+of @code{va_arg} with a pointer type to receive arguments of any other
+pointer type.
+
+In particular, in GNU C @samp{va_arg (ap, void *)} can safely be used
+to consume an argument of any pointer type.
+
 @node Pointers to Arrays
 @section Pointers to Arrays with Qualifiers Work as Expected
 @cindex pointers to arrays
@@ -2710,7 +2749,8 @@ or variable) must match the kind of symbol to which the argument refers.
 The @code{copy} attribute copies only syntactic and semantic attributes
 but not attributes that affect a symbol's linkage or visibility such as
 @code{alias}, @code{visibility}, or @code{weak}.  The @code{deprecated}
-attribute is also not copied.  @xref{Common Type Attributes}.
+and @code{target_clones} attribute are also not copied.
+@xref{Common Type Attributes}.
 @xref{Common Variable Attributes}.
 
 For example, the @var{StrongAlias} macro below makes use of the @code{alias}
@@ -3175,9 +3215,9 @@ marked symbols.
 @item no_sanitize ("@var{sanitize_option}")
 @cindex @code{no_sanitize} function attribute
 The @code{no_sanitize} attribute on functions is used
-to inform the compiler that it should not do sanitization of all options
+to inform the compiler that it should not do sanitization of any option
 mentioned in @var{sanitize_option}.  A list of values acceptable by
-@option{-fsanitize} option can be provided.
+the @option{-fsanitize} option can be provided.
 
 @smallexample
 void __attribute__ ((no_sanitize ("alignment", "object-size")))
@@ -3908,7 +3948,15 @@ same as for the @option{-mcpu=} command-line option.
 @cindex @code{sign-return-address} function attribute, AArch64
 Select the function scope on which return address signing will be applied.  The
 behavior and permissible arguments are the same as for the command-line option
-@option{-msign-return-address=}.  The default value is @code{none}.
+@option{-msign-return-address=}.  The default value is @code{none}.  This
+attribute is deprecated.  The @code{branch-protection} attribute should
+be used instead.
+
+@item branch-protection
+@cindex @code{branch-protection} function attribute, AArch64
+Select the function scope on which branch protection will be applied.  The
+behavior and permissible arguments are the same as for the command-line option
+@option{-mbranch-protection=}.  The default value is @code{none}.
 
 @end table
 
@@ -4092,7 +4140,8 @@ void f () __attribute__ ((interrupt ("ilink1")));
 @end smallexample
 
 Permissible values for this parameter are: @w{@code{ilink1}} and
-@w{@code{ilink2}}.
+@w{@code{ilink2}} for ARCv1 architecture, and @w{@code{ilink}} and
+@w{@code{firq}} for ARCv2 architecture.
 
 @item long_call
 @itemx medium_call
@@ -4135,6 +4184,17 @@ This attribute allows one to mark secure-code functions that are
 callable from normal mode.  The location of the secure call function
 into the @code{sjli} table needs to be passed as argument.
 
+@item naked
+@cindex @code{naked} function attribute, ARC
+This attribute allows the compiler to construct the requisite function
+declaration, while allowing the body of the function to be assembly
+code.  The specified function will not have prologue/epilogue
+sequences generated by the compiler.  Only basic @code{asm} statements
+can safely be included in naked functions (@pxref{Basic Asm}).  While
+using extended @code{asm} or a mixture of basic @code{asm} and C code
+may appear to work, they cannot be depended upon to work reliably and
+are not supported.
+
 @end table
 
 @node ARM Function Attributes
@@ -4143,6 +4203,15 @@ into the @code{sjli} table needs to be passed as argument.
 These function attributes are supported for ARM targets:
 
 @table @code
+
+@item general-regs-only
+@cindex @code{general-regs-only} function attribute, ARM
+Indicates that no floating-point or Advanced SIMD registers should be
+used when generating code for this function.  If the function explicitly
+uses floating-point code, then the compiler gives an error.  This is
+the same behavior as that of the command-line option
+@option{-mgeneral-regs-only}.
+
 @item interrupt
 @cindex @code{interrupt} function attribute, ARM
 Use this attribute to indicate
@@ -5374,13 +5443,6 @@ Generate code that uses (does not use) ISEL instruction.
 Generate code that uses (does not use) the move from condition
 register field instruction implemented on the POWER4 processor and
 other processors that support the PowerPC V2.01 architecture.
-
-@item mfpgpr
-@itemx no-mfpgpr
-@cindex @code{target("mfpgpr")} function attribute, PowerPC
-Generate code that uses (does not use) the FP move to/from general
-purpose register instructions implemented on the POWER6X processor and
-other processors that support the extended PowerPC V2.05 architecture.
 
 @item mulhw
 @itemx no-mulhw
@@ -7024,8 +7086,10 @@ class itself is instantiated.
 
 @item vector_size (@var{bytes})
 @cindex @code{vector_size} variable attribute
-This attribute specifies the vector size for the variable, measured in
-bytes.  For example, the declaration:
+This attribute specifies the vector size for the type of the declared
+variable, measured in bytes.  The type to which it applies is known as
+the @dfn{base type}.  The @var{bytes} argument must be a positive
+power-of-two multiple of the base type size.  For example, the declaration:
 
 @smallexample
 int foo __attribute__ ((vector_size (16)));
@@ -7033,10 +7097,12 @@ int foo __attribute__ ((vector_size (16)));
 
 @noindent
 causes the compiler to set the mode for @code{foo}, to be 16 bytes,
-divided into @code{int} sized units.  Assuming a 32-bit int (a vector of
-4 units of 4 bytes), the corresponding mode of @code{foo} is V4SI@.
+divided into @code{int} sized units.  Assuming a 32-bit @code{int},
+@code{foo}'s type is a vector of four units of four bytes each, and
+the corresponding mode of @code{foo} is @code{V4SI}.
+@xref{Vector Extensions}, for details of manipulating vector variables.
 
-This attribute is only applicable to integral and float scalars,
+This attribute is only applicable to integral and floating scalars,
 although arrays, pointers, and function return values are allowed in
 conjunction with this construct.
 
@@ -8099,6 +8165,39 @@ the case with lock or thread classes, which are usually defined and then
 not referenced, but contain constructors and destructors that have
 nontrivial bookkeeping functions.
 
+@item vector_size (@var{bytes})
+@cindex @code{vector_size} type attribute
+This attribute specifies the vector size for the type, measured in bytes.
+The type to which it applies is known as the @dfn{base type}.  The @var{bytes}
+argument must be a positive power-of-two multiple of the base type size.  For
+example, the following declarations:
+
+@smallexample
+typedef __attribute__ ((vector_size (32))) int int_vec32_t ;
+typedef __attribute__ ((vector_size (32))) int* int_vec32_ptr_t;
+typedef __attribute__ ((vector_size (32))) int int_vec32_arr3_t[3];
+@end smallexample
+
+@noindent
+define @code{int_vec32_t} to be a 32-byte vector type composed of @code{int}
+sized units.  With @code{int} having a size of 4 bytes, the type defines
+a vector of eight units, four bytes each.  The mode of variables of type
+@code{int_vec32_t} is @code{V8SI}.  @code{int_vec32_ptr_t} is then defined
+to be a pointer to such a vector type, and @code{int_vec32_arr3_t} to be
+an array of three such vectors.  @xref{Vector Extensions}, for details of
+manipulating objects of vector types.
+
+This attribute is only applicable to integral and floating scalar types.
+In function declarations the attribute applies to the function return
+type.
+
+For example, the following:
+@smallexample
+__attribute__ ((vector_size (16))) float get_flt_vec16 (void);
+@end smallexample
+declares @code{get_flt_vec16} to be a function returning a 16-byte vector
+with the base type @code{float}.
+
 @item visibility
 @cindex @code{visibility} type attribute
 In C++, attribute visibility (@pxref{Function Attributes}) can also be
@@ -9047,6 +9146,8 @@ outside of C functions, you must use basic @code{asm}.
 You can use this technique to emit assembler directives,
 define assembly language macros that can be invoked elsewhere in the file,
 or write entire functions in assembly language.
+Basic @code{asm} statements outside of functions may not use any
+qualifiers.
 
 @item
 Functions declared
@@ -10734,7 +10835,7 @@ evaluates to the empty string.
 backward compatibility with old versions of GCC.
 
 In C, @code{__PRETTY_FUNCTION__} is yet another name for
-@code{__func__}, except that at file (or, in C++, namespace scope),
+@code{__func__}, except that at file scope (or, in C++, namespace scope),
 it evaluates to the string @code{"top level"}.  In addition, in C++,
 @code{__PRETTY_FUNCTION__} contains the signature of the function as
 well as its bare name.  For example, this program:
@@ -10864,7 +10965,7 @@ typedef int v4si __attribute__ ((vector_size (16)));
 @end smallexample
 
 @noindent
-The @code{int} type specifies the base type, while the attribute specifies
+The @code{int} type specifies the @dfn{base type}, while the attribute specifies
 the vector size for the variable, measured in bytes.  For example, the
 declaration above causes the compiler to set the mode for the @code{v4si}
 type to be 16 bytes wide and divided into @code{int} sized units.  For
@@ -10872,9 +10973,9 @@ a 32-bit @code{int} this means a vector of 4 units of 4 bytes, and the
 corresponding mode of @code{foo} is @acronym{V4SI}.
 
 The @code{vector_size} attribute is only applicable to integral and
-float scalars, although arrays, pointers, and function return values
+floating scalars, although arrays, pointers, and function return values
 are allowed in conjunction with this construct. Only sizes that are
-a power of two are currently allowed.
+positive power-of-two multiples of the base type size are currently allowed.
 
 All the basic integer types can be used as base types, both as signed
 and as unsigned: @code{char}, @code{short}, @code{int}, @code{long},
@@ -11758,7 +11859,7 @@ is a built-in construct that returns a constant number of bytes from
 @var{ptr} to the end of the object @var{ptr} pointer points to
 (if known at compile time).  To determine the sizes of dynamically allocated
 objects the function relies on the allocation functions called to obtain
-the storage to be declared with the @code{alloc_size} attribute (@xref{Common
+the storage to be declared with the @code{alloc_size} attribute (@pxref{Common
 Function Attributes}).  @code{__builtin_object_size} never evaluates
 its arguments for side effects.  If there are any side effects in them, it
 returns @code{(size_t) -1} for @var{type} 0 or 1 and @code{(size_t) 0}
@@ -12537,13 +12638,16 @@ check its compatibility with @var{size}.
 The @code{__builtin_has_attribute} function evaluates to an integer constant
 expression equal to @code{true} if the symbol or type referenced by
 the @var{type-or-expression} argument has been declared with
-the @var{attribute} referenced by the second argument.  Neither argument
-is evaluated.  The @var{type-or-expression} argument is subject to the same
+the @var{attribute} referenced by the second argument.  For
+an @var{type-or-expression} argument that does not reference a symbol,
+since attributes do not apply to expressions the built-in consider
+the type of the argument.  Neither argument is evaluated.
+The @var{type-or-expression} argument is subject to the same
 restrictions as the argument to @code{typeof} (@pxref{Typeof}).  The
 @var{attribute} argument is an attribute name optionally followed by
 a comma-separated list of arguments enclosed in parentheses.  Both forms
 of attribute names---with and without double leading and trailing
-underscores---are recognized.  @xref{Attribute Syntax} for details.
+underscores---are recognized.  @xref{Attribute Syntax}, for details.
 When no attribute arguments are specified for an attribute that expects
 one or more arguments the function returns @code{true} if
 @var{type-or-expression} has been declared with the attribute regardless
@@ -12941,8 +13045,11 @@ when testing pointer or floating-point values.
 For the purposes of branch prediction optimizations, the probability that
 a @code{__builtin_expect} expression is @code{true} is controlled by GCC's
 @code{builtin-expect-probability} parameter, which defaults to 90%.  
+
 You can also use @code{__builtin_expect_with_probability} to explicitly 
-assign a probability value to individual expressions.
+assign a probability value to individual expressions.  If the built-in
+is used in a loop construct, the provided probability will influence
+the expected number of iterations made by loop optimizations.
 @end deftypefn
 
 @deftypefn {Built-in Function} long __builtin_expect_with_probability
@@ -13146,7 +13253,8 @@ and GCC does not issue a warning.
 @end deftypefn
 
 @deftypefn {Built-in Function}{size_t} __builtin_object_size (const void * @var{ptr}, int @var{type})
-Returns the size of an object pointed to by @var{ptr}.  @xref{Object Size Checking} for a detailed description of the function.
+Returns the size of an object pointed to by @var{ptr}.  @xref{Object Size
+Checking}, for a detailed description of the function.
 @end deftypefn
 
 @deftypefn {Built-in Function} double __builtin_huge_val (void)
@@ -16779,8 +16887,8 @@ enabling the @option{-mpowerpc64}, @option{-mpowerpc-gpopt},
 @option{-mpowerpc-gfxopt}, @option{-mmfcrf}, @option{-mpopcntb},
 @option{-mfprnd}, @option{-mcmpb}, @option{-mhard-dfp}, and
 @option{-mrecip-precision} options.  Specify the
-@option{-maltivec} and @option{-mfpgpr} options explicitly in
-combination with the above options if they are desired.
+@option{-maltivec} option explicitly in
+combination with the above options if desired.
 
 The following functions require option @option{-mcmpb}.
 @smallexample
@@ -22946,6 +23054,7 @@ information.
 * ARM Pragmas::
 * M32C Pragmas::
 * MeP Pragmas::
+* PRU Pragmas::
 * RS/6000 and PowerPC Pragmas::
 * S/390 Pragmas::
 * Darwin Pragmas::
@@ -23093,6 +23202,26 @@ call model when calling the named functions.  Examples:
 @smallexample
 extern int foo ();
 #pragma call foo
+@end smallexample
+
+@end table
+
+@node PRU Pragmas
+@subsection PRU Pragmas
+
+@table @code
+
+@item ctable_entry @var{index} @var{constant_address}
+@cindex pragma, ctable_entry
+Specifies that the PRU CTABLE entry given by @var{index} has the value
+@var{constant_address}.  This enables GCC to emit LBCO/SBCO instructions
+when the load/store address is known and can be addressed with some CTABLE
+entry.  For example:
+
+@smallexample
+/* will compile to "sbco Rx, 2, 0x10, 4" */
+#pragma ctable_entry 2 0x4802a000
+*(unsigned int *)0x4802a010 = val;
 @end smallexample
 
 @end table

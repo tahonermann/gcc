@@ -957,7 +957,7 @@ DEFPARAM (PARAM_GRAPHITE_MAX_NB_SCOP_PARAMS,
 
 DEFPARAM (PARAM_GRAPHITE_MAX_ARRAYS_PER_SCOP,
 	  "graphite-max-arrays-per-scop",
-	  "Maximum number of arrays per scop.",
+	  "Maximum number of arrays per SCoP.",
 	  100, 0, 0)
 
 DEFPARAM (PARAM_MAX_ISL_OPERATIONS,
@@ -990,14 +990,6 @@ DEFPARAM (PARAM_LOOP_INVARIANT_MAX_BBS_IN_LOOP,
 DEFPARAM (PARAM_PROFILE_FUNC_INTERNAL_ID,
 	  "profile-func-internal-id",
 	  "Use internal function id in profile lookup.",
-	  0, 0, 1)
-
-/* When the parameter is 1, track the most frequent N target
-   addresses in indirect-call profile. This disables
-   indirect_call_profiler_v3 which tracks single target.  */
-DEFPARAM (PARAM_INDIR_CALL_TOPN_PROFILE,
-	  "indir-call-topn-profile",
-	  "Track top N target addresses in indirect-call profile.",
 	  0, 0, 1)
 
 /* Avoid SLP vectorization of large basic blocks.  */
@@ -1117,12 +1109,6 @@ DEFPARAM (PARAM_IPA_CP_LOOP_HINT_BONUS,
 	  "bounds or strides known.",
 	  64, 0, 0)
 
-DEFPARAM (PARAM_IPA_CP_ARRAY_INDEX_HINT_BONUS,
-	  "ipa-cp-array-index-hint-bonus",
-	  "Compile-time bonus IPA-CP assigns to candidates which make an array "
-	  "index known.",
-	  48, 0, 0)
-
 DEFPARAM (PARAM_IPA_MAX_AA_STEPS,
 	  "ipa-max-aa-steps",
 	  "Maximum number of statements that will be visited by IPA formal "
@@ -1145,6 +1131,11 @@ DEFPARAM (MAX_PARTITION_SIZE,
 	  "lto-max-partition",
 	  "Maximal size of a partition for LTO (in estimated instructions).",
 	  1000000, 0, INT_MAX)
+
+DEFPARAM (PARAM_MAX_LTO_STREAMING_PARALLELISM,
+	  "lto-max-streaming-parallelism",
+	  "maximal number of LTO partitions streamed in parallel.",
+	  32, 1, 0)
 
 /* Diagnostic parameters.  */
 
@@ -1169,6 +1160,20 @@ DEFPARAM (PARAM_CASE_VALUES_THRESHOLD,
 	  "use a jump-table instead of a tree of conditional branches, "
 	  "if 0, use the default for the machine.",
           0, 0, 0)
+
+DEFPARAM (PARAM_JUMP_TABLE_MAX_GROWTH_RATIO_FOR_SIZE,
+	  "jump-table-max-growth-ratio-for-size",
+	  "The maximum code size growth ratio when expanding "
+	  "into a jump table (in percent).  The parameter is used when "
+	  "optimizing for size.",
+	  300, 0, 0)
+
+DEFPARAM (PARAM_JUMP_TABLE_MAX_GROWTH_RATIO_FOR_SPEED,
+	  "jump-table-max-growth-ratio-for-speed",
+	  "The maximum code size growth ratio when expanding "
+	  "into a jump table (in percent).  The parameter is used when "
+	  "optimizing for speed.",
+	  800, 0, 0)
 
 /* Data race flags for C++0x memory model compliance.  */
 DEFPARAM (PARAM_ALLOW_STORE_DATA_RACES,
@@ -1199,6 +1204,11 @@ DEFPARAM (PARAM_MAX_STORES_TO_MERGE,
 	  "Maximum number of constant stores to merge in the "
 	  "store merging pass.",
 	  64, 2, 0)
+
+DEFPARAM (PARAM_STORE_MERGING_MAX_SIZE,
+	  "store-merging-max-size",
+	  "Maximum size of a single store merging region in bytes.",
+	  65536, 1, 1)
 
 DEFPARAM (PARAM_MAX_TAIL_MERGE_ITERATIONS,
           "max-tail-merge-iterations",
@@ -1408,6 +1418,24 @@ DEFPARAM(PARAM_LOOP_VERSIONING_MAX_OUTER_INSNS,
 	 " considered for versioning, on top of the instructions in inner"
 	 " loops.",
 	 100, 0, 0)
+
+DEFPARAM(PARAM_GIMPLE_FE_COMPUTED_HOT_BB_THRESHOLD,
+	 "gimple-fe-computed-hot-bb-threshold",
+	 "The number of executions of a basic block which is considered hot."
+	 " The parameter is used only in GIMPLE FE.",
+	 0, 0, 0)
+
+DEFPARAM(PARAM_HASH_TABLE_VERIFICATION_LIMIT,
+	 "hash-table-verification-limit",
+	 "The number of elements for which hash table verification is done for "
+	 "each searched element.",
+	 10, 0, 0)
+
+DEFPARAM(PARAM_SSA_NAME_DEF_CHAIN_LIMIT,
+	 "ssa-name-def-chain-limit",
+	 "The maximum number of SSA_NAME assignments to follow in determining "
+	 "a value.",
+	 512, 0, 0)
 
 /*
 

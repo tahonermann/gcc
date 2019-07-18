@@ -447,11 +447,22 @@ d_init_versions (void)
   if (global.params.useArrayBounds == BOUNDSCHECKoff)
     VersionCondition::addPredefinedGlobalIdent ("D_NoBoundsChecks");
 
+  if (global.params.betterC)
+    VersionCondition::addPredefinedGlobalIdent ("D_BetterC");
+  else
+    {
+      VersionCondition::addPredefinedGlobalIdent ("D_ModuleInfo");
+      VersionCondition::addPredefinedGlobalIdent ("D_Exceptions");
+      VersionCondition::addPredefinedGlobalIdent ("D_TypeInfo");
+    }
+
   VersionCondition::addPredefinedGlobalIdent ("all");
 
   /* Emit all target-specific version identifiers.  */
   targetdm.d_cpu_versions ();
   targetdm.d_os_versions ();
+
+  VersionCondition::addPredefinedGlobalIdent ("CppRuntime_Gcc");
 }
 
 /* A helper for d_build_builtins_module.  Return a new ALIAS for TYPE.
@@ -1106,7 +1117,7 @@ d_init_builtins (void)
   Type::tvalist = build_frontend_type (va_list_type_node);
   if (!Type::tvalist)
     {
-      error ("cannot represent built-in va_list type in D");
+      error ("cannot represent built-in %<va_list%> type in D");
       gcc_unreachable ();
     }
 

@@ -107,8 +107,9 @@ static bool cp_printer (pretty_printer *, text_info *, const char *,
 /* Struct for handling %H or %I, which require delaying printing the
    type until a postprocessing stage.  */
 
-struct deferred_printed_type
+class deferred_printed_type
 {
+public:
   deferred_printed_type ()
   : m_tree (NULL_TREE), m_buffer_ptr (NULL), m_verbose (false), m_quote (false)
   {}
@@ -738,14 +739,7 @@ dump_aggr_type (cxx_pretty_printer *pp, tree t, int flags)
       name = DECL_NAME (name);
     }
 
-  if (name == 0 || anon_aggrname_p (name))
-    {
-      if (flags & TFF_CLASS_KEY_OR_ENUM)
-	pp_string (pp, M_("<unnamed>"));
-      else
-	pp_printf (pp, M_("<unnamed %s>"), variety);
-    }
-  else if (LAMBDA_TYPE_P (t))
+  if (LAMBDA_TYPE_P (t))
     {
       /* A lambda's "type" is essentially its signature.  */
       pp_string (pp, M_("<lambda"));
@@ -755,8 +749,16 @@ dump_aggr_type (cxx_pretty_printer *pp, tree t, int flags)
 			 flags);
       pp_greater (pp);
     }
+  else if (!name || IDENTIFIER_ANON_P (name))
+    {
+      if (flags & TFF_CLASS_KEY_OR_ENUM)
+	pp_string (pp, M_("<unnamed>"));
+      else
+	pp_printf (pp, M_("<unnamed %s>"), variety);
+    }
   else
     pp_cxx_tree_identifier (pp, name);
+
   if (tmplate)
     dump_template_parms (pp, TYPE_TEMPLATE_INFO (t),
 			 !CLASSTYPE_USE_TEMPLATE (t),
@@ -2660,7 +2662,7 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
       dump_expr (pp, TREE_OPERAND (t, 0), flags);
       break;
 
-    case DEFAULT_ARG:
+    case DEFERRED_PARSE:
       pp_string (pp, M_("<unparsed>"));
       break;
 
@@ -3049,8 +3051,8 @@ location_of (tree t)
 
   if (DECL_P (t))
     return DECL_SOURCE_LOCATION (t);
-  if (TREE_CODE (t) == DEFAULT_ARG)
-    return defarg_location (t);
+  if (TREE_CODE (t) == DEFERRED_PARSE)
+    return defparse_location (t);
   return cp_expr_loc_or_loc (t, input_location);
 }
 
@@ -4148,75 +4150,77 @@ maybe_warn_cpp0x (cpp0x_warn_str str)
       case CPP0X_INITIALIZER_LISTS:
 	pedwarn (input_location, 0, 
 		 "extended initializer lists "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
 	break;
       case CPP0X_EXPLICIT_CONVERSION:
 	pedwarn (input_location, 0,
 		 "explicit conversion operators "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
 	break;
       case CPP0X_VARIADIC_TEMPLATES:
 	pedwarn (input_location, 0,
 		 "variadic templates "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
 	break;
       case CPP0X_LAMBDA_EXPR:
 	pedwarn (input_location, 0,
 		 "lambda expressions "
-		  "only available with -std=c++11 or -std=gnu++11");
+		  "only available with %<-std=c++11%> or %<-std=gnu++11%>");
 	break;
       case CPP0X_AUTO:
 	pedwarn (input_location, 0,
-		 "C++11 auto only available with -std=c++11 or -std=gnu++11");
+		 "C++11 auto only available with %<-std=c++11%> or "
+		 "%<-std=gnu++11%>");
 	break;
       case CPP0X_SCOPED_ENUMS:
 	pedwarn (input_location, 0,
-		 "scoped enums only available with -std=c++11 or -std=gnu++11");
+		 "scoped enums only available with %<-std=c++11%> or "
+		 "%<-std=gnu++11%>");
 	break;
       case CPP0X_DEFAULTED_DELETED:
 	pedwarn (input_location, 0,
 		 "defaulted and deleted functions "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
 	break;
       case CPP0X_INLINE_NAMESPACES:
 	pedwarn (input_location, OPT_Wpedantic,
 		 "inline namespaces "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
 	break;
       case CPP0X_OVERRIDE_CONTROLS:
 	pedwarn (input_location, 0,
 		 "override controls (override/final) "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
         break;
       case CPP0X_NSDMI:
 	pedwarn (input_location, 0,
 		 "non-static data member initializers "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
         break;
       case CPP0X_USER_DEFINED_LITERALS:
 	pedwarn (input_location, 0,
 		 "user-defined literals "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
 	break;
       case CPP0X_DELEGATING_CTORS:
 	pedwarn (input_location, 0,
 		 "delegating constructors "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
         break;
       case CPP0X_INHERITING_CTORS:
 	pedwarn (input_location, 0,
 		 "inheriting constructors "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
         break;
       case CPP0X_ATTRIBUTES:
 	pedwarn (input_location, 0,
 		 "c++11 attributes "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
 	break;
       case CPP0X_REF_QUALIFIER:
 	pedwarn (input_location, 0,
 		 "ref-qualifiers "
-		 "only available with -std=c++11 or -std=gnu++11");
+		 "only available with %<-std=c++11%> or %<-std=gnu++11%>");
 	break;
       default:
 	gcc_unreachable ();

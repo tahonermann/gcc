@@ -385,12 +385,6 @@ can_inline_edge_p (struct cgraph_edge *e, bool report,
       e->inline_failed = CIF_ATTRIBUTE_MISMATCH;
       inlinable = false;
     }
-  else if (callee->externally_visible
-	   && flag_live_patching == LIVE_PATCHING_INLINE_ONLY_STATIC)
-    {
-      e->inline_failed = CIF_EXTERN_LIVE_ONLY_STATIC;
-      inlinable = false;
-    }
   if (!inlinable && report)
     report_inline_failed_reason (e);
   return inlinable;
@@ -433,6 +427,13 @@ can_inline_edge_by_limits_p (struct cgraph_edge *e, bool report,
      		 DECL_ATTRIBUTES (caller->decl))
       && !caller_growth_limits (e))
     inlinable = false;
+  else if (callee->externally_visible
+	   && !DECL_DISREGARD_INLINE_LIMITS (callee->decl)
+	   && flag_live_patching == LIVE_PATCHING_INLINE_ONLY_STATIC)
+    {
+      e->inline_failed = CIF_EXTERN_LIVE_ONLY_STATIC;
+      inlinable = false;
+    }
   /* Don't inline a function with a higher optimization level than the
      caller.  FIXME: this is really just tip of iceberg of handling
      optimization attribute.  */
@@ -806,7 +807,6 @@ want_inline_small_function_p (struct cgraph_edge *e, bool report)
 		   || (!(hints & (INLINE_HINT_indirect_call
 				  | INLINE_HINT_known_hot
 				  | INLINE_HINT_loop_iterations
-				  | INLINE_HINT_array_index
 				  | INLINE_HINT_loop_stride))
 		       && !(big_speedup = big_speedup_p (e)))))
 	{
@@ -832,7 +832,6 @@ want_inline_small_function_p (struct cgraph_edge *e, bool report)
 	       && !(hints & INLINE_HINT_known_hot)
 	       && growth >= ((hints & (INLINE_HINT_indirect_call
 				       | INLINE_HINT_loop_iterations
-			               | INLINE_HINT_array_index
 				       | INLINE_HINT_loop_stride))
 			     ? MAX (MAX_INLINE_INSNS_AUTO,
 				    MAX_INLINE_INSNS_SINGLE)
@@ -1036,7 +1035,7 @@ edge_badness (struct cgraph_edge *edge, bool dump)
   int growth;
   sreal edge_time, unspec_edge_time;
   struct cgraph_node *callee = edge->callee->ultimate_alias_target ();
-  struct ipa_fn_summary *callee_info = ipa_fn_summaries->get (callee);
+  class ipa_fn_summary *callee_info = ipa_fn_summaries->get (callee);
   ipa_hints hints;
   cgraph_node *caller = (edge->caller->global.inlined_to 
 			 ? edge->caller->global.inlined_to
@@ -1226,7 +1225,6 @@ edge_badness (struct cgraph_edge *edge, bool dump)
     badness = badness.shift (badness > 0 ? 4 : -4);
   if ((hints & (INLINE_HINT_indirect_call
 		| INLINE_HINT_loop_iterations
-		| INLINE_HINT_array_index
 		| INLINE_HINT_loop_stride))
       || callee_info->growth <= 0)
     badness = badness.shift (badness > 0 ? -2 : 2);
@@ -1751,6 +1749,16 @@ sum_callers (struct cgraph_node *node, void *data)
   return false;
 }
 
+/* We only propagate across edges with non-interposable callee.  */
+
+inline bool
+ignore_edge_p (struct cgraph_edge *e)
+{
+  enum availability avail;
+  e->callee->function_or_virtual_thunk_symbol (&avail, e->caller);
+  return (avail <= AVAIL_INTERPOSABLE);
+}
+
 /* We use greedy algorithm for inlining of small functions:
    All inline candidates are put into prioritized heap ordered in
    increasing badness.
@@ -1778,7 +1786,7 @@ inline_small_functions (void)
      metrics.  */
 
   max_count = profile_count::uninitialized ();
-  ipa_reduced_postorder (order, true, NULL);
+  ipa_reduced_postorder (order, true, ignore_edge_p);
   free (order);
 
   FOR_EACH_DEFINED_FUNCTION (node)
@@ -1788,7 +1796,7 @@ inline_small_functions (void)
 	    && (node->has_gimple_body_p () || node->thunk.thunk_p)
 	    && opt_for_fn (node->decl, optimize))
 	  {
-	    struct ipa_fn_summary *info = ipa_fn_summaries->get (node);
+	    class ipa_fn_summary *info = ipa_fn_summaries->get (node);
 	    struct ipa_dfs_info *dfs = (struct ipa_dfs_info *) node->aux;
 
 	    /* Do not account external functions, they will be optimized out
@@ -2133,7 +2141,7 @@ inline_small_functions (void)
    at IPA inlining time.  */
 
 static void
-flatten_function (struct cgraph_node *node, bool early)
+flatten_function (struct cgraph_node *node, bool early, bool update)
 {
   struct cgraph_edge *e;
 
@@ -2163,7 +2171,7 @@ flatten_function (struct cgraph_node *node, bool early)
 	 it in order to fully flatten the leaves.  */
       if (!e->inline_failed)
 	{
-	  flatten_function (callee, early);
+	  flatten_function (callee, early, false);
 	  continue;
 	}
 
@@ -2203,14 +2211,15 @@ flatten_function (struct cgraph_node *node, bool early)
       inline_call (e, true, NULL, NULL, false);
       if (e->callee != orig_callee)
 	orig_callee->aux = (void *) node;
-      flatten_function (e->callee, early);
+      flatten_function (e->callee, early, false);
       if (e->callee != orig_callee)
 	orig_callee->aux = NULL;
     }
 
   node->aux = NULL;
-  if (!node->global.inlined_to)
-    ipa_update_overall_fn_summary (node);
+  if (update)
+    ipa_update_overall_fn_summary (node->global.inlined_to
+				   ? node->global.inlined_to : node);
 }
 
 /* Inline NODE to all callers.  Worker for cgraph_for_node_and_aliases.
@@ -2518,7 +2527,7 @@ ipa_inline (void)
 	 function.  */
       if (dump_file)
 	fprintf (dump_file, "Flattening %s\n", node->name ());
-      flatten_function (node, false);
+      flatten_function (node, false, true);
     }
 
   if (j < nnodes - 2)
@@ -2781,7 +2790,7 @@ early_inliner (function *fun)
       if (dump_enabled_p ())
 	dump_printf (MSG_OPTIMIZED_LOCATIONS,
 		     "Flattening %C\n", node);
-      flatten_function (node, true);
+      flatten_function (node, true, true);
       inlined = true;
     }
   else

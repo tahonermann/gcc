@@ -4714,7 +4714,7 @@ gfc_simplify_matmul (gfc_expr *matrix_a, gfc_expr *matrix_b)
   else
     gcc_unreachable();
 
-  offset_a = offset_b = 0;
+  offset_b = 0;
   for (col = 0; col < result_columns; ++col)
     {
       offset_a = 0;
@@ -6999,20 +6999,17 @@ gfc_simplify_scan (gfc_expr *e, gfc_expr *c, gfc_expr *b, gfc_expr *kind)
 	    indx = 0;
 	}
       else
-	{
-	  i = 0;
-	  for (indx = len; indx > 0; indx--)
-	    {
-	      for (i = 0; i < lenc; i++)
-		{
-		  if (c->value.character.string[i]
-		      == e->value.character.string[indx - 1])
-		    break;
-		}
-	      if (i < lenc)
-		break;
-	    }
-	}
+	for (indx = len; indx > 0; indx--)
+	  {
+	    for (i = 0; i < lenc; i++)
+	      {
+		if (c->value.character.string[i]
+		    == e->value.character.string[indx - 1])
+		  break;
+	      }
+	    if (i < lenc)
+	      break;
+	  }
     }
 
   result = gfc_get_int_expr (k, &e->where, indx);
@@ -7383,6 +7380,7 @@ gfc_simplify_sizeof (gfc_expr *x)
 {
   gfc_expr *result = NULL;
   mpz_t array_size;
+  size_t res_size;
 
   if (x->ts.type == BT_CLASS || x->ts.deferred)
     return NULL;
@@ -7398,7 +7396,8 @@ gfc_simplify_sizeof (gfc_expr *x)
 
   result = gfc_get_constant_expr (BT_INTEGER, gfc_index_integer_kind,
 				  &x->where);
-  mpz_set_si (result->value.integer, gfc_target_expr_size (x));
+  gfc_target_expr_size (x, &res_size);
+  mpz_set_si (result->value.integer, res_size);
 
   return result;
 }
@@ -7412,6 +7411,7 @@ gfc_simplify_storage_size (gfc_expr *x,
 {
   gfc_expr *result = NULL;
   int k;
+  size_t siz;
 
   if (x->ts.type == BT_CLASS || x->ts.deferred)
     return NULL;
@@ -7427,7 +7427,8 @@ gfc_simplify_storage_size (gfc_expr *x,
 
   result = gfc_get_constant_expr (BT_INTEGER, k, &x->where);
 
-  mpz_set_si (result->value.integer, gfc_element_size (x));
+  gfc_element_size (x, &siz);
+  mpz_set_si (result->value.integer, siz);
   mpz_mul_ui (result->value.integer, result->value.integer, BITS_PER_UNIT);
 
   return range_check (result, "STORAGE_SIZE");

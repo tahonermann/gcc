@@ -31,8 +31,9 @@ class hash_map;
 #define LOCATION_LINE_WIDTH	  48
 
 /* Memory allocation location.  */
-struct mem_location
+class mem_location
 {
+public:
   /* Default constructor.  */
   inline
   mem_location () {}
@@ -123,8 +124,9 @@ struct mem_location
 };
 
 /* Memory usage register to a memory location.  */
-struct mem_usage
+class mem_usage
 {
+public:
   /* Default constructor.  */
   mem_usage (): m_allocated (0), m_times (0), m_peak (0), m_instances (1) {}
 
@@ -219,10 +221,8 @@ struct mem_usage
   inline void
   dump_footer () const
   {
-    print_dash_line ();
     fprintf (stderr, "%s" PRsa (53) PRsa (26) "\n", "Total",
 	     SIZE_AMOUNT (m_allocated), SIZE_AMOUNT (m_times));
-    print_dash_line ();
   }
 
   /* Return fraction of NOMINATOR and DENOMINATOR in percent.  */
@@ -247,7 +247,6 @@ struct mem_usage
   {
     fprintf (stderr, "%-48s %11s%16s%10s%17s\n", name, "Leak", "Peak",
 	     "Times", "Type");
-    print_dash_line ();
   }
 
   /* Current number of allocated bytes.  */
@@ -263,8 +262,9 @@ struct mem_usage
 /* Memory usage pair that connectes memory usage and number
    of allocated bytes.  */
 template <class T>
-struct mem_usage_pair
+class mem_usage_pair
 {
+public:
   mem_usage_pair (T *usage_, size_t allocated_): usage (usage_),
   allocated (allocated_) {}
 
@@ -345,8 +345,14 @@ public:
   T *release_instance_overhead (void *ptr, size_t size,
 				bool remove_from_map = false);
 
-  /* Release intance object identified by PTR pointer.  */
+  /* Release instance object identified by PTR pointer.  */
   void release_object_overhead (void *ptr);
+
+  /* Unregister a memory allocation descriptor registered with
+     register_descriptor (remove from reverse map), unless it is
+     unregistered through release_instance_overhead with
+     REMOVE_FROM_MAP = true.  */
+  void unregister_descriptor (void *ptr);
 
   /* Get sum value for ORIGIN type of allocation for the descriptor.  */
   T get_sum (mem_alloc_origin origin);
@@ -525,7 +531,7 @@ mem_alloc_description<T>::release_instance_overhead (void *ptr, size_t size,
   return usage;
 }
 
-/* Release intance object identified by PTR pointer.  */
+/* Release instance object identified by PTR pointer.  */
 
 template <class T>
 inline void
@@ -539,15 +545,26 @@ mem_alloc_description<T>::release_object_overhead (void *ptr)
     }
 }
 
+/* Unregister a memory allocation descriptor registered with
+   register_descriptor (remove from reverse map), unless it is
+   unregistered through release_instance_overhead with
+   REMOVE_FROM_MAP = true.  */
+template <class T>
+inline void
+mem_alloc_description<T>::unregister_descriptor (void *ptr)
+{
+  m_reverse_map->remove (ptr);
+}
+
 /* Default contructor.  */
 
 template <class T>
 inline
 mem_alloc_description<T>::mem_alloc_description ()
 {
-  m_map = new mem_map_t (13, false, false);
-  m_reverse_map = new reverse_mem_map_t (13, false, false);
-  m_reverse_object_map = new reverse_object_map_t (13, false, false);
+  m_map = new mem_map_t (13, false, false, false);
+  m_reverse_map = new reverse_mem_map_t (13, false, false, false);
+  m_reverse_object_map = new reverse_object_map_t (13, false, false, false);
 }
 
 /* Default destructor.  */
@@ -631,11 +648,17 @@ mem_alloc_description<T>::dump (mem_alloc_origin origin,
   mem_list_t *list = get_list (origin, &length, cmp);
   T total = get_sum (origin);
 
+  T::print_dash_line ();
   T::dump_header (mem_location::get_origin_name (origin));
+  T::print_dash_line ();
   for (int i = length - 1; i >= 0; i--)
     list[i].second->dump (list[i].first, total);
+  T::print_dash_line ();
 
+  T::dump_header (mem_location::get_origin_name (origin));
+  T::print_dash_line ();
   total.dump_footer ();
+  T::print_dash_line ();
 
   XDELETEVEC (list);
 

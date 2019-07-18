@@ -96,6 +96,7 @@ public:
   unsigned int encoded_nelts () const;
   bool encoded_full_vector_p () const;
   T elt (unsigned int) const;
+  unsigned int count_dups (int, int, int) const;
 
   bool operator == (const Derived &) const;
   bool operator != (const Derived &x) const { return !operator == (x); }
@@ -198,13 +199,14 @@ template<typename T, typename Derived>
 T
 vector_builder<T, Derived>::elt (unsigned int i) const
 {
-  /* This only makes sense if the encoding has been fully populated.  */
-  gcc_checking_assert (encoded_nelts () <= this->length ());
-
   /* First handle elements that are already present in the underlying
      vector, regardless of whether they're part of the encoding or not.  */
   if (i < this->length ())
     return (*this)[i];
+
+  /* Extrapolation is only possible if the encoding has been fully
+     populated.  */
+  gcc_checking_assert (encoded_nelts () <= this->length ());
 
   /* Identify the pattern that contains element I and work out the index of
      the last encoded element for that pattern.  */
@@ -221,6 +223,23 @@ vector_builder<T, Derived>::elt (unsigned int i) const
   T prev = (*this)[final_i - m_npatterns];
   return derived ()->apply_step (final, count - 2,
 				 derived ()->step (prev, final));
+}
+
+/* Return the number of leading duplicate elements in the range
+   [START:END:STEP].  The value is always at least 1.  */
+
+template<typename T, typename Derived>
+unsigned int
+vector_builder<T, Derived>::count_dups (int start, int end, int step) const
+{
+  gcc_assert ((end - start) % step == 0);
+
+  unsigned int ndups = 1;
+  for (int i = start + step;
+       i != end && derived ()->equal_p (elt (i), elt (start));
+       i += step)
+    ndups++;
+  return ndups;
 }
 
 /* Change the encoding to NPATTERNS patterns of NELTS_PER_PATTERN each,

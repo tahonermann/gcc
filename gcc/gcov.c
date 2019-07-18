@@ -76,17 +76,17 @@ using namespace std;
 
 /* This is the size of the buffer used to read in source file lines.  */
 
-struct function_info;
-struct block_info;
-struct source_info;
+class function_info;
+class block_info;
+class source_info;
 
 /* Describes an arc between two basic blocks.  */
 
 struct arc_info
 {
   /* source and destination blocks.  */
-  struct block_info *src;
-  struct block_info *dst;
+  class block_info *src;
+  class block_info *dst;
 
   /* transition counts.  */
   gcov_type count;
@@ -121,8 +121,9 @@ struct arc_info
 /* Describes which locations (lines and files) are associated with
    a basic block.  */
 
-struct block_location_info
+class block_location_info
 {
+public:
   block_location_info (unsigned _source_file_idx):
     source_file_idx (_source_file_idx)
   {}
@@ -134,8 +135,9 @@ struct block_location_info
 /* Describes a basic block. Contains lists of arcs to successor and
    predecessor blocks.  */
 
-struct block_info
+class block_info
 {
+public:
   /* Constructor.  */
   block_info ();
 
@@ -176,7 +178,7 @@ struct block_info
 
   /* Temporary chain for solving graph, and for chaining blocks on one
      line.  */
-  struct block_info *chain;
+  class block_info *chain;
 
 };
 
@@ -191,8 +193,9 @@ block_info::block_info (): succ (NULL), pred (NULL), num_succ (0), num_pred (0),
 /* Describes a single line of source.  Contains a chain of basic blocks
    with code on it.  */
 
-struct line_info
+class line_info
 {
+public:
   /* Default constructor.  */
   line_info ();
 
@@ -230,8 +233,9 @@ static int flag_demangled_names = 0;
 
 /* Describes a single function. Contains an array of basic blocks.  */
 
-struct function_info
+class function_info
 {
+public:
   function_info ();
   ~function_info ();
 
@@ -283,6 +287,9 @@ struct function_info
   /* Last line number.  */
   unsigned end_line;
 
+  /* Last line column.  */
+  unsigned end_column;
+
   /* Index of source file where the function is defined.  */
   unsigned src;
 
@@ -290,7 +297,7 @@ struct function_info
   vector<line_info> lines;
 
   /* Next function.  */
-  struct function_info *next;
+  class function_info *next;
 
   /*  Get demangled name of a function.  The demangled name
       is converted when it is used for the first time.  */
@@ -353,8 +360,9 @@ struct coverage_info
 /* Describes a file mentioned in the block graph.  Contains an array
    of line info.  */
 
-struct source_info
+class source_info
 {
+public:
   /* Default constructor.  */
   source_info ();
 
@@ -631,7 +639,8 @@ function_info::function_info (): m_name (NULL), m_demangled_name (NULL),
   ident (0), lineno_checksum (0), cfg_checksum (0), has_catch (0),
   artificial (0), is_group (0),
   blocks (), blocks_executed (0), counts (),
-  start_line (0), start_column (), end_line (0), src (0), lines (), next (NULL)
+  start_line (0), start_column (0), end_line (0), end_column (0),
+  src (0), lines (), next (NULL)
 {
 }
 
@@ -672,27 +681,11 @@ bool function_info::group_line_p (unsigned n, unsigned src_idx)
 typedef vector<arc_info *> arc_vector_t;
 typedef vector<const block_info *> block_vector_t;
 
-/* Enum with types of loop in CFG.  */
-
-enum loop_type
-{
-  NO_LOOP = 0,
-  LOOP = 1,
-  NEGATIVE_LOOP = 3
-};
-
-/* Loop_type operator that merges two values: A and B.  */
-
-inline loop_type& operator |= (loop_type& a, loop_type b)
-{
-    return a = static_cast<loop_type> (a | b);
-}
-
 /* Handle cycle identified by EDGES, where the function finds minimum cs_count
    and subtract the value from all counts.  The subtracted value is added
    to COUNT.  Returns type of loop.  */
 
-static loop_type
+static void
 handle_cycle (const arc_vector_t &edges, int64_t &count)
 {
   /* Find the minimum edge of the cycle, and reduce all nodes in the cycle by
@@ -708,7 +701,7 @@ handle_cycle (const arc_vector_t &edges, int64_t &count)
   for (unsigned i = 0; i < edges.size (); i++)
     edges[i]->cs_count -= cycle_count;
 
-  return cycle_count < 0 ? NEGATIVE_LOOP : LOOP;
+  gcc_assert (cycle_count > 0);
 }
 
 /* Unblock a block U from BLOCKED.  Apart from that, iterate all blocks
@@ -734,17 +727,28 @@ unblock (const block_info *u, block_vector_t &blocked,
     unblock (*it, blocked, block_lists);
 }
 
+/* Return true when PATH contains a zero cycle arc count.  */
+
+static bool
+path_contains_zero_cycle_arc (arc_vector_t &path)
+{
+  for (unsigned i = 0; i < path.size (); i++)
+    if (path[i]->cs_count == 0)
+      return true;
+  return false;
+}
+
 /* Find circuit going to block V, PATH is provisional seen cycle.
    BLOCKED is vector of blocked vertices, BLOCK_LISTS contains vertices
    blocked by a block.  COUNT is accumulated count of the current LINE.
    Returns what type of loop it contains.  */
 
-static loop_type
+static bool
 circuit (block_info *v, arc_vector_t &path, block_info *start,
 	 block_vector_t &blocked, vector<block_vector_t> &block_lists,
 	 line_info &linfo, int64_t &count)
 {
-  loop_type result = NO_LOOP;
+  bool loop_found = false;
 
   /* Add v to the block list.  */
   gcc_assert (find (blocked.begin (), blocked.end (), v) == blocked.end ());
@@ -754,26 +758,35 @@ circuit (block_info *v, arc_vector_t &path, block_info *start,
   for (arc_info *arc = v->succ; arc; arc = arc->succ_next)
     {
       block_info *w = arc->dst;
-      if (w < start || !linfo.has_block (w))
+      if (w < start
+	  || arc->cs_count == 0
+	  || !linfo.has_block (w))
 	continue;
 
       path.push_back (arc);
       if (w == start)
-	/* Cycle has been found.  */
-	result |= handle_cycle (path, count);
-      else if (find (blocked.begin (), blocked.end (), w) == blocked.end ())
-	result |= circuit (w, path, start, blocked, block_lists, linfo, count);
+	{
+	  /* Cycle has been found.  */
+	  handle_cycle (path, count);
+	  loop_found = true;
+	}
+      else if (!path_contains_zero_cycle_arc (path)
+	       &&  find (blocked.begin (), blocked.end (), w) == blocked.end ())
+	loop_found |= circuit (w, path, start, blocked, block_lists, linfo,
+			       count);
 
       path.pop_back ();
     }
 
-  if (result != NO_LOOP)
+  if (loop_found)
     unblock (v, blocked, block_lists);
   else
     for (arc_info *arc = v->succ; arc; arc = arc->succ_next)
       {
 	block_info *w = arc->dst;
-	if (w < start || !linfo.has_block (w))
+	if (w < start
+	    || arc->cs_count == 0
+	    || !linfo.has_block (w))
 	  continue;
 
 	size_t index
@@ -784,14 +797,13 @@ circuit (block_info *v, arc_vector_t &path, block_info *start,
 	  list.push_back (v);
       }
 
-  return result;
+  return loop_found;
 }
 
-/* Find cycles for a LINFO.  If HANDLE_NEGATIVE_CYCLES is set and the line
-   contains a negative loop, then perform the same function once again.  */
+/* Find cycles for a LINFO.  */
 
 static gcov_type
-get_cycles_count (line_info &linfo, bool handle_negative_cycles = true)
+get_cycles_count (line_info &linfo)
 {
   /* Note that this algorithm works even if blocks aren't in sorted order.
      Each iteration of the circuit detection is completely independent
@@ -799,7 +811,7 @@ get_cycles_count (line_info &linfo, bool handle_negative_cycles = true)
      Therefore, operating on a permuted order (i.e., non-sorted) only
      has the effect of permuting the output cycles.  */
 
-  loop_type result = NO_LOOP;
+  bool loop_found = false;
   gcov_type count = 0;
   for (vector<block_info *>::iterator it = linfo.blocks.begin ();
        it != linfo.blocks.end (); it++)
@@ -807,13 +819,9 @@ get_cycles_count (line_info &linfo, bool handle_negative_cycles = true)
       arc_vector_t path;
       block_vector_t blocked;
       vector<block_vector_t > block_lists;
-      result |= circuit (*it, path, *it, blocked, block_lists, linfo,
-			 count);
+      loop_found |= circuit (*it, path, *it, blocked, block_lists, linfo,
+			     count);
     }
-
-  /* If we have a negative cycle, repeat the find_cycles routine.  */
-  if (result == NEGATIVE_LOOP && handle_negative_cycles)
-    count += get_cycles_count (linfo, false);
 
   return count;
 }
@@ -1041,17 +1049,21 @@ process_args (int argc, char **argv)
   return optind;
 }
 
-/* Output intermediate LINE sitting on LINE_NUM to JSON OBJECT.  */
+/* Output intermediate LINE sitting on LINE_NUM to JSON OBJECT.
+   Add FUNCTION_NAME to the LINE.  */
 
 static void
 output_intermediate_json_line (json::array *object,
-			       line_info *line, unsigned line_num)
+			       line_info *line, unsigned line_num,
+			       const char *function_name)
 {
   if (!line->exists)
     return;
 
   json::object *lineo = new json::object ();
   lineo->set ("line_number", new json::number (line_num));
+  if (function_name != NULL)
+    lineo->set ("function_name", new json::string (function_name));
   lineo->set ("count", new json::number (line->count));
   lineo->set ("unexecuted_block",
 	      new json::literal (line->has_unexecuted_block));
@@ -1127,7 +1139,9 @@ output_json_intermediate_file (json::array *json_files, source_info *src)
       function->set ("demangled_name",
 		     new json::string ((*it)->get_demangled_name ()));
       function->set ("start_line", new json::number ((*it)->start_line));
+      function->set ("start_column", new json::number ((*it)->start_column));
       function->set ("end_line", new json::number ((*it)->end_line));
+      function->set ("end_column", new json::number ((*it)->end_column));
       function->set ("blocks",
 		     new json::number ((*it)->get_block_count ()));
       function->set ("blocks_executed",
@@ -1141,6 +1155,8 @@ output_json_intermediate_file (json::array *json_files, source_info *src)
   json::array *lineso = new json::array ();
   root->set ("lines", lineso);
 
+  function_info *last_non_group_fn = NULL;
+
   for (unsigned line_num = 1; line_num <= src->lines.size (); line_num++)
     {
       vector<function_info *> *fns = src->get_functions_at_location (line_num);
@@ -1150,17 +1166,23 @@ output_json_intermediate_file (json::array *json_files, source_info *src)
 	for (vector<function_info *>::iterator it2 = fns->begin ();
 	     it2 != fns->end (); it2++)
 	  {
+	    if (!(*it2)->is_group)
+	      last_non_group_fn = *it2;
+
 	    vector<line_info> &lines = (*it2)->lines;
 	    for (unsigned i = 0; i < lines.size (); i++)
 	      {
 		line_info *line = &lines[i];
-		output_intermediate_json_line (lineso, line, line_num + i);
+		output_intermediate_json_line (lineso, line, line_num + i,
+					       (*it2)->m_name);
 	      }
 	  }
 
       /* Follow with lines associated with the source file.  */
       if (line_num < src->lines.size ())
-	output_intermediate_json_line (lineso, &src->lines[line_num], line_num);
+	output_intermediate_json_line (lineso, &src->lines[line_num], line_num,
+				       (last_non_group_fn != NULL
+					? last_non_group_fn->m_name : NULL));
     }
 }
 
@@ -1403,6 +1425,7 @@ generate_results (const char *file_name)
 
   if (bbg_cwd != NULL)
     root->set ("current_working_directory", new json::string (bbg_cwd));
+  root->set ("data_file", new json::string (file_name));
 
   json::array *json_files = new json::array ();
   root->set ("files", json_files);
@@ -1714,6 +1737,7 @@ read_graph_file (void)
 	  unsigned start_line = gcov_read_unsigned ();
 	  unsigned start_column = gcov_read_unsigned ();
 	  unsigned end_line = gcov_read_unsigned ();
+	  unsigned end_column = gcov_read_unsigned ();
 
 	  fn = new function_info ();
 	  functions.push_back (fn);
@@ -1727,6 +1751,7 @@ read_graph_file (void)
 	  fn->start_line = start_line;
 	  fn->start_column = start_column;
 	  fn->end_line = end_line;
+	  fn->end_column = end_column;
 	  fn->artificial = artificial;
 
 	  current_tag = tag;

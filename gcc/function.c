@@ -133,7 +133,7 @@ vec<tree, va_gc> *types_used_by_cur_var_decl;
 
 /* Forward declarations.  */
 
-static struct temp_slot *find_temp_slot_from_address (rtx);
+static class temp_slot *find_temp_slot_from_address (rtx);
 static void pad_to_arg_alignment (struct args_size *, int, struct args_size *);
 static void pad_below (struct args_size *, machine_mode, tree);
 static void reorder_blocks_1 (rtx_insn *, tree, vec<tree> *);
@@ -345,7 +345,7 @@ try_fit_stack_local (poly_int64 start, poly_int64 length,
 static void
 add_frame_space (poly_int64 start, poly_int64 end)
 {
-  struct frame_space *space = ggc_alloc<frame_space> ();
+  class frame_space *space = ggc_alloc<frame_space> ();
   space->next = crtl->frame_space_list;
   crtl->frame_space_list = space;
   space->start = start;
@@ -441,11 +441,11 @@ assign_stack_local_1 (machine_mode mode, poly_int64 size,
     {
       if (kind & ASLK_RECORD_PAD)
 	{
-	  struct frame_space **psp;
+	  class frame_space **psp;
 
 	  for (psp = &crtl->frame_space_list; *psp; psp = &(*psp)->next)
 	    {
-	      struct frame_space *space = *psp;
+	      class frame_space *space = *psp;
 	      if (!try_fit_stack_local (space->start, space->length, size,
 					alignment, &slot_offset))
 		continue;
@@ -556,11 +556,12 @@ assign_stack_local (machine_mode mode, poly_int64 size, int align)
    result, all temporaries are preserved.  A temporary is preserved by
    pretending it was allocated at the previous nesting level.  */
 
-struct GTY(()) temp_slot {
+class GTY(()) temp_slot {
+public:
   /* Points to next temporary slot.  */
-  struct temp_slot *next;
+  class temp_slot *next;
   /* Points to previous temporary slot.  */
-  struct temp_slot *prev;
+  class temp_slot *prev;
   /* The rtx to used to reference the slot.  */
   rtx slot;
   /* The size, in units, of the slot.  */
@@ -588,7 +589,7 @@ struct GTY(()) temp_slot {
 struct GTY((for_user)) temp_slot_address_entry {
   hashval_t hash;
   rtx address;
-  struct temp_slot *temp_slot;
+  class temp_slot *temp_slot;
 };
 
 struct temp_address_hasher : ggc_ptr_hash<temp_slot_address_entry>
@@ -605,7 +606,7 @@ static size_t n_temp_slots_in_use;
 /* Removes temporary slot TEMP from LIST.  */
 
 static void
-cut_slot_from_list (struct temp_slot *temp, struct temp_slot **list)
+cut_slot_from_list (class temp_slot *temp, class temp_slot **list)
 {
   if (temp->next)
     temp->next->prev = temp->prev;
@@ -620,7 +621,7 @@ cut_slot_from_list (struct temp_slot *temp, struct temp_slot **list)
 /* Inserts temporary slot TEMP to LIST.  */
 
 static void
-insert_slot_to_list (struct temp_slot *temp, struct temp_slot **list)
+insert_slot_to_list (class temp_slot *temp, class temp_slot **list)
 {
   temp->next = *list;
   if (*list)
@@ -631,7 +632,7 @@ insert_slot_to_list (struct temp_slot *temp, struct temp_slot **list)
 
 /* Returns the list of used temp slots at LEVEL.  */
 
-static struct temp_slot **
+static class temp_slot **
 temp_slots_at_level (int level)
 {
   if (level >= (int) vec_safe_length (used_temp_slots))
@@ -654,7 +655,7 @@ max_slot_level (void)
 /* Moves temporary slot TEMP to LEVEL.  */
 
 static void
-move_slot_to_level (struct temp_slot *temp, int level)
+move_slot_to_level (class temp_slot *temp, int level)
 {
   cut_slot_from_list (temp, temp_slots_at_level (temp->level));
   insert_slot_to_list (temp, temp_slots_at_level (level));
@@ -664,7 +665,7 @@ move_slot_to_level (struct temp_slot *temp, int level)
 /* Make temporary slot TEMP available.  */
 
 static void
-make_slot_available (struct temp_slot *temp)
+make_slot_available (class temp_slot *temp)
 {
   cut_slot_from_list (temp, temp_slots_at_level (temp->level));
   insert_slot_to_list (temp, &avail_temp_slots);
@@ -700,7 +701,7 @@ temp_address_hasher::equal (temp_slot_address_entry *t1,
 
 /* Add ADDRESS as an alias of TEMP_SLOT to the addess -> temp slot mapping.  */
 static void
-insert_temp_slot_address (rtx address, struct temp_slot *temp_slot)
+insert_temp_slot_address (rtx address, class temp_slot *temp_slot)
 {
   struct temp_slot_address_entry *t = ggc_alloc<temp_slot_address_entry> ();
   t->address = address;
@@ -734,10 +735,10 @@ remove_unused_temp_slot_addresses (void)
 
 /* Find the temp slot corresponding to the object at address X.  */
 
-static struct temp_slot *
+static class temp_slot *
 find_temp_slot_from_address (rtx x)
 {
-  struct temp_slot *p;
+  class temp_slot *p;
   struct temp_slot_address_entry tmp, *t;
 
   /* First try the easy way:
@@ -786,7 +787,7 @@ rtx
 assign_stack_temp_for_type (machine_mode mode, poly_int64 size, tree type)
 {
   unsigned int align;
-  struct temp_slot *p, *best_p = 0, *selected = NULL, **pp;
+  class temp_slot *p, *best_p = 0, *selected = NULL, **pp;
   rtx slot;
 
   gcc_assert (known_size_p (size));
@@ -1030,7 +1031,7 @@ assign_temp (tree type_or_decl, int memory_required,
 static void
 combine_temp_slots (void)
 {
-  struct temp_slot *p, *q, *next, *next_q;
+  class temp_slot *p, *q, *next, *next_q;
   int num_slots;
 
   /* We can't combine slots, because the information about which slot
@@ -1094,7 +1095,7 @@ combine_temp_slots (void)
 void
 update_temp_slot_address (rtx old_rtx, rtx new_rtx)
 {
-  struct temp_slot *p;
+  class temp_slot *p;
 
   if (rtx_equal_p (old_rtx, new_rtx))
     return;
@@ -1148,7 +1149,7 @@ update_temp_slot_address (rtx old_rtx, rtx new_rtx)
 void
 preserve_temp_slots (rtx x)
 {
-  struct temp_slot *p = 0, *next;
+  class temp_slot *p = 0, *next;
 
   if (x == 0)
     return;
@@ -1188,7 +1189,7 @@ preserve_temp_slots (rtx x)
 void
 free_temp_slots (void)
 {
-  struct temp_slot *p, *next;
+  class temp_slot *p, *next;
   bool some_available = false;
 
   for (p = *temp_slots_at_level (temp_slot_level); p; p = next)
@@ -2912,7 +2913,11 @@ assign_parm_setup_block (struct assign_parm_data_all *all,
   size_stored = CEIL_ROUND (size, UNITS_PER_WORD);
   if (stack_parm == 0)
     {
-      SET_DECL_ALIGN (parm, MAX (DECL_ALIGN (parm), BITS_PER_WORD));
+      HOST_WIDE_INT parm_align
+	= (STRICT_ALIGNMENT
+	   ? MAX (DECL_ALIGN (parm), BITS_PER_WORD) : DECL_ALIGN (parm));
+
+      SET_DECL_ALIGN (parm, parm_align);
       if (DECL_ALIGN (parm) > MAX_SUPPORTED_STACK_ALIGNMENT)
 	{
 	  rtx allocsize = gen_int_mode (size_stored, Pmode);
@@ -4016,13 +4021,6 @@ locate_and_pad_parm (machine_mode passed_mode, tree type, int in_regs,
 	    }
 	}
     }
-
-  /* Remember if the outgoing parameter requires extra alignment on the
-     calling function side.  */
-  if (crtl->stack_alignment_needed < boundary)
-    crtl->stack_alignment_needed = boundary;
-  if (crtl->preferred_stack_boundary < boundary)
-    crtl->preferred_stack_boundary = boundary;
 
   if (ARGS_GROW_DOWNWARD)
     {
@@ -5138,7 +5136,7 @@ expand_function_start (tree subr)
       r_save = expand_expr (t_save, NULL_RTX, VOIDmode, EXPAND_WRITE);
       gcc_assert (GET_MODE (r_save) == Pmode);
 
-      emit_move_insn (r_save, targetm.builtin_setjmp_frame_value ());
+      emit_move_insn (r_save, hard_frame_pointer_rtx);
       update_nonlocal_goto_save_area ();
     }
 
@@ -5247,19 +5245,6 @@ use_return_register (void)
   diddle_return_value (do_use_return_reg, NULL);
 }
 
-/* Set the location of the insn chain starting at INSN to LOC.  */
-
-static void
-set_insn_locations (rtx_insn *insn, int loc)
-{
-  while (insn != NULL)
-    {
-      if (INSN_P (insn))
-	INSN_LOCATION (insn) = loc;
-      insn = NEXT_INSN (insn);
-    }
-}
-
 /* Generate RTL for the end of the current function.  */
 
 void
@@ -5329,6 +5314,12 @@ expand_function_end (void)
   /* If this is an implementation of throw, do what's necessary to
      communicate between __builtin_eh_return and the epilogue.  */
   expand_eh_return ();
+
+  /* If stack protection is enabled for this function, check the guard.  */
+  if (crtl->stack_protect_guard
+      && targetm.stack_protect_runtime_enabled_p ()
+      && naked_return_label == NULL_RTX)
+    stack_protect_epilogue ();
 
   /* If scalar return value was computed in a pseudo-reg, or was a named
      return value that got dumped to the stack, copy that to the hard
@@ -5476,7 +5467,9 @@ expand_function_end (void)
     emit_insn (gen_blockage ());
 
   /* If stack protection is enabled for this function, check the guard.  */
-  if (crtl->stack_protect_guard && targetm.stack_protect_runtime_enabled_p ())
+  if (crtl->stack_protect_guard
+      && targetm.stack_protect_runtime_enabled_p ()
+      && naked_return_label)
     stack_protect_epilogue ();
 
   /* If we had calls to alloca, and this machine needs
@@ -6395,6 +6388,21 @@ make_pass_thread_prologue_and_epilogue (gcc::context *ctxt)
 }
 
 
+/* If CONSTRAINT is a matching constraint, then return its number.
+   Otherwise, return -1.  */
+
+static int
+matching_constraint_num (const char *constraint)
+{
+  if (*constraint == '%')
+    constraint++;
+
+  if (IN_RANGE (*constraint, '0', '9'))
+    return strtoul (constraint, NULL, 10);
+
+  return -1;
+}
+
 /* This mini-pass fixes fall-out from SSA in asm statements that have
    in-out constraints.  Say you start with
 
@@ -6453,14 +6461,10 @@ match_asm_constraints_1 (rtx_insn *insn, rtx *p_sets, int noutputs)
       rtx input, output;
       rtx_insn *insns;
       const char *constraint = ASM_OPERANDS_INPUT_CONSTRAINT (op, i);
-      char *end;
       int match, j;
 
-      if (*constraint == '%')
-	constraint++;
-
-      match = strtoul (constraint, &end, 10);
-      if (end == constraint)
+      match = matching_constraint_num (constraint);
+      if (match < 0)
 	continue;
 
       gcc_assert (match < noutputs);
@@ -6477,14 +6481,14 @@ match_asm_constraints_1 (rtx_insn *insn, rtx *p_sets, int noutputs)
       /* We can't do anything if the output is also used as input,
 	 as we're going to overwrite it.  */
       for (j = 0; j < ninputs; j++)
-        if (reg_overlap_mentioned_p (output, RTVEC_ELT (inputs, j)))
+	if (reg_overlap_mentioned_p (output, RTVEC_ELT (inputs, j)))
 	  break;
       if (j != ninputs)
 	continue;
 
       /* Avoid changing the same input several times.  For
 	 asm ("" : "=mr" (out1), "=mr" (out2) : "0" (in), "1" (in));
-	 only change in once (to out1), rather than changing it
+	 only change it once (to out1), rather than changing it
 	 first to out1 and afterwards to out2.  */
       if (i > 0)
 	{
@@ -6501,6 +6505,9 @@ match_asm_constraints_1 (rtx_insn *insn, rtx *p_sets, int noutputs)
       insns = get_insns ();
       end_sequence ();
       emit_insn_before (insns, insn);
+
+      constraint = ASM_OPERANDS_OUTPUT_CONSTRAINT(SET_SRC(p_sets[match]));
+      bool early_clobber_p = strchr (constraint, '&') != NULL;
 
       /* Now replace all mentions of the input with output.  We can't
 	 just replace the occurrence in inputs[i], as the register might
@@ -6523,7 +6530,14 @@ match_asm_constraints_1 (rtx_insn *insn, rtx *p_sets, int noutputs)
 	 value, but different pseudos) where we formerly had only one.
 	 With more complicated asms this might lead to reload failures
 	 which wouldn't have happen without this pass.  So, iterate over
-	 all operands and replace all occurrences of the register used.  */
+	 all operands and replace all occurrences of the register used.
+
+	 However, if one or more of the 'input' uses have a non-matching
+	 constraint and the matched output operand is an early clobber
+	 operand, then do not replace the input operand, since by definition
+	 it conflicts with the output operand and cannot share the same
+	 register.  See PR89313 for details.  */
+
       for (j = 0; j < noutputs; j++)
 	if (!rtx_equal_p (SET_DEST (p_sets[j]), input)
 	    && reg_overlap_mentioned_p (input, SET_DEST (p_sets[j])))
@@ -6531,8 +6545,13 @@ match_asm_constraints_1 (rtx_insn *insn, rtx *p_sets, int noutputs)
 					      input, output);
       for (j = 0; j < ninputs; j++)
 	if (reg_overlap_mentioned_p (input, RTVEC_ELT (inputs, j)))
-	  RTVEC_ELT (inputs, j) = replace_rtx (RTVEC_ELT (inputs, j),
-					       input, output);
+	  {
+	    if (!early_clobber_p
+		|| match == matching_constraint_num
+			      (ASM_OPERANDS_INPUT_CONSTRAINT (op, j)))
+	      RTVEC_ELT (inputs, j) = replace_rtx (RTVEC_ELT (inputs, j),
+						   input, output);
+	  }
 
       changed = true;
     }

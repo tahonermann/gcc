@@ -583,6 +583,9 @@ resolve_contained_fntype (gfc_symbol *sym, gfc_namespace *ns)
       || sym->attr.entry_master)
     return;
 
+  if (!sym->result)
+    return;
+
   /* Try to find out of what the return type is.  */
   if (sym->result->ts.type == BT_UNKNOWN && sym->result->ts.interface == NULL)
     {
@@ -838,22 +841,22 @@ resolve_entries (gfc_namespace *ns)
 	      if (sym->attr.dimension)
 		{
 		  if (el == ns->entries)
-		    gfc_error ("FUNCTION result %s can't be an array in "
+		    gfc_error ("FUNCTION result %s cannot be an array in "
 			       "FUNCTION %s at %L", sym->name,
 			       ns->entries->sym->name, &sym->declared_at);
 		  else
-		    gfc_error ("ENTRY result %s can't be an array in "
+		    gfc_error ("ENTRY result %s cannot be an array in "
 			       "FUNCTION %s at %L", sym->name,
 			       ns->entries->sym->name, &sym->declared_at);
 		}
 	      else if (sym->attr.pointer)
 		{
 		  if (el == ns->entries)
-		    gfc_error ("FUNCTION result %s can't be a POINTER in "
+		    gfc_error ("FUNCTION result %s cannot be a POINTER in "
 			       "FUNCTION %s at %L", sym->name,
 			       ns->entries->sym->name, &sym->declared_at);
 		  else
-		    gfc_error ("ENTRY result %s can't be a POINTER in "
+		    gfc_error ("ENTRY result %s cannot be a POINTER in "
 			       "FUNCTION %s at %L", sym->name,
 			       ns->entries->sym->name, &sym->declared_at);
 		}
@@ -891,12 +894,12 @@ resolve_entries (gfc_namespace *ns)
 		  if (sym)
 		    {
 		      if (el == ns->entries)
-			gfc_error ("FUNCTION result %s can't be of type %s "
+			gfc_error ("FUNCTION result %s cannot be of type %s "
 				   "in FUNCTION %s at %L", sym->name,
 				   gfc_typename (ts), ns->entries->sym->name,
 				   &sym->declared_at);
 		      else
-			gfc_error ("ENTRY result %s can't be of type %s "
+			gfc_error ("ENTRY result %s cannot be of type %s "
 				   "in FUNCTION %s at %L", sym->name,
 				   gfc_typename (ts), ns->entries->sym->name,
 				   &sym->declared_at);
@@ -1050,7 +1053,7 @@ resolve_common_blocks (gfc_symtree *common_root)
 	}
       if (!gsym)
 	{
-	  gsym = gfc_get_gsymbol (common_root->n.common->name);
+	  gsym = gfc_get_gsymbol (common_root->n.common->name, false);
 	  gsym->type = GSYM_COMMON;
 	  gsym->where = common_root->n.common->where;
 	  gsym->defined = 1;
@@ -1072,7 +1075,7 @@ resolve_common_blocks (gfc_symtree *common_root)
 	}
       if (!gsym)
 	{
-	  gsym = gfc_get_gsymbol (common_root->n.common->binding_label);
+	  gsym = gfc_get_gsymbol (common_root->n.common->binding_label, true);
 	  gsym->type = GSYM_COMMON;
 	  gsym->where = common_root->n.common->where;
 	  gsym->defined = 1;
@@ -1862,6 +1865,25 @@ resolve_procedure_expression (gfc_expr* expr)
 }
 
 
+/* Check that name is not a derived type.  */
+ 
+static bool
+is_dt_name (const char *name)
+{
+  gfc_symbol *dt_list, *dt_first;
+
+  dt_list = dt_first = gfc_derived_types;
+  for (; dt_list; dt_list = dt_list->dt_next)
+    {
+      if (strcmp(dt_list->name, name) == 0)
+	return true;
+      if (dt_first == dt_list->dt_next)
+	break;
+    }
+  return false;
+}
+
+
 /* Resolve an actual argument list.  Most of the time, this is just
    resolving the expressions in the list.
    The exception is that we sometimes have to decide whether arguments
@@ -1922,6 +1944,13 @@ resolve_actual_arglist (gfc_actual_arglist *arg, procedure_type ptype,
       /* See if the expression node should really be a variable reference.  */
 
       sym = e->symtree->n.sym;
+
+      if (sym->attr.flavor == FL_PROCEDURE && is_dt_name (sym->name))
+	{
+	  gfc_error ("Derived type %qs is used as an actual "
+		     "argument at %L", sym->name, &e->where);
+	  goto cleanup;
+	}
 
       if (sym->attr.flavor == FL_PROCEDURE
 	  || sym->attr.intrinsic
@@ -2487,7 +2516,8 @@ resolve_global_procedure (gfc_symbol *sym, locus *where,
 
   type = sub ? GSYM_SUBROUTINE : GSYM_FUNCTION;
 
-  gsym = gfc_get_gsymbol (sym->binding_label ? sym->binding_label : sym->name);
+  gsym = gfc_get_gsymbol (sym->binding_label ? sym->binding_label : sym->name,
+			  sym->binding_label != NULL);
 
   if ((gsym->type != GSYM_UNKNOWN && gsym->type != type))
     gfc_global_used (gsym, where);
@@ -2497,62 +2527,64 @@ resolve_global_procedure (gfc_symbol *sym, locus *where,
       && gsym->type != GSYM_UNKNOWN
       && !gsym->binding_label
       && gsym->ns
-      && gsym->ns->resolved != -1
       && gsym->ns->proc_name
       && not_in_recursive (sym, gsym->ns)
       && not_entry_self_reference (sym, gsym->ns))
     {
       gfc_symbol *def_sym;
-
-      /* Resolve the gsymbol namespace if needed.  */
-      if (!gsym->ns->resolved)
-	{
-	  gfc_symbol *old_dt_list;
-
-	  /* Stash away derived types so that the backend_decls do not
-	     get mixed up.  */
-	  old_dt_list = gfc_derived_types;
-	  gfc_derived_types = NULL;
-
-	  gfc_resolve (gsym->ns);
-
-	  /* Store the new derived types with the global namespace.  */
-	  if (gfc_derived_types)
-	    gsym->ns->derived_types = gfc_derived_types;
-
-	  /* Restore the derived types of this namespace.  */
-	  gfc_derived_types = old_dt_list;
-	}
-
-      /* Make sure that translation for the gsymbol occurs before
-	 the procedure currently being resolved.  */
-      ns = gfc_global_ns_list;
-      for (; ns && ns != gsym->ns; ns = ns->sibling)
-	{
-	  if (ns->sibling == gsym->ns)
-	    {
-	      ns->sibling = gsym->ns->sibling;
-	      gsym->ns->sibling = gfc_global_ns_list;
-	      gfc_global_ns_list = gsym->ns;
-	      break;
-	    }
-	}
-
       def_sym = gsym->ns->proc_name;
 
-      /* This can happen if a binding name has been specified.  */
-      if (gsym->binding_label && gsym->sym_name != def_sym->name)
-	gfc_find_symbol (gsym->sym_name, gsym->ns, 0, &def_sym);
-
-      if (def_sym->attr.entry_master)
+      if (gsym->ns->resolved != -1)
 	{
-	  gfc_entry_list *entry;
-	  for (entry = gsym->ns->entries; entry; entry = entry->next)
-	    if (strcmp (entry->sym->name, sym->name) == 0)
-	      {
-		def_sym = entry->sym;
-		break;
-	      }
+
+	  /* Resolve the gsymbol namespace if needed.  */
+	  if (!gsym->ns->resolved)
+	    {
+	      gfc_symbol *old_dt_list;
+
+	      /* Stash away derived types so that the backend_decls
+		 do not get mixed up.  */
+	      old_dt_list = gfc_derived_types;
+	      gfc_derived_types = NULL;
+
+	      gfc_resolve (gsym->ns);
+
+	      /* Store the new derived types with the global namespace.  */
+	      if (gfc_derived_types)
+		gsym->ns->derived_types = gfc_derived_types;
+
+	      /* Restore the derived types of this namespace.  */
+	      gfc_derived_types = old_dt_list;
+	    }
+
+	  /* Make sure that translation for the gsymbol occurs before
+	     the procedure currently being resolved.  */
+	  ns = gfc_global_ns_list;
+	  for (; ns && ns != gsym->ns; ns = ns->sibling)
+	    {
+	      if (ns->sibling == gsym->ns)
+		{
+		  ns->sibling = gsym->ns->sibling;
+		  gsym->ns->sibling = gfc_global_ns_list;
+		  gfc_global_ns_list = gsym->ns;
+		  break;
+		}
+	    }
+
+	  /* This can happen if a binding name has been specified.  */
+	  if (gsym->binding_label && gsym->sym_name != def_sym->name)
+	    gfc_find_symbol (gsym->sym_name, gsym->ns, 0, &def_sym);
+
+	  if (def_sym->attr.entry_master || def_sym->attr.entry)
+	    {
+	      gfc_entry_list *entry;
+	      for (entry = gsym->ns->entries; entry; entry = entry->next)
+		if (strcmp (entry->sym->name, sym->name) == 0)
+		  {
+		    def_sym = entry->sym;
+		    break;
+		  }
+	    }
 	}
 
       if (sym->attr.function && !gfc_compare_types (&sym->ts, &def_sym->ts))
@@ -4709,9 +4741,13 @@ find_array_spec (gfc_expr *e)
   gfc_array_spec *as;
   gfc_component *c;
   gfc_ref *ref;
+  bool class_as = false;
 
   if (e->symtree->n.sym->ts.type == BT_CLASS)
-    as = CLASS_DATA (e->symtree->n.sym)->as;
+    {
+      as = CLASS_DATA (e->symtree->n.sym)->as;
+      class_as = true;
+    }
   else
     as = e->symtree->n.sym->as;
 
@@ -4730,7 +4766,7 @@ find_array_spec (gfc_expr *e)
 	c = ref->u.c.component;
 	if (c->attr.dimension)
 	  {
-	    if (as != NULL)
+	    if (as != NULL && !(class_as && as == c->as))
 	      gfc_internal_error ("find_array_spec(): unused as(1)");
 	    as = c->as;
 	  }
@@ -5944,6 +5980,13 @@ extract_compcall_passed_object (gfc_expr* e)
 {
   gfc_expr* po;
 
+  if (e->expr_type == EXPR_UNKNOWN)
+    {
+      gfc_error ("Error in typebound call at %L",
+		 &e->where);
+      return NULL;
+    }
+
   gcc_assert (e->expr_type == EXPR_COMPCALL);
 
   if (e->value.compcall.base_object)
@@ -6089,7 +6132,11 @@ check_typebound_baseobject (gfc_expr* e)
   if (!base)
     return false;
 
-  gcc_assert (base->ts.type == BT_DERIVED || base->ts.type == BT_CLASS);
+  if (base->ts.type != BT_DERIVED && base->ts.type != BT_CLASS)
+    {
+      gfc_error ("Error in typebound call at %L", &e->where);
+      goto cleanup;
+    }
 
   if (base->ts.type == BT_CLASS && !gfc_expr_attr (base).class_ok)
     return false;
@@ -6526,7 +6573,6 @@ resolve_typebound_function (gfc_expr* e)
     }
 
   c = gfc_find_component (declared, "_data", true, true, NULL);
-  declared = c->ts.u.derived;
 
   /* Treat the call as if it is a typebound procedure, in order to roll
      out the correct name for the specific function.  */
@@ -7766,13 +7812,54 @@ resolve_allocate_expr (gfc_expr *e, gfc_code *code, bool *array_alloc_wo_spec)
 
   if (codimension)
     for (i = ar->dimen; i < ar->dimen + ar->codimen; i++)
-      if (ar->dimen_type[i] == DIMEN_THIS_IMAGE)
-	{
-	  gfc_error ("Coarray specification required in ALLOCATE statement "
-		     "at %L", &e->where);
-	  goto failure;
-	}
+      {
+	switch (ar->dimen_type[i])
+	  {
+	  case DIMEN_THIS_IMAGE:
+	    gfc_error ("Coarray specification required in ALLOCATE statement "
+		       "at %L", &e->where);
+	    goto failure;
 
+	  case  DIMEN_RANGE:
+	    if (ar->start[i] == 0 || ar->end[i] == 0)
+	      {
+		/* If ar->stride[i] is NULL, we issued a previous error.  */
+		if (ar->stride[i] == NULL)
+		  gfc_error ("Bad array specification in ALLOCATE statement "
+			     "at %L", &e->where);
+		goto failure;
+	      }
+	    else if (gfc_dep_compare_expr (ar->start[i], ar->end[i]) == 1)
+	      {
+		gfc_error ("Upper cobound is less than lower cobound at %L",
+			   &ar->start[i]->where);
+		goto failure;
+	      }
+	    break;
+
+	  case DIMEN_ELEMENT:
+	    if (ar->start[i]->expr_type == EXPR_CONSTANT)
+	      {
+		gcc_assert (ar->start[i]->ts.type == BT_INTEGER);
+		if (mpz_cmp_si (ar->start[i]->value.integer, 1) < 0)
+		  {
+		    gfc_error ("Upper cobound is less than lower cobound "
+			       "of 1 at %L", &ar->start[i]->where);
+		    goto failure;
+		  }
+	      }
+	    break;
+
+	  case DIMEN_STAR:
+	    break;
+
+	  default:
+	    gfc_error ("Bad array specification in ALLOCATE statement at %L",
+		       &e->where);
+	    goto failure;
+
+	  }
+      }
   for (i = 0; i < ar->dimen; i++)
     {
       if (ar->type == AR_ELEMENT || ar->type == AR_FULL)
@@ -11806,7 +11893,7 @@ gfc_verify_binding_labels (gfc_symbol *sym)
 	  && (gsym->type == GSYM_FUNCTION || gsym->type == GSYM_SUBROUTINE)))
     {
       if (!gsym)
-	gsym = gfc_get_gsymbol (sym->binding_label);
+	gsym = gfc_get_gsymbol (sym->binding_label, true);
       gsym->where = sym->declared_at;
       gsym->sym_name = sym->name;
       gsym->binding_label = sym->binding_label;
@@ -12300,6 +12387,10 @@ deferred_requirements (gfc_symbol *sym)
 	   || sym->attr.associate_var
 	   || sym->attr.omp_udr_artificial_var))
     {
+      /* If a function has a result variable, only check the variable.  */
+      if (sym->result && sym->name != sym->result->name)
+	return true;
+
       gfc_error ("Entity %qs at %L has a deferred type parameter and "
 		 "requires either the POINTER or ALLOCATABLE attribute",
 		 sym->name, &sym->declared_at);
@@ -12508,6 +12599,10 @@ resolve_fl_procedure (gfc_symbol *sym, int mp_flag)
 
   if (sym->attr.function
       && !resolve_fl_var_and_proc (sym, mp_flag))
+    return false;
+
+  /* Constraints on deferred type parameter.  */
+  if (!deferred_requirements (sym))
     return false;
 
   if (sym->ts.type == BT_CHARACTER)
@@ -13074,7 +13169,7 @@ check_generic_tbp_ambiguity (gfc_tbp_generic* t1, gfc_tbp_generic* t2,
   if (sym1->attr.subroutine != sym2->attr.subroutine
       || sym1->attr.function != sym2->attr.function)
     {
-      gfc_error ("%qs and %qs can't be mixed FUNCTION/SUBROUTINE for"
+      gfc_error ("%qs and %qs cannot be mixed FUNCTION/SUBROUTINE for"
 		 " GENERIC %qs at %L",
 		 sym1->name, sym2->name, generic_name, &where);
       return false;
@@ -13209,7 +13304,7 @@ specific_found:
   /* If we attempt to "overwrite" a specific binding, this is an error.  */
   if (p->overridden && !p->overridden->is_generic)
     {
-      gfc_error ("GENERIC %qs at %L can't overwrite specific binding with"
+      gfc_error ("GENERIC %qs at %L cannot overwrite specific binding with"
 		 " the same name", name, &p->where);
       return false;
     }
@@ -13265,7 +13360,7 @@ get_checked_tb_operator_target (gfc_tbp_generic* target, locus where)
   /* F08:C468. All operator bindings must have a passed-object dummy argument.  */
   if (target->specific->nopass)
     {
-      gfc_error ("Type-bound operator at %L can't be NOPASS", &where);
+      gfc_error ("Type-bound operator at %L cannot be NOPASS", &where);
       return NULL;
     }
 
@@ -16765,6 +16860,7 @@ resolve_codes (gfc_namespace *ns)
   bitmap_obstack_initialize (&labels_obstack);
 
   gfc_resolve_oacc_declare (ns);
+  gfc_resolve_oacc_routines (ns);
   gfc_resolve_omp_local_vars (ns);
   gfc_resolve_code (ns->code, ns);
 

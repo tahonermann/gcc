@@ -288,7 +288,7 @@ static bool arm_builtin_support_vector_misalignment (machine_mode mode,
 static void arm_conditional_register_usage (void);
 static enum flt_eval_method arm_excess_precision (enum excess_precision_type);
 static reg_class_t arm_preferred_rename_class (reg_class_t rclass);
-static void arm_autovectorize_vector_sizes (vector_sizes *);
+static void arm_autovectorize_vector_sizes (vector_sizes *, bool);
 static int arm_default_branch_cost (bool, bool);
 static int arm_cortex_a5_branch_cost (bool, bool);
 static int arm_cortex_m_branch_cost (bool, bool);
@@ -2884,14 +2884,15 @@ arm_option_check_internal (struct gcc_options *opts)
       && write_symbols != NO_DEBUG
       && !TARGET_APCS_FRAME
       && (TARGET_DEFAULT & MASK_APCS_FRAME))
-    warning (0, "-g with -mno-apcs-frame may not give sensible debugging");
+    warning (0, "%<-g%> with %<-mno-apcs-frame%> may not give sensible "
+	     "debugging");
 
   /* iWMMXt unsupported under Thumb mode.  */
   if (TARGET_THUMB_P (flags) && TARGET_IWMMXT)
     error ("iWMMXt unsupported under Thumb mode");
 
   if (TARGET_HARD_TP && TARGET_THUMB1_P (flags))
-    error ("cannot use -mtp=cp15 with 16-bit Thumb");
+    error ("cannot use %<-mtp=cp15%> with 16-bit Thumb");
 
   if (TARGET_THUMB_P (flags) && TARGET_VXWORKS_RTP && flag_pic)
     {
@@ -2913,7 +2914,7 @@ arm_option_check_internal (struct gcc_options *opts)
       /* Cannot load addresses: -mslow-flash-data forbids literal pool and
 	 -mword-relocations forbids relocation of MOVT/MOVW.  */
       if (target_word_relocations)
-	error ("%s incompatible with -mword-relocations", flag);
+	error ("%s incompatible with %<-mword-relocations%>", flag);
     }
 }
 
@@ -3181,7 +3182,8 @@ arm_configure_build_target (struct arm_build_target *target,
 	  if (!bitmap_empty_p (isa_delta))
 	    {
 	      if (warn_compatible)
-		warning (0, "switch -mcpu=%s conflicts with -march=%s switch",
+		warning (0, "switch %<-mcpu=%s%> conflicts "
+			 "with %<-march=%s%> switch",
 			 arm_selected_cpu->common.name,
 			 arm_selected_arch->common.name);
 	      /* -march wins for code generation.
@@ -3406,7 +3408,8 @@ arm_option_override (void)
 
   if (TARGET_APCS_STACK && !TARGET_APCS_FRAME)
     {
-      warning (0, "-mapcs-stack-check incompatible with -mno-apcs-frame");
+      warning (0, "%<-mapcs-stack-check%> incompatible with "
+	       "%<-mno-apcs-frame%>");
       target_flags |= MASK_APCS_FRAME;
     }
 
@@ -3414,7 +3417,7 @@ arm_option_override (void)
     target_flags |= MASK_APCS_FRAME;
 
   if (TARGET_APCS_REENT && flag_pic)
-    error ("-fpic and -mapcs-reent are incompatible");
+    error ("%<-fpic%> and %<-mapcs-reent%> are incompatible");
 
   if (TARGET_APCS_REENT)
     warning (0, "APCS reentrant code not supported.  Ignored");
@@ -3475,7 +3478,7 @@ arm_option_override (void)
   if (flag_pic && TARGET_SINGLE_PIC_BASE)
     {
       if (TARGET_VXWORKS_RTP)
-	warning (0, "RTP PIC is incompatible with -msingle-pic-base");
+	warning (0, "RTP PIC is incompatible with %<-msingle-pic-base%>");
       arm_pic_register = (TARGET_APCS_STACK || TARGET_AAPCS_BASED) ? 9 : 10;
     }
 
@@ -3487,7 +3490,7 @@ arm_option_override (void)
       int pic_register = decode_reg_name (arm_pic_register_string);
 
       if (!flag_pic)
-	warning (0, "-mpic-register= is useless without -fpic");
+	warning (0, "%<-mpic-register=%> is useless without %<-fpic%>");
 
       /* Prevent the user from choosing an obviously stupid PIC register.  */
       else if (pic_register < 0 || call_used_regs[pic_register]
@@ -3496,7 +3499,7 @@ arm_option_override (void)
 	       || pic_register >= PC_REGNUM
 	       || (TARGET_VXWORKS_RTP
 		   && (unsigned int) pic_register != arm_pic_register))
-	error ("unable to use '%s' for PIC register", arm_pic_register_string);
+	error ("unable to use %qs for PIC register", arm_pic_register_string);
       else
 	arm_pic_register = pic_register;
     }
@@ -3518,7 +3521,8 @@ arm_option_override (void)
   if (flag_reorder_blocks_and_partition)
     {
       inform (input_location,
-	      "-freorder-blocks-and-partition not supported on this architecture");
+	      "%<-freorder-blocks-and-partition%> not supported "
+	      "on this architecture");
       flag_reorder_blocks_and_partition = 0;
       flag_reorder_blocks = 1;
     }
@@ -3733,10 +3737,10 @@ arm_options_perform_arch_sanity_checks (void)
   if (TARGET_AAPCS_BASED)
     {
       if (TARGET_CALLER_INTERWORKING)
-	error ("AAPCS does not support -mcaller-super-interworking");
+	error ("AAPCS does not support %<-mcaller-super-interworking%>");
       else
 	if (TARGET_CALLEE_INTERWORKING)
-	  error ("AAPCS does not support -mcallee-super-interworking");
+	  error ("AAPCS does not support %<-mcallee-super-interworking%>");
     }
 
   /* __fp16 support currently assumes the core has ldrh.  */
@@ -3760,7 +3764,7 @@ arm_options_perform_arch_sanity_checks (void)
 	{
 	  arm_pcs_default = ARM_PCS_AAPCS_VFP;
 	  if (!bitmap_bit_p (arm_active_target.isa, isa_bit_vfpv2))
-	    error ("-mfloat-abi=hard: selected processor lacks an FPU");
+	    error ("%<-mfloat-abi=hard%>: selected processor lacks an FPU");
 	}
       else
 	arm_pcs_default = ARM_PCS_AAPCS;
@@ -3768,7 +3772,7 @@ arm_options_perform_arch_sanity_checks (void)
   else
     {
       if (arm_float_abi == ARM_FLOAT_ABI_HARD)
-	sorry ("-mfloat-abi=hard and VFP");
+	sorry ("%<-mfloat-abi=hard%> and VFP");
 
       if (arm_abi == ARM_ABI_APCS)
 	arm_pcs_default = ARM_PCS_APCS;
@@ -6108,6 +6112,11 @@ aapcs_vfp_is_call_or_return_candidate (enum arm_pcs pcs_variant,
     return false;
 
   *base_mode = new_mode;
+
+  if (TARGET_GENERAL_REGS_ONLY)
+    error ("argument of type %qT not permitted with -mgeneral-regs-only",
+	   type);
+
   return true;
 }
 
@@ -7039,8 +7048,8 @@ arm_handle_cmse_nonsecure_entry (tree *node, tree name,
   if (!use_cmse)
     {
       *no_add_attrs = true;
-      warning (OPT_Wattributes, "%qE attribute ignored without -mcmse option.",
-	       name);
+      warning (OPT_Wattributes, "%qE attribute ignored without %<-mcmse%> "
+	       "option.", name);
       return NULL_TREE;
     }
 
@@ -7091,8 +7100,8 @@ arm_handle_cmse_nonsecure_call (tree *node, tree name,
   if (!use_cmse)
     {
       *no_add_attrs = true;
-      warning (OPT_Wattributes, "%qE attribute ignored without -mcmse option.",
-	       name);
+      warning (OPT_Wattributes, "%qE attribute ignored without %<-mcmse%> "
+	       "option.", name);
       return NULL_TREE;
     }
 
@@ -7629,6 +7638,41 @@ legitimize_pic_address (rtx orig, machine_mode mode, rtx reg, rtx pic_reg,
 }
 
 
+/* Whether a register is callee saved or not.  This is necessary because high
+   registers are marked as caller saved when optimizing for size on Thumb-1
+   targets despite being callee saved in order to avoid using them.  */
+#define callee_saved_reg_p(reg) \
+  (!call_used_regs[reg] \
+   || (TARGET_THUMB1 && optimize_size \
+       && reg >= FIRST_HI_REGNUM && reg <= LAST_HI_REGNUM))
+
+/* Return a mask for the call-clobbered low registers that are unused
+   at the end of the prologue.  */
+static unsigned long
+thumb1_prologue_unused_call_clobbered_lo_regs (void)
+{
+  unsigned long mask = 0;
+  bitmap prologue_live_out = df_get_live_out (ENTRY_BLOCK_PTR_FOR_FN (cfun));
+
+  for (int reg = FIRST_LO_REGNUM; reg <= LAST_LO_REGNUM; reg++)
+    if (!callee_saved_reg_p (reg) && !REGNO_REG_SET_P (prologue_live_out, reg))
+      mask |= 1 << (reg - FIRST_LO_REGNUM);
+  return mask;
+}
+
+/* Similarly for the start of the epilogue.  */
+static unsigned long
+thumb1_epilogue_unused_call_clobbered_lo_regs (void)
+{
+  unsigned long mask = 0;
+  bitmap epilogue_live_in = df_get_live_in (EXIT_BLOCK_PTR_FOR_FN (cfun));
+
+  for (int reg = FIRST_LO_REGNUM; reg <= LAST_LO_REGNUM; reg++)
+    if (!callee_saved_reg_p (reg) && !REGNO_REG_SET_P (epilogue_live_in, reg))
+      mask |= 1 << (reg - FIRST_LO_REGNUM);
+  return mask;
+}
+
 /* Find a spare register to use during the prolog of a function.  */
 
 static int
@@ -7636,44 +7680,15 @@ thumb_find_work_register (unsigned long pushed_regs_mask)
 {
   int reg;
 
+  unsigned long unused_regs
+    = thumb1_prologue_unused_call_clobbered_lo_regs ();
+
   /* Check the argument registers first as these are call-used.  The
      register allocation order means that sometimes r3 might be used
      but earlier argument registers might not, so check them all.  */
-  for (reg = LAST_ARG_REGNUM; reg >= 0; reg --)
-    if (!df_regs_ever_live_p (reg))
+  for (reg = LAST_LO_REGNUM; reg >= FIRST_LO_REGNUM; reg--)
+    if (unused_regs & (1 << (reg - FIRST_LO_REGNUM)))
       return reg;
-
-  /* Before going on to check the call-saved registers we can try a couple
-     more ways of deducing that r3 is available.  The first is when we are
-     pushing anonymous arguments onto the stack and we have less than 4
-     registers worth of fixed arguments(*).  In this case r3 will be part of
-     the variable argument list and so we can be sure that it will be
-     pushed right at the start of the function.  Hence it will be available
-     for the rest of the prologue.
-     (*): ie crtl->args.pretend_args_size is greater than 0.  */
-  if (cfun->machine->uses_anonymous_args
-      && crtl->args.pretend_args_size > 0)
-    return LAST_ARG_REGNUM;
-
-  /* The other case is when we have fixed arguments but less than 4 registers
-     worth.  In this case r3 might be used in the body of the function, but
-     it is not being used to convey an argument into the function.  In theory
-     we could just check crtl->args.size to see how many bytes are
-     being passed in argument registers, but it seems that it is unreliable.
-     Sometimes it will have the value 0 when in fact arguments are being
-     passed.  (See testcase execute/20021111-1.c for an example).  So we also
-     check the args_info.nregs field as well.  The problem with this field is
-     that it makes no allowances for arguments that are passed to the
-     function but which are not used.  Hence we could miss an opportunity
-     when a function has an unused argument in r3.  But it is better to be
-     safe than to be sorry.  */
-  if (! cfun->machine->uses_anonymous_args
-      && crtl->args.size >= 0
-      && crtl->args.size <= (LAST_ARG_REGNUM * UNITS_PER_WORD)
-      && (TARGET_AAPCS_BASED
-	  ? crtl->args.info.aapcs_ncrn < 4
-	  : crtl->args.info.nregs < 4))
-    return LAST_ARG_REGNUM;
 
   /* Otherwise look for a call-saved register that is going to be pushed.  */
   for (reg = LAST_LO_REGNUM; reg > LAST_ARG_REGNUM; reg --)
@@ -8882,7 +8897,7 @@ arm_tls_referenced_p (rtx x)
 	     currently implement these if a literal pool is disabled.  */
 	  if (arm_disable_literal_pool)
 	    sorry ("accessing thread-local storage is not currently supported "
-		   "with -mpure-code or -mslow-flash-data");
+		   "with %<-mpure-code%> or %<-mslow-flash-data%>");
 
 	  return true;
 	}
@@ -8940,11 +8955,16 @@ static bool
 arm_cannot_force_const_mem (machine_mode mode ATTRIBUTE_UNUSED, rtx x)
 {
   rtx base, offset;
+  split_const (x, &base, &offset);
 
-  if (ARM_OFFSETS_MUST_BE_WITHIN_SECTIONS_P)
+  if (SYMBOL_REF_P (base))
     {
-      split_const (x, &base, &offset);
-      if (GET_CODE (base) == SYMBOL_REF
+      /* Function symbols cannot have an offset due to the Thumb bit.  */
+      if ((SYMBOL_REF_FLAGS (base) & SYMBOL_FLAG_FUNCTION)
+	  && INTVAL (offset) != 0)
+	return true;
+
+      if (ARM_OFFSETS_MUST_BE_WITHIN_SECTIONS_P
 	  && !offset_within_block_p (base, INTVAL (offset)))
 	return true;
     }
@@ -11989,8 +12009,7 @@ neon_valid_immediate (rtx op, machine_mode mode, int inverse,
   else
     {
       n_elts = 1;
-      if (mode == VOIDmode)
-	mode = DImode;
+      gcc_assert (mode != VOIDmode);
     }
 
   innersize = GET_MODE_UNIT_SIZE (mode);
@@ -12452,7 +12471,7 @@ neon_expand_vector_init (rtx target, rtx vals)
   if (n_var == 1)
     {
       rtx copy = copy_rtx (vals);
-      rtx index = GEN_INT (one_var);
+      rtx merge_mask = GEN_INT (1 << one_var);
 
       /* Load constant part of vector, substitute neighboring value for
 	 varying element.  */
@@ -12461,38 +12480,7 @@ neon_expand_vector_init (rtx target, rtx vals)
 
       /* Insert variable.  */
       x = copy_to_mode_reg (inner_mode, XVECEXP (vals, 0, one_var));
-      switch (mode)
-	{
-	case E_V8QImode:
-	  emit_insn (gen_neon_vset_lanev8qi (target, x, target, index));
-	  break;
-	case E_V16QImode:
-	  emit_insn (gen_neon_vset_lanev16qi (target, x, target, index));
-	  break;
-	case E_V4HImode:
-	  emit_insn (gen_neon_vset_lanev4hi (target, x, target, index));
-	  break;
-	case E_V8HImode:
-	  emit_insn (gen_neon_vset_lanev8hi (target, x, target, index));
-	  break;
-	case E_V2SImode:
-	  emit_insn (gen_neon_vset_lanev2si (target, x, target, index));
-	  break;
-	case E_V4SImode:
-	  emit_insn (gen_neon_vset_lanev4si (target, x, target, index));
-	  break;
-	case E_V2SFmode:
-	  emit_insn (gen_neon_vset_lanev2sf (target, x, target, index));
-	  break;
-	case E_V4SFmode:
-	  emit_insn (gen_neon_vset_lanev4sf (target, x, target, index));
-	  break;
-	case E_V2DImode:
-	  emit_insn (gen_neon_vset_lanev2di (target, x, target, index));
-	  break;
-	default:
-	  gcc_unreachable ();
-	}
+      emit_insn (gen_vec_set_internal (mode, target, x, merge_mask, target));
       return;
     }
 
@@ -14366,7 +14354,7 @@ arm_block_move_unaligned_loop (rtx dest, rtx src, HOST_WIDE_INT length,
    core type, optimize_size setting, etc.  */
 
 static int
-arm_movmemqi_unaligned (rtx *operands)
+arm_cpymemqi_unaligned (rtx *operands)
 {
   HOST_WIDE_INT length = INTVAL (operands[2]);
   
@@ -14403,7 +14391,7 @@ arm_movmemqi_unaligned (rtx *operands)
 }
 
 int
-arm_gen_movmemqi (rtx *operands)
+arm_gen_cpymemqi (rtx *operands)
 {
   HOST_WIDE_INT in_words_to_go, out_words_to_go, last_bytes;
   HOST_WIDE_INT srcoffset, dstoffset;
@@ -14417,7 +14405,7 @@ arm_gen_movmemqi (rtx *operands)
     return 0;
 
   if (unaligned_access && (INTVAL (operands[3]) & 3) != 0)
-    return arm_movmemqi_unaligned (operands);
+    return arm_cpymemqi_unaligned (operands);
 
   if (INTVAL (operands[3]) & 3)
     return 0;
@@ -14551,7 +14539,7 @@ arm_gen_movmemqi (rtx *operands)
   return 1;
 }
 
-/* Helper for gen_movmem_ldrd_strd. Increase the address of memory rtx
+/* Helper for gen_cpymem_ldrd_strd. Increase the address of memory rtx
 by mode size.  */
 inline static rtx
 next_consecutive_mem (rtx mem)
@@ -14566,7 +14554,7 @@ next_consecutive_mem (rtx mem)
 /* Copy using LDRD/STRD instructions whenever possible.
    Returns true upon success. */
 bool
-gen_movmem_ldrd_strd (rtx *operands)
+gen_cpymem_ldrd_strd (rtx *operands)
 {
   unsigned HOST_WIDE_INT len;
   HOST_WIDE_INT align;
@@ -14610,7 +14598,7 @@ gen_movmem_ldrd_strd (rtx *operands)
 
   /* If we cannot generate any LDRD/STRD, try to generate LDM/STM.  */
   if (!(dst_aligned || src_aligned))
-    return arm_gen_movmemqi (operands);
+    return arm_gen_cpymemqi (operands);
 
   /* If the either src or dst is unaligned we'll be accessing it as pairs
      of unaligned SImode accesses.  Otherwise we can generate DImode
@@ -19428,13 +19416,6 @@ output_ascii_pseudo_op (FILE *stream, const unsigned char *p, int len)
   fputs ("\"\n", stream);
 }
 
-/* Whether a register is callee saved or not.  This is necessary because high
-   registers are marked as caller saved when optimizing for size on Thumb-1
-   targets despite being callee saved in order to avoid using them.  */
-#define callee_saved_reg_p(reg) \
-  (!call_used_regs[reg] \
-   || (TARGET_THUMB1 && optimize_size \
-       && reg >= FIRST_HI_REGNUM && reg <= LAST_HI_REGNUM))
 
 /* Compute the register save mask for registers 0 through 12
    inclusive.  This code is used by arm_compute_save_core_reg_mask ().  */
@@ -19688,10 +19669,19 @@ thumb1_compute_save_core_reg_mask (void)
   if (mask & 0xff || thumb_force_lr_save ())
     mask |= (1 << LR_REGNUM);
 
-  /* Make sure we have a low work register if we need one.
-     We will need one if we are going to push a high register,
-     but we are not currently intending to push a low register.  */
+  bool call_clobbered_scratch
+    = (thumb1_prologue_unused_call_clobbered_lo_regs ()
+       && thumb1_epilogue_unused_call_clobbered_lo_regs ());
+
+  /* Make sure we have a low work register if we need one.  We will
+     need one if we are going to push a high register, but we are not
+     currently intending to push a low register.  However if both the
+     prologue and epilogue have a spare call-clobbered low register,
+     then we won't need to find an additional work register.  It does
+     not need to be the same register in the prologue and
+     epilogue.  */
   if ((mask & 0xff) == 0
+      && !call_clobbered_scratch
       && ((mask & 0x0f00) || TARGET_BACKTRACE))
     {
       /* Use thumb_find_work_register to choose which register
@@ -24917,12 +24907,7 @@ thumb1_unexpanded_epilogue (void)
       unsigned long mask = live_regs_mask & 0xff;
       int next_hi_reg;
 
-      /* The available low registers depend on the size of the value we are
-         returning.  */
-      if (size <= 12)
-	mask |=  1 << 3;
-      if (size <= 8)
-	mask |= 1 << 2;
+      mask |= thumb1_epilogue_unused_call_clobbered_lo_regs ();
 
       if (mask == 0)
 	/* Oh dear!  We have no low registers into which we can pop
@@ -24930,7 +24915,7 @@ thumb1_unexpanded_epilogue (void)
 	internal_error
 	  ("no low registers available for popping high registers");
 
-      for (next_hi_reg = 8; next_hi_reg < 13; next_hi_reg++)
+      for (next_hi_reg = 12; next_hi_reg > LAST_LO_REGNUM; next_hi_reg--)
 	if (live_regs_mask & (1 << next_hi_reg))
 	  break;
 
@@ -24938,7 +24923,7 @@ thumb1_unexpanded_epilogue (void)
 	{
 	  /* Find lo register(s) into which the high register(s) can
              be popped.  */
-	  for (regno = 0; regno <= LAST_LO_REGNUM; regno++)
+	  for (regno = LAST_LO_REGNUM; regno >= 0; regno--)
 	    {
 	      if (mask & (1 << regno))
 		high_regs_pushed--;
@@ -24946,20 +24931,22 @@ thumb1_unexpanded_epilogue (void)
 		break;
 	    }
 
-	  mask &= (2 << regno) - 1;	/* A noop if regno == 8 */
+	  if (high_regs_pushed == 0 && regno >= 0)
+	    mask &= ~((1 << regno) - 1);
 
 	  /* Pop the values into the low register(s).  */
 	  thumb_pop (asm_out_file, mask);
 
 	  /* Move the value(s) into the high registers.  */
-	  for (regno = 0; regno <= LAST_LO_REGNUM; regno++)
+	  for (regno = LAST_LO_REGNUM; regno >= 0; regno--)
 	    {
 	      if (mask & (1 << regno))
 		{
 		  asm_fprintf (asm_out_file, "\tmov\t%r, %r\n", next_hi_reg,
 			       regno);
 
-		  for (next_hi_reg++; next_hi_reg < 13; next_hi_reg++)
+		  for (next_hi_reg--; next_hi_reg > LAST_LO_REGNUM;
+		       next_hi_reg--)
 		    if (live_regs_mask & (1 << next_hi_reg))
 		      break;
 		}
@@ -25341,10 +25328,20 @@ thumb1_expand_prologue (void)
 	  break;
 
       /* Here we need to mask out registers used for passing arguments
-	 even if they can be pushed.  This is to avoid using them to stash the high
-	 registers.  Such kind of stash may clobber the use of arguments.  */
+	 even if they can be pushed.  This is to avoid using them to
+	 stash the high registers.  Such kind of stash may clobber the
+	 use of arguments.  */
       pushable_regs = l_mask & (~arg_regs_mask);
-      if (lr_needs_saving)
+      pushable_regs |= thumb1_prologue_unused_call_clobbered_lo_regs ();
+
+      /* Normally, LR can be used as a scratch register once it has been
+	 saved; but if the function examines its own return address then
+	 the value is still live and we need to avoid using it.  */
+      bool return_addr_live
+	= REGNO_REG_SET_P (df_get_live_out (ENTRY_BLOCK_PTR_FOR_FN (cfun)),
+			   LR_REGNUM);
+
+      if (lr_needs_saving || return_addr_live)
 	pushable_regs &= ~(1 << LR_REGNUM);
 
       if (pushable_regs == 0)
@@ -25385,6 +25382,11 @@ thumb1_expand_prologue (void)
 	      push_mask |= 1 << LR_REGNUM;
 	      real_regs_mask |= 1 << LR_REGNUM;
 	      lr_needs_saving = false;
+	      /* If the return address is not live at this point, we
+		 can add LR to the list of registers that we can use
+		 for pushes.  */
+	      if (!return_addr_live)
+		pushable_regs |= 1 << LR_REGNUM;
 	    }
 
 	  insn = thumb1_emit_multi_reg_push (push_mask, real_regs_mask);
@@ -25409,7 +25411,7 @@ thumb1_expand_prologue (void)
   if ((flag_stack_check == STATIC_BUILTIN_STACK_CHECK
        || flag_stack_clash_protection)
       && size)
-    sorry ("-fstack-check=specific for Thumb-1");
+    sorry ("%<-fstack-check=specific%> for Thumb-1");
 
   amount = offsets->outgoing_args - offsets->saved_regs;
   amount -= 4 * thumb1_extra_regs_pushed (offsets, true);
@@ -26362,7 +26364,7 @@ thumb_call_via_reg (rtx reg)
 
 /* Routines for generating rtl.  */
 void
-thumb_expand_movmemqi (rtx *operands)
+thumb_expand_cpymemqi (rtx *operands)
 {
   rtx out = copy_to_mode_reg (SImode, XEXP (operands[0], 0));
   rtx in  = copy_to_mode_reg (SImode, XEXP (operands[1], 0));
@@ -26371,13 +26373,13 @@ thumb_expand_movmemqi (rtx *operands)
 
   while (len >= 12)
     {
-      emit_insn (gen_movmem12b (out, in, out, in));
+      emit_insn (gen_cpymem12b (out, in, out, in));
       len -= 12;
     }
 
   if (len >= 8)
     {
-      emit_insn (gen_movmem8b (out, in, out, in));
+      emit_insn (gen_cpymem8b (out, in, out, in));
       len -= 8;
     }
 
@@ -26964,10 +26966,14 @@ static void
 arm_output_mi_thunk (FILE *file, tree thunk, HOST_WIDE_INT delta,
 		     HOST_WIDE_INT vcall_offset, tree function)
 {
+  const char *fnname = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (thunk));
+
+  assemble_start_function (thunk, fnname);
   if (TARGET_32BIT)
     arm32_output_mi_thunk (file, thunk, delta, vcall_offset, function);
   else
     arm_thumb1_mi_thunk (file, thunk, delta, vcall_offset, function);
+  assemble_end_function (thunk, fnname);
 }
 
 int
@@ -28314,7 +28320,7 @@ arm_vector_alignment (const_tree type)
 }
 
 static void
-arm_autovectorize_vector_sizes (vector_sizes *sizes)
+arm_autovectorize_vector_sizes (vector_sizes *sizes, bool)
 {
   if (!TARGET_NEON_VECTORIZE_DOUBLE)
     {
@@ -28396,7 +28402,7 @@ arm_conditional_register_usage (void)
 	}
     }
 
-  if (TARGET_REALLY_IWMMXT)
+  if (TARGET_REALLY_IWMMXT && !TARGET_GENERAL_REGS_ONLY)
     {
       regno = FIRST_IWMMXT_GR_REGNUM;
       /* The 2002/10/09 revision of the XScale ABI has wCG0
@@ -30569,10 +30575,6 @@ aarch_macro_fusion_pair_p (rtx_insn* prev, rtx_insn* curr)
   if (!arm_macro_fusion_p ())
     return false;
 
-  if (current_tune->fusible_ops & tune_params::FUSE_AES_AESMC
-      && aarch_crypto_can_dual_issue (prev, curr))
-    return true;
-
   if (current_tune->fusible_ops & tune_params::FUSE_MOVW_MOVT
       && arm_sets_movw_movt_fusible_p (prev_set, curr_set))
     return true;
@@ -30863,19 +30865,20 @@ arm_valid_target_attribute_rec (tree args, struct gcc_options *opts)
 
   while ((q = strtok (argstr, ",")) != NULL)
     {
-      while (ISSPACE (*q)) ++q;
-
       argstr = NULL;
-      if (!strncmp (q, "thumb", 5))
-	  opts->x_target_flags |= MASK_THUMB;
+      if (!strcmp (q, "thumb"))
+	opts->x_target_flags |= MASK_THUMB;
 
-      else if (!strncmp (q, "arm", 3))
-	  opts->x_target_flags &= ~MASK_THUMB;
+      else if (!strcmp (q, "arm"))
+	opts->x_target_flags &= ~MASK_THUMB;
+
+      else if (!strcmp (q, "general-regs-only"))
+	opts->x_target_flags |= MASK_GENERAL_REGS_ONLY;
 
       else if (!strncmp (q, "fpu=", 4))
 	{
 	  int fpu_index;
-	  if (! opt_enum_arg_to_value (OPT_mfpu_, q+4,
+	  if (! opt_enum_arg_to_value (OPT_mfpu_, q + 4,
 				       &fpu_index, CL_TARGET))
 	    {
 	      error ("invalid fpu for target attribute or pragma %qs", q);
@@ -30893,7 +30896,7 @@ arm_valid_target_attribute_rec (tree args, struct gcc_options *opts)
 	}
       else if (!strncmp (q, "arch=", 5))
 	{
-	  char* arch = q+5;
+	  char *arch = q + 5;
 	  const arch_option *arm_selected_arch
 	     = arm_parse_arch_option_name (all_architectures, "arch", arch);
 

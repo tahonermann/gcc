@@ -13,6 +13,12 @@ if LIBGO_IS_RTEMS
 subdirs = testsuite
 endif
 
+if LIBGO_IS_DARWIN
+GO_EXPORT_SECTION_NAME = __GNU_GO.__go_export
+else
+GO_EXPORT_SECTION_NAME = .go_export
+endif
+
 SUBDIRS = ${subdirs}
 
 gcc_version := $(shell $(GOC) -dumpversion)
@@ -453,9 +459,7 @@ runtime_files = \
 	runtime/go-fieldtrack.c \
 	runtime/go-matherr.c \
 	runtime/go-memclr.c \
-	runtime/go-memcmp.c \
 	runtime/go-memequal.c \
-	runtime/go-memmove.c \
 	runtime/go-nanotime.c \
 	runtime/go-now.c \
 	runtime/go-nosys.c \
@@ -463,8 +467,6 @@ runtime_files = \
 	runtime/go-runtime-error.c \
 	runtime/go-setenv.c \
 	runtime/go-signal.c \
-	runtime/go-strslice.c \
-	runtime/go-typedesc-equal.c \
 	runtime/go-unsafe-pointer.c \
 	runtime/go-unsetenv.c \
 	runtime/go-unwind.c \
@@ -476,6 +478,7 @@ runtime_files = \
 	runtime/runtime_c.c \
 	runtime/stack.c \
 	runtime/yield.c \
+	runtime/go-context.S \
 	$(rtems_task_variable_add_file) \
 	$(runtime_getncpu_file)
 
@@ -539,6 +542,7 @@ s-cpu: Makefile
 	rm -f cpugen.go.tmp
 	echo "package cpu" > cpugen.go.tmp
 	echo "const CacheLinePadSize = `$(SHELL) $(srcdir)/goarch.sh $(GOARCH) cachelinesize`" >> cpugen.go.tmp
+	echo "const FunctionDescriptors = $(FUNCTION_DESCRIPTORS)" >> cpugen.go.tmp
 	$(SHELL) $(srcdir)/mvifdiff.sh cpugen.go.tmp cpugen.go
 	$(STAMP) $@
 
@@ -817,7 +821,7 @@ BUILDGOX = \
 	if test ! -f $$f; then \
 	  f="$(basename $(<D)/.libs/$(<F)).o"; \
 	fi; \
-	$(OBJCOPY) -j .go_export $$f $@.tmp; \
+	$(OBJCOPY) -j $(GO_EXPORT_SECTION_NAME) $$f $@.tmp; \
 	$(SHELL) $(srcdir)/mvifdiff.sh $@.tmp `echo $@ | sed -e 's/s-gox/gox/'`
 
 GOTESTFLAGS =

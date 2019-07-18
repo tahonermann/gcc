@@ -302,6 +302,16 @@
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 0, 15)")))
 
+;; Return 1 if op is a 34-bit constant integer.
+(define_predicate "cint34_operand"
+  (match_code "const_int")
+{
+  if (!TARGET_PREFIXED_ADDR)
+    return 0;
+
+  return SIGNED_34BIT_OFFSET_P (INTVAL (op));
+})
+
 ;; Return 1 if op is a register that is not special.
 ;; Disallow (SUBREG:SF (REG:SI)) and (SUBREG:SI (REG:SF)) on VSX systems where
 ;; you need to be careful in moving a SFmode to SImode and vice versa due to
@@ -404,33 +414,6 @@
     return 1;
 
   return FP_REGNO_P (r);
-})
-
-;; Return 1 if op is a HTM specific SPR register.
-(define_predicate "htm_spr_reg_operand"
-  (match_operand 0 "register_operand")
-{
-  if (!TARGET_HTM)
-    return 0;
-
-  if (SUBREG_P (op))
-    op = SUBREG_REG (op);
-
-  if (!REG_P (op))
-    return 0;
-
-  switch (REGNO (op))
-    {
-      case TFHAR_REGNO:
-      case TFIAR_REGNO:
-      case TEXASR_REGNO:
-	return 1;
-      default:
-	break;
-    }
-  
-  /* Unknown SPR.  */
-  return 0;
 })
 
 ;; Return 1 if op is a general purpose register that is an even register
@@ -1637,6 +1620,82 @@
     op = XEXP (op, 0);
 
   return GET_CODE (op) == UNSPEC && XINT (op, 1) == UNSPEC_TOCREL;
+})
+
+;; Return true if the operand is a pc-relative address.
+(define_predicate "pcrel_address"
+  (match_code "label_ref,symbol_ref,const")
+{
+  if (!rs6000_pcrel_p (cfun))
+    return false;
+
+  if (GET_CODE (op) == CONST)
+    op = XEXP (op, 0);
+
+  /* Validate offset.  */
+  if (GET_CODE (op) == PLUS)
+    {
+      rtx op0 = XEXP (op, 0);
+      rtx op1 = XEXP (op, 1);
+
+      if (!CONST_INT_P (op1) || !SIGNED_34BIT_OFFSET_P (INTVAL (op1)))
+	return false;
+
+      op = op0;
+    }
+
+  if (LABEL_REF_P (op))
+    return true;
+
+  return (SYMBOL_REF_P (op) && SYMBOL_REF_LOCAL_P (op));
+})
+
+;; Return true if the operand is an external symbol whose address can be loaded
+;; into a register using:
+;;	PLA reg,label@pcrel@got
+;;
+;; The linker will either optimize this to either a PADDI if the label is
+;; defined locally in another module or a PLD of the address if the label is
+;; defined in another module.
+
+(define_predicate "pcrel_external_address"
+  (match_code "symbol_ref,const")
+{
+  if (!rs6000_pcrel_p (cfun))
+    return false;
+
+  if (GET_CODE (op) == CONST)
+    op = XEXP (op, 0);
+
+  /* Validate offset.  */
+  if (GET_CODE (op) == PLUS)
+    {
+      rtx op0 = XEXP (op, 0);
+      rtx op1 = XEXP (op, 1);
+
+      if (!CONST_INT_P (op1) || !SIGNED_34BIT_OFFSET_P (INTVAL (op1)))
+	return false;
+
+      op = op0;
+    }
+
+  return (SYMBOL_REF_P (op) && !SYMBOL_REF_LOCAL_P (op));
+})
+
+;; Return 1 if op is a prefixed memory operand.
+(define_predicate "prefixed_mem_operand"
+  (match_code "mem")
+{
+  return rs6000_prefixed_address (XEXP (op, 0), GET_MODE (op));
+})
+
+;; Return 1 if op is a memory operand to an external variable when we
+;; support pc-relative addressing and the PCREL_OPT relocation to
+;; optimize references to it.
+(define_predicate "pcrel_external_mem_operand"
+  (match_code "mem")
+{
+  return pcrel_external_address (XEXP (op, 0), Pmode);
 })
 
 ;; Match the first insn (addis) in fusing the combination of addis and loads to

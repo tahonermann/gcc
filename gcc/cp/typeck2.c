@@ -360,7 +360,7 @@ abstract_virtuals_error_sfinae (tree decl, tree type, abstract_class_use use,
 	     "be used in throw-expression", type);
       break;
     case ACU_CATCH:
-      error ("cannot declare catch parameter to be of abstract "
+      error ("cannot declare %<catch%> parameter to be of abstract "
 	     "class type %qT", type);
       break;
     default:
@@ -380,7 +380,7 @@ abstract_virtuals_error_sfinae (tree decl, tree type, abstract_class_use use,
       FOR_EACH_VEC_ELT (*pure, ix, fn)
 	if (! DECL_CLONED_FUNCTION_P (fn)
 	    || DECL_COMPLETE_DESTRUCTOR_P (fn))
-	  inform (DECL_SOURCE_LOCATION (fn), "\t%#qD", fn);
+	  inform (DECL_SOURCE_LOCATION (fn), "    %#qD", fn);
 
       /* Now truncate the vector.  This leaves it non-null, so we know
 	 there are pure virtuals, but empty so we don't list them out
@@ -603,7 +603,7 @@ cxx_incomplete_type_error (location_t loc, const_tree value, const_tree type)
 static bool
 split_nonconstant_init_1 (tree dest, tree init)
 {
-  unsigned HOST_WIDE_INT idx;
+  unsigned HOST_WIDE_INT idx, tidx = HOST_WIDE_INT_M1U;
   tree field_index, value;
   tree type = TREE_TYPE (dest);
   tree inner_type = NULL;
@@ -657,23 +657,23 @@ split_nonconstant_init_1 (tree dest, tree init)
 	      if (!split_nonconstant_init_1 (sub, value))
 		complete_p = false;
 	      else
-		CONSTRUCTOR_ELTS (init)->ordered_remove (idx--);
-	      num_split_elts++;
+		{
+		  /* Mark element for removal.  */
+		  CONSTRUCTOR_ELT (init, idx)->index = NULL_TREE;
+		  if (idx < tidx)
+		    tidx = idx;
+		  num_split_elts++;
+		}
 	    }
 	  else if (!initializer_constant_valid_p (value, inner_type))
 	    {
 	      tree code;
 	      tree sub;
 
-	      /* FIXME: Ordered removal is O(1) so the whole function is
-		 worst-case quadratic. This could be fixed using an aside
-		 bitmap to record which elements must be removed and remove
-		 them all at the same time. Or by merging
-		 split_non_constant_init into process_init_constructor_array,
-		 that is separating constants from non-constants while building
-		 the vector.  */
-	      CONSTRUCTOR_ELTS (init)->ordered_remove (idx);
-	      --idx;
+	      /* Mark element for removal.  */
+	      CONSTRUCTOR_ELT (init, idx)->index = NULL_TREE;
+	      if (idx < tidx)
+		tidx = idx;
 
 	      if (TREE_CODE (field_index) == RANGE_EXPR)
 		{
@@ -710,6 +710,22 @@ split_nonconstant_init_1 (tree dest, tree init)
 
 	      num_split_elts++;
 	    }
+	}
+      if (num_split_elts == 1)
+	CONSTRUCTOR_ELTS (init)->ordered_remove (tidx);
+      else if (num_split_elts > 1)
+	{
+	  /* Perform the delayed ordered removal of non-constant elements
+	     we split out.  */
+	  for (idx = tidx; idx < CONSTRUCTOR_NELTS (init); ++idx)
+	    if (CONSTRUCTOR_ELT (init, idx)->index == NULL_TREE)
+	      ;
+	    else
+	      {
+		*CONSTRUCTOR_ELT (init, tidx) = *CONSTRUCTOR_ELT (init, idx);
+		++tidx;
+	      }
+	  vec_safe_truncate (CONSTRUCTOR_ELTS (init), tidx);
 	}
       break;
 
@@ -824,10 +840,9 @@ store_init_value (tree decl, tree init, vec<tree, va_gc>** cleanups, int flags)
       value = digest_init_flags (type, init, flags, tf_warning_or_error);
     }
 
-  if (TREE_CODE (type) == ARRAY_TYPE
-      && TYPE_STRING_FLAG (TREE_TYPE (type))
-      && TREE_CODE (value) == CONSTRUCTOR)
-    value = braced_list_to_string (type, value);
+  /* Look for braced array initializers for character arrays and
+     recursively convert them into STRING_CSTs.  */
+  value = braced_lists_to_strings (type, value);
 
   current_ref_temp_count = 0;
   value = extend_ref_init_temps (decl, value, cleanups);
@@ -1020,7 +1035,7 @@ check_narrowing (tree type, tree init, tsubst_flags_t complain, bool const_only)
 	  int savederrorcount = errorcount;
 	  global_dc->pedantic_errors = 1;
 	  pedwarn (loc, OPT_Wnarrowing,
-		   "narrowing conversion of %qE from %qH to %qI ",
+		   "narrowing conversion of %qE from %qH to %qI",
 		   init, ftype, type);
 	  if (errorcount == savederrorcount)
 	    ok = true;
@@ -1165,8 +1180,8 @@ digest_init_r (tree type, tree init, int nested, int flags,
 		 be invalid.  */
 	      if (size < TREE_STRING_LENGTH (stripped_init))
 		{
-		  permerror (loc, "initializer-string for array "
-			     "of chars is too long");
+		  permerror (loc, "initializer-string for %qT is too long",
+			     type);
 
 		  init = build_string (size,
 				       TREE_STRING_POINTER (stripped_init));
@@ -1201,8 +1216,7 @@ digest_init_r (tree type, tree init, int nested, int flags,
   /* "If T is a class type and the initializer list has a single
      element of type cv U, where U is T or a class derived from T,
      the object is initialized from that element."  */
-  if (flag_checking
-      && cxx_dialect >= cxx11
+  if (cxx_dialect >= cxx11
       && BRACE_ENCLOSED_INITIALIZER_P (stripped_init)
       && CONSTRUCTOR_NELTS (stripped_init) == 1
       && ((CLASS_TYPE_P (type) && !CLASSTYPE_NON_AGGREGATE (type))
@@ -1210,8 +1224,29 @@ digest_init_r (tree type, tree init, int nested, int flags,
     {
       tree elt = CONSTRUCTOR_ELT (stripped_init, 0)->value;
       if (reference_related_p (type, TREE_TYPE (elt)))
-	/* We should have fixed this in reshape_init.  */
-	gcc_unreachable ();
+	{
+	  /* In C++17, aggregates can have bases, thus participate in
+	     aggregate initialization.  In the following case:
+
+	       struct B { int c; };
+	       struct D : B { };
+	       D d{{D{{42}}}};
+
+	    there's an extra set of braces, so the D temporary initializes
+	    the first element of d, which is the B base subobject.  The base
+	    of type B is copy-initialized from the D temporary, causing
+	    object slicing.  */
+	  tree field = next_initializable_field (TYPE_FIELDS (type));
+	  if (field && DECL_FIELD_IS_BASE (field))
+	    {
+	      if (warning_at (loc, 0, "initializing a base class of type %qT "
+			      "results in object slicing", TREE_TYPE (field)))
+		inform (loc, "remove %<{ }%> around initializer");
+	    }
+	  else if (flag_checking)
+	    /* We should have fixed this in reshape_init.  */
+	    gcc_unreachable ();
+	}
     }
 
   if (BRACE_ENCLOSED_INITIALIZER_P (stripped_init)
@@ -1274,7 +1309,10 @@ digest_nsdmi_init (tree decl, tree init, tsubst_flags_t complain)
   tree type = TREE_TYPE (decl);
   int flags = LOOKUP_IMPLICIT;
   if (DIRECT_LIST_INIT_P (init))
-    flags = LOOKUP_NORMAL;
+    {
+      flags = LOOKUP_NORMAL;
+      complain |= tf_no_cleanup;
+    }
   if (BRACE_ENCLOSED_INITIALIZER_P (init)
       && CP_AGGREGATE_TYPE_P (type))
     init = reshape_init (type, init, complain);
@@ -1326,8 +1364,7 @@ massage_init_elt (tree type, tree init, int nested, int flags,
     init = TARGET_EXPR_INITIAL (init);
   /* When we defer constant folding within a statement, we may want to
      defer this folding as well.  */
-  tree t = fold_non_dependent_expr (init, complain);
-  t = maybe_constant_init (t);
+  tree t = fold_non_dependent_init (init, complain);
   if (TREE_CONSTANT (t))
     init = t;
   return init;
@@ -2155,7 +2192,6 @@ build_functional_cast (tree exp, tree parms, tsubst_flags_t complain)
 
   /* The type to which we are casting.  */
   tree type;
-  vec<tree, va_gc> *parmvec;
 
   if (error_operand_p (exp) || parms == error_mark_node)
     return error_mark_node;
@@ -2198,7 +2234,7 @@ build_functional_cast (tree exp, tree parms, tsubst_flags_t complain)
 	  if (type == error_mark_node)
 	    {
 	      if (complain & tf_error)
-		error ("cannot deduce template arguments for %qT from ()",
+		error ("cannot deduce template arguments for %qT from %<()%>",
 		       anode);
 	      return error_mark_node;
 	    }
@@ -2277,12 +2313,11 @@ build_functional_cast (tree exp, tree parms, tsubst_flags_t complain)
     }
 
   /* Call the constructor.  */
-  parmvec = make_tree_vector ();
+  releasing_vec parmvec;
   for (; parms != NULL_TREE; parms = TREE_CHAIN (parms))
     vec_safe_push (parmvec, TREE_VALUE (parms));
   exp = build_special_member_call (NULL_TREE, complete_ctor_identifier,
 				   &parmvec, type, LOOKUP_NORMAL, complain);
-  release_tree_vector (parmvec);
 
   if (exp == error_mark_node)
     return error_mark_node;

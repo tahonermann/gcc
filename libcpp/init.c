@@ -171,7 +171,7 @@ init_library (void)
 /* Initialize a cpp_reader structure.  */
 cpp_reader *
 cpp_create_reader (enum c_lang lang, cpp_hash_table *table,
-		   struct line_maps *line_table)
+		   class line_maps *line_table)
 {
   cpp_reader *pfile;
 
@@ -185,6 +185,7 @@ cpp_create_reader (enum c_lang lang, cpp_hash_table *table,
   CPP_OPTION (pfile, warn_multichar) = 1;
   CPP_OPTION (pfile, discard_comments) = 1;
   CPP_OPTION (pfile, discard_comments_in_macro_exp) = 1;
+  CPP_OPTION (pfile, max_include_depth) = 200;
   CPP_OPTION (pfile, tabstop) = 8;
   CPP_OPTION (pfile, operator_names) = 1;
   CPP_OPTION (pfile, warn_trigraphs) = 2;
@@ -285,7 +286,7 @@ cpp_create_reader (enum c_lang lang, cpp_hash_table *table,
 /* Set the line_table entry in PFILE.  This is called after reading a
    PCH file, as the old line_table will be incorrect.  */
 void
-cpp_set_line_map (cpp_reader *pfile, struct line_maps *line_table)
+cpp_set_line_map (cpp_reader *pfile, class line_maps *line_table)
 {
   pfile->line_table = line_table;
 }
@@ -764,14 +765,9 @@ cpp_finish (cpp_reader *pfile, FILE *deps_stream)
   while (pfile->buffer)
     _cpp_pop_buffer (pfile);
 
-  if (CPP_OPTION (pfile, deps.style) != DEPS_NONE
-      && deps_stream)
-    {
-      deps_write (pfile->deps, deps_stream, 72);
-
-      if (CPP_OPTION (pfile, deps.phony_targets))
-	deps_phony_targets (pfile->deps, deps_stream);
-    }
+  if (CPP_OPTION (pfile, deps.style) != DEPS_NONE && deps_stream)
+    deps_write (pfile->deps, deps_stream,
+		CPP_OPTION (pfile, deps.phony_targets), 72);
 
   /* Report on headers that could use multiple include guards.  */
   if (CPP_OPTION (pfile, print_include_names))

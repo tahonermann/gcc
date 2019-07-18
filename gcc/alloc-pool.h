@@ -34,8 +34,9 @@ typedef unsigned long ALLOC_POOL_ID_TYPE;
 extern ALLOC_POOL_ID_TYPE last_id;
 
 /* Pool allocator memory usage.  */
-struct pool_usage: public mem_usage
+class pool_usage: public mem_usage
 {
+public:
   /* Default contructor.  */
   pool_usage (): m_element_size (0), m_pool_name ("") {}
   /* Constructor.  */
@@ -83,17 +84,14 @@ struct pool_usage: public mem_usage
   {
     fprintf (stderr, "%-32s%-48s %6s%11s%16s%17s%12s\n", "Pool name", name,
 	     "Pools", "Leak", "Peak", "Times", "Elt size");
-    print_dash_line ();
   }
 
   /* Dump footer.  */
   inline void
   dump_footer ()
   {
-    print_dash_line ();
     fprintf (stderr, "%s" PRsa(82) PRsa(10) "\n", "Total",
 	     SIZE_AMOUNT (m_instances), SIZE_AMOUNT (m_allocated));
-    print_dash_line ();
   }
 
   /* Element size.  */

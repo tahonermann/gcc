@@ -57,7 +57,7 @@ compilation is specified by a string called a "spec".  */
      getenv ();
    Hence we need to use "get" for the accessor method, not "getenv".  */
 
-class env_manager
+struct env_manager
 {
  public:
   void init (bool can_restore, bool debug);
@@ -3068,17 +3068,17 @@ execute (void)
   if (!wrapper_string)
     {
       string = find_a_file (&exec_prefixes, commands[0].prog, X_OK, false);
-      commands[0].argv[0] = (string) ? string : commands[0].argv[0];
+      if (string)
+	commands[0].argv[0] = string;
     }
 
   for (n_commands = 1, i = 0; argbuf.iterate (i, &arg); i++)
     if (arg && strcmp (arg, "|") == 0)
       {				/* each command.  */
 #if defined (__MSDOS__) || defined (OS2) || defined (VMS)
-	fatal_error (input_location, "-pipe not supported");
+	fatal_error (input_location, "%<-pipe%> not supported");
 #endif
-	argbuf[i] = 0; /* Termination of
-						     command args.  */
+	argbuf[i] = 0; /* Termination of command args.  */
 	commands[n_commands].prog = argbuf[i + 1];
 	commands[n_commands].argv
 	  = &(argbuf.address ())[i + 1];
@@ -3198,7 +3198,7 @@ execute (void)
 				   ? PEX_RECORD_TIMES : 0),
 		  progname, temp_filename);
   if (pex == NULL)
-    fatal_error (input_location, "pex_init failed: %m");
+    fatal_error (input_location, "%<pex_init%> failed: %m");
 
   for (i = 0; i < n_commands; i++)
     {
@@ -3769,7 +3769,7 @@ driver_wrong_lang_callback (const struct cl_decoded_option *decoded,
   const struct cl_option *option = &cl_options[decoded->opt_index];
 
   if (option->cl_reject_driver)
-    error ("unrecognized command line option %qs",
+    error ("unrecognized command-line option %qs",
 	   decoded->orig_option_with_args_text);
   else
     save_switch (decoded->canonical_option[0],
@@ -4148,7 +4148,7 @@ driver_handle_option (struct gcc_options *opts,
 	       || strcmp (arg, "object") == 0)
 	save_temps_flag = SAVE_TEMPS_OBJ;
       else
-	fatal_error (input_location, "%qs is an unknown -save-temps option",
+	fatal_error (input_location, "%qs is an unknown %<-save-temps%> option",
 		     decoded->orig_option_with_args_text);
       break;
 
@@ -4651,7 +4651,7 @@ process_command (unsigned int decoded_options_count,
     {
       /* -save-temps overrides -pipe, so that temp files are produced */
       if (save_temps_flag)
-	warning (0, "-pipe ignored because -save-temps specified");
+	warning (0, "%<-pipe%> ignored because %<-save-temps%> specified");
       use_pipes = 0;
     }
 
@@ -4751,10 +4751,9 @@ process_command (unsigned int decoded_options_count,
     }
 
   /* Ensure we only invoke each subprocess once.  */
-  if (print_subprocess_help || print_help_list || print_version)
+  if (n_infiles == 0
+      && (print_subprocess_help || print_help_list || print_version))
     {
-      n_infiles = 0;
-
       /* Create a dummy input file, so that we can pass
 	 the help option on to the various sub-processes.  */
       add_infile ("help-dummy", "c");
@@ -6139,7 +6138,8 @@ eval_spec_function (const char *func, const char *args,
 
   alloc_args ();
   if (do_spec_2 (args, soft_matched_part) < 0)
-    fatal_error (input_location, "error in args to spec function %qs", func);
+    fatal_error (input_location, "error in arguments to spec function %qs",
+		 func);
 
   /* argbuf_index is an index for the next argument to be inserted, and
      so contains the count of the args already inserted.  */
@@ -6791,6 +6791,11 @@ print_configuration (FILE *file)
 #endif
 
   fnotice (file, "Thread model: %s\n", thrmod);
+  fnotice (file, "Supported LTO compression algorithms: zlib");
+#ifdef HAVE_ZSTD_H
+  fnotice (file, " zstd");
+#endif
+  fnotice (file, "\n");
 
   /* compiler_version is truncated at the first space when initialized
   from version string, so truncate version_string at the first space
@@ -6924,11 +6929,11 @@ run_attempt (const char **new_argv, const char *out_temp,
 
   pex = pex_init (PEX_USE_PIPES, new_argv[0], NULL);
   if (!pex)
-    fatal_error (input_location, "pex_init failed: %m");
+    fatal_error (input_location, "%<pex_init%> failed: %m");
 
   errmsg = pex_run (pex, pex_flags, new_argv[0],
-		    CONST_CAST2 (char *const *, const char **, &new_argv[1]), out_temp,
-		    err_temp, &err);
+		    CONST_CAST2 (char *const *, const char **, &new_argv[1]),
+		    out_temp, err_temp, &err);
   if (errmsg != NULL)
     {
       errno = err;
@@ -7243,7 +7248,7 @@ compare_files (char *cmpfile[])
 
     if (!ret && length[0] != length[1])
       {
-	error ("%s: -fcompare-debug failure (length)", gcc_input_filename);
+	error ("%s: %<-fcompare-debug%> failure (length)", gcc_input_filename);
 	ret = 1;
       }
 
@@ -7273,7 +7278,7 @@ compare_files (char *cmpfile[])
       {
 	if (memcmp (map[0], map[1], length[0]) != 0)
 	  {
-	    error ("%s: -fcompare-debug failure", gcc_input_filename);
+	    error ("%s: %<-fcompare-debug%> failure", gcc_input_filename);
 	    ret = 1;
 	  }
       }
@@ -7310,7 +7315,7 @@ compare_files (char *cmpfile[])
 
 	if (c0 != c1)
 	  {
-	    error ("%s: -fcompare-debug failure",
+	    error ("%s: %<-fcompare-debug%> failure",
 		   gcc_input_filename);
 	    ret = 1;
 	    break;
@@ -7615,7 +7620,8 @@ driver::set_up_specs () const
       && do_spec_2 (sysroot_suffix_spec, NULL) == 0)
     {
       if (argbuf.length () > 1)
-        error ("spec failure: more than one arg to SYSROOT_SUFFIX_SPEC");
+	error ("spec failure: more than one argument to "
+	       "%<SYSROOT_SUFFIX_SPEC%>");
       else if (argbuf.length () == 1)
         target_sysroot_suffix = xstrdup (argbuf.last ());
     }
@@ -7639,7 +7645,8 @@ driver::set_up_specs () const
       && do_spec_2 (sysroot_hdrs_suffix_spec, NULL) == 0)
     {
       if (argbuf.length () > 1)
-        error ("spec failure: more than one arg to SYSROOT_HEADERS_SUFFIX_SPEC");
+	error ("spec failure: more than one argument "
+	       "to %<SYSROOT_HEADERS_SUFFIX_SPEC%>");
       else if (argbuf.length () == 1)
         target_sysroot_hdrs_suffix = xstrdup (argbuf.last ());
     }
@@ -7844,11 +7851,11 @@ driver::handle_unrecognized_options ()
       {
 	const char *hint = m_option_proposer.suggest_option (switches[i].part1);
 	if (hint)
-	  error ("unrecognized command line option %<-%s%>;"
+	  error ("unrecognized command-line option %<-%s%>;"
 		 " did you mean %<-%s%>?",
 		 switches[i].part1, hint);
 	else
-	  error ("unrecognized command line option %<-%s%>",
+	  error ("unrecognized command-line option %<-%s%>",
 		 switches[i].part1);
       }
 }
@@ -8086,7 +8093,8 @@ driver::prepare_infiles ()
 
   if (!combine_inputs && have_c && have_o && lang_n_infiles > 1)
     fatal_error (input_location,
-		 "cannot specify -o with -c, -S or -E with multiple files");
+		 "cannot specify %<-o%> with %<-c%>, %<-S%> or %<-E%> "
+		 "with multiple files");
 
   /* No early exit needed from main; we can continue.  */
   return false;
@@ -8152,7 +8160,7 @@ driver::do_spec_on_infiles () const
 		{
 		  if (verbose_flag)
 		    inform (UNKNOWN_LOCATION,
-			    "recompiling with -fcompare-debug");
+			    "recompiling with %<-fcompare-debug%>");
 
 		  compare_debug = -compare_debug;
 		  n_switches = n_switches_debug_check[1];
@@ -8168,7 +8176,7 @@ driver::do_spec_on_infiles () const
 
 		  if (value < 0)
 		    {
-		      error ("during -fcompare-debug recompilation");
+		      error ("during %<-fcompare-debug%> recompilation");
 		      this_file_error = 1;
 		    }
 
@@ -8294,7 +8302,7 @@ driver::maybe_run_linker (const char *argv0) const
 					     false);
 	      if (!temp_spec)
 		fatal_error (input_location,
-			     "-fuse-linker-plugin, but %s not found",
+			     "%<-fuse-linker-plugin%>, but %s not found",
 			     LTOPLUGINSONAME);
 	      linker_plugin_file_spec = convert_white_space (temp_spec);
 	    }
@@ -8571,7 +8579,7 @@ static int n_mdswitches;
 /* Check whether a particular argument was used.  The first time we
    canonicalize the switches to keep only the ones we care about.  */
 
-class used_arg_t
+struct used_arg_t
 {
  public:
   int operator () (const char *p, int len);
@@ -9797,7 +9805,7 @@ compare_debug_auxbase_opt_spec_function (int arg,
   len = strlen (argv[0]);
   if (len < 3 || strcmp (argv[0] + len - 3, ".gk") != 0)
     fatal_error (input_location, "argument to %%:compare-debug-auxbase-opt "
-		 "does not end in .gk");
+		 "does not end in %<.gk%>");
 
   if (debug_auxbase_opt)
     return debug_auxbase_opt;

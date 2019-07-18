@@ -358,7 +358,7 @@ add_insn_allocno_copies (rtx_insn *insn)
   rtx set, operand, dup;
   bool bound_p[MAX_RECOG_OPERANDS];
   int i, n, freq;
-  HARD_REG_SET alts;
+  alternative_mask alts;
 
   freq = REG_FREQ_FROM_BB (BLOCK_FOR_INSN (insn));
   if (freq == 0)
@@ -379,7 +379,7 @@ add_insn_allocno_copies (rtx_insn *insn)
      there are no dead registers, there will be no such copies.  */
   if (! find_reg_note (insn, REG_DEAD, NULL_RTX))
     return;
-  ira_setup_alts (insn, alts);
+  alts = ira_setup_alts (insn);
   for (i = 0; i < recog_data.n_operands; i++)
     bound_p[i] = false;
   for (i = 0; i < recog_data.n_operands; i++)
@@ -633,7 +633,12 @@ print_allocno_conflicts (FILE * file, bool reg_p, ira_allocno_t a)
       ira_object_conflict_iterator oci;
 
       if (OBJECT_CONFLICT_ARRAY (obj) == NULL)
-	continue;
+	{
+	  fprintf (file, "\n;;     total conflict hard regs:\n");
+	  fprintf (file, ";;     conflict hard regs:\n\n");
+	  continue;
+	}
+
       if (n > 1)
 	fprintf (file, "\n;;   subobject %d:", i);
       FOR_EACH_OBJECT_CONFLICT (obj, conflict_obj, oci)
@@ -683,6 +688,7 @@ print_conflicts (FILE *file, bool reg_p)
 
   FOR_EACH_ALLOCNO (a, ai)
     print_allocno_conflicts (file, reg_p, a);
+  putc ('\n', file);
 }
 
 /* Print information about allocno or only regno (if REG_P) conflicts

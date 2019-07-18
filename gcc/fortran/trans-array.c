@@ -849,6 +849,41 @@ is_pointer_array (tree expr)
 }
 
 
+/* If the symbol or expression reference a CFI descriptor, return the
+   pointer to the converted gfc descriptor. If an array reference is
+   present as the last argument, check that it is the one applied to
+   the CFI descriptor in the expression. Note that the CFI object is
+   always the symbol in the expression!  */
+
+static bool
+get_CFI_desc (gfc_symbol *sym, gfc_expr *expr,
+	      tree *desc, gfc_array_ref *ar)
+{
+  tree tmp;
+
+  if (!is_CFI_desc (sym, expr))
+    return false;
+
+  if (expr && ar)
+    {
+      if (!(expr->ref && expr->ref->type == REF_ARRAY)
+	  || (&expr->ref->u.ar != ar))
+	return false;
+    }
+
+  if (sym == NULL)
+    tmp = expr->symtree->n.sym->backend_decl;
+  else
+    tmp = sym->backend_decl;
+
+  if (tmp && DECL_LANG_SPECIFIC (tmp))
+    tmp = GFC_DECL_SAVED_DESCRIPTOR (tmp);
+
+  *desc = tmp;
+  return true;
+}
+
+
 /* Return the span of an array.  */
 
 tree
@@ -856,9 +891,14 @@ gfc_get_array_span (tree desc, gfc_expr *expr)
 {
   tree tmp;
 
-  if (is_pointer_array (desc))
-    /* This will have the span field set.  */
-    tmp = gfc_conv_descriptor_span_get (desc);
+  if (is_pointer_array (desc) || get_CFI_desc (NULL, expr, &desc, NULL))
+    {
+      if (POINTER_TYPE_P (TREE_TYPE (desc)))
+	desc = build_fold_indirect_ref_loc (input_location, desc);
+
+      /* This will have the span field set.  */
+      tmp = gfc_conv_descriptor_span_get (desc);
+    }
   else if (TREE_CODE (desc) == COMPONENT_REF
 	   && GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (desc))
 	   && GFC_CLASS_TYPE_P (TREE_TYPE (TREE_OPERAND (desc, 0))))
@@ -1199,6 +1239,7 @@ gfc_trans_create_temp_array (stmtblock_t * pre, stmtblock_t * post, gfc_ss * ss,
   tree nelem;
   tree cond;
   tree or_expr;
+  tree elemsize;
   tree class_expr = NULL_TREE;
   int n, dim, tmp_dim;
   int total_dim = 0;
@@ -1293,15 +1334,6 @@ gfc_trans_create_temp_array (stmtblock_t * pre, stmtblock_t * post, gfc_ss * ss,
   tmp = gfc_conv_descriptor_dtype (desc);
   gfc_add_modify (pre, tmp, gfc_get_dtype (TREE_TYPE (desc)));
 
-  /* Also set the span for derived types, since they can be used in
-     component references to arrays of this type.  */
-  if (TREE_CODE (eltype) == RECORD_TYPE)
-    {
-      tmp = TYPE_SIZE_UNIT (eltype);
-      tmp = fold_convert (gfc_array_index_type, tmp);
-      gfc_conv_descriptor_span_set (pre, desc, tmp);
-    }
-
   /*
      Fill in the bounds and stride.  This is a packed array, so:
 
@@ -1373,22 +1405,21 @@ gfc_trans_create_temp_array (stmtblock_t * pre, stmtblock_t * post, gfc_ss * ss,
 	}
     }
 
+  if (class_expr == NULL_TREE)
+    elemsize = fold_convert (gfc_array_index_type,
+			     TYPE_SIZE_UNIT (gfc_get_element_type (type)));
+  else
+    elemsize = gfc_class_vtab_size_get (class_expr);
+
   /* Get the size of the array.  */
   if (size && !callee_alloc)
     {
-      tree elemsize;
       /* If or_expr is true, then the extent in at least one
 	 dimension is zero and the size is set to zero.  */
       size = fold_build3_loc (input_location, COND_EXPR, gfc_array_index_type,
 			      or_expr, gfc_index_zero_node, size);
 
       nelem = size;
-      if (class_expr == NULL_TREE)
-	elemsize = fold_convert (gfc_array_index_type,
-			TYPE_SIZE_UNIT (gfc_get_element_type (type)));
-      else
-	elemsize = gfc_class_vtab_size_get (class_expr);
-
       size = fold_build2_loc (input_location, MULT_EXPR, gfc_array_index_type,
 			      size, elemsize);
     }
@@ -1397,6 +1428,10 @@ gfc_trans_create_temp_array (stmtblock_t * pre, stmtblock_t * post, gfc_ss * ss,
       nelem = size;
       size = NULL_TREE;
     }
+
+  /* Set the span.  */
+  tmp = fold_convert (gfc_array_index_type, elemsize);
+  gfc_conv_descriptor_span_set (pre, desc, tmp);
 
   gfc_trans_allocate_array_storage (pre, post, info, size, nelem, initial,
 				    dynamic, dealloc);
@@ -2099,6 +2134,8 @@ get_array_ctor_var_strlen (stmtblock_t *block, gfc_expr * expr, tree * len)
 	{
 	case REF_ARRAY:
 	  /* Array references don't change the string length.  */
+	  if (ts->deferred)
+	    get_array_ctor_all_strlen (block, expr, len);
 	  break;
 
 	case REF_COMPONENT:
@@ -2107,7 +2144,8 @@ get_array_ctor_var_strlen (stmtblock_t *block, gfc_expr * expr, tree * len)
 	  break;
 
 	case REF_SUBSTRING:
-	  if (ref->u.ss.start->expr_type != EXPR_CONSTANT
+	  if (ref->u.ss.end == NULL
+	      || ref->u.ss.start->expr_type != EXPR_CONSTANT
 	      || ref->u.ss.end->expr_type != EXPR_CONSTANT)
 	    {
 	      /* Note that this might evaluate expr.  */
@@ -2507,7 +2545,6 @@ trans_array_constructor (gfc_ss * ss, locus * where)
 			       ss_info->string_length);
 	  ss_info->string_length = gfc_evaluate_now (ss_info->string_length,
 						     &length_se.pre);
-
 	  gfc_add_block_to_block (&outer_loop->pre, &length_se.pre);
 	  gfc_add_block_to_block (&outer_loop->post, &length_se.post);
 	}
@@ -2697,6 +2734,9 @@ bool
 gfc_scalar_elemental_arg_saved_as_reference (gfc_ss_info * ss_info)
 {
   if (ss_info->type != GFC_SS_REFERENCE)
+    return false;
+
+  if (ss_info->data.scalar.needs_temporary)
     return false;
 
   /* If the actual argument can be absent (in other words, it can
@@ -3461,11 +3501,8 @@ gfc_conv_scalarized_array_ref (gfc_se * se, gfc_array_ref * ar)
   if (build_class_array_ref (se, base, index))
     return;
 
-  if (expr && ((is_subref_array (expr)
-		&& GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (info->descriptor)))
-	       || (expr->ts.deferred && (expr->expr_type == EXPR_VARIABLE
-					 || expr->expr_type == EXPR_FUNCTION))))
-    decl = expr->symtree->n.sym->backend_decl;
+  if (get_CFI_desc (NULL, expr, &decl, ar))
+    decl = build_fold_indirect_ref_loc (input_location, decl);
 
   /* A pointer array component can be detected from its field decl. Fix
      the descriptor, mark the resulting variable decl and pass it to
@@ -3712,6 +3749,8 @@ gfc_conv_array_ref (gfc_se * se, gfc_array_ref * ar, gfc_expr *expr,
   /* A pointer array component can be detected from its field decl. Fix
      the descriptor, mark the resulting variable decl and pass it to
      build_array_ref.  */
+  if (get_CFI_desc (sym, expr, &decl, ar))
+    decl = build_fold_indirect_ref_loc (input_location, decl);
   if (!expr->ts.deferred && !sym->attr.codimension
       && is_pointer_array (se->expr))
     {
@@ -4740,8 +4779,6 @@ gfc_could_be_alias (gfc_ss * lss, gfc_ss * rss)
 	}
     }
 
-  lsym_pointer = lsym->attr.pointer;
-  lsym_target = lsym->attr.target;
   lsym_pointer = lsym->attr.pointer;
   lsym_target = lsym->attr.target;
 
@@ -5986,7 +6023,6 @@ gfc_conv_array_initializer (tree type, gfc_expr * expr)
 {
   gfc_constructor *c;
   tree tmp;
-  offset_int wtmp;
   gfc_se se;
   tree index, range;
   vec<constructor_elt, va_gc> *v = NULL;
@@ -6009,13 +6045,10 @@ gfc_conv_array_initializer (tree type, gfc_expr * expr)
       else
 	gfc_conv_structure (&se, expr, 1);
 
-      wtmp = wi::to_offset (TYPE_MAX_VALUE (TYPE_DOMAIN (type))) + 1;
-      /* This will probably eat buckets of memory for large arrays.  */
-      while (wtmp != 0)
-        {
-	  CONSTRUCTOR_APPEND_ELT (v, NULL_TREE, se.expr);
-	  wtmp -= 1;
-        }
+      CONSTRUCTOR_APPEND_ELT (v, build2 (RANGE_EXPR, gfc_array_index_type,
+					 TYPE_MIN_VALUE (TYPE_DOMAIN (type)),
+					 TYPE_MAX_VALUE (TYPE_DOMAIN (type))),
+			      se.expr);
       break;
 
     case EXPR_ARRAY:
@@ -6930,6 +6963,7 @@ get_array_charlen (gfc_expr *expr, gfc_se *se)
   gfc_formal_arglist *formal;
   gfc_actual_arglist *arg;
   gfc_se tse;
+  gfc_expr *e;
 
   if (expr->ts.u.cl->length
 	&& gfc_is_constant_expr (expr->ts.u.cl->length))
@@ -6941,6 +6975,34 @@ get_array_charlen (gfc_expr *expr, gfc_se *se)
 
   switch (expr->expr_type)
     {
+    case EXPR_ARRAY:
+
+      /* This is somewhat brutal. The expression for the first
+	 element of the array is evaluated and assigned to a
+	 new string length for the original expression.  */
+      e = gfc_constructor_first (expr->value.constructor)->expr;
+
+      gfc_init_se (&tse, NULL);
+      if (e->rank)
+	gfc_conv_expr_descriptor (&tse, e);
+      else
+	gfc_conv_expr (&tse, e);
+
+      gfc_add_block_to_block (&se->pre, &tse.pre);
+      gfc_add_block_to_block (&se->post, &tse.post);
+
+      if (!expr->ts.u.cl->backend_decl || !VAR_P (expr->ts.u.cl->backend_decl))
+	{
+	  expr->ts.u.cl = gfc_new_charlen (gfc_current_ns, NULL);
+	  expr->ts.u.cl->backend_decl =
+			gfc_create_var (gfc_charlen_type_node, "sln");
+	}
+
+      gfc_add_modify (&se->pre, expr->ts.u.cl->backend_decl,
+		      tse.string_length);
+
+      return;
+
     case EXPR_OP:
       get_array_charlen (expr->value.op.op1, se);
 
@@ -6948,7 +7010,7 @@ get_array_charlen (gfc_expr *expr, gfc_se *se)
       if (expr->value.op.op == INTRINSIC_PARENTHESES)
 	return;
 
-     expr->ts.u.cl->backend_decl =
+      expr->ts.u.cl->backend_decl =
 		gfc_create_var (gfc_charlen_type_node, "sln");
 
       if (expr->value.op.op2)
@@ -7166,6 +7228,8 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
 
       if (se->force_tmp)
 	need_tmp = 1;
+      else if (se->force_no_tmp)
+	need_tmp = 0;
 
       if (need_tmp)
 	full = 0;
@@ -7326,7 +7390,8 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
 
   if (need_tmp)
     {
-      if (expr->ts.type == BT_CHARACTER && !expr->ts.u.cl->backend_decl)
+      if (expr->ts.type == BT_CHARACTER
+	  && (!expr->ts.u.cl->backend_decl || expr->expr_type == EXPR_ARRAY))
 	get_array_charlen (expr, se);
 
       /* Tell the scalarizer to make a temporary.  */
@@ -7448,7 +7513,17 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
 
       /* Set the string_length for a character array.  */
       if (expr->ts.type == BT_CHARACTER)
-	se->string_length =  gfc_get_expr_charlen (expr);
+	{
+	  se->string_length =  gfc_get_expr_charlen (expr);
+	  if (VAR_P (se->string_length)
+	      && expr->ts.u.cl->backend_decl == se->string_length)
+	    tmp = ss_info->string_length;
+	  else
+	    tmp = se->string_length;
+
+	  if (expr->ts.deferred)
+	    gfc_add_modify (&se->pre, expr->ts.u.cl->backend_decl, tmp);
+	}
 
       /* If we have an array section or are assigning make sure that
 	 the lower bound is 1.  References to the full
@@ -7510,7 +7585,10 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
 	}
 
       /* Set the span field.  */
-      tmp = gfc_get_array_span (desc, expr);
+      if (expr->ts.type == BT_CHARACTER && ss_info->string_length)
+	tmp = ss_info->string_length;
+      else
+	tmp = gfc_get_array_span (desc, expr);
       if (tmp != NULL_TREE)
 	gfc_conv_descriptor_span_set (&loop.pre, parm, tmp);
 
@@ -7773,6 +7851,23 @@ array_parameter_size (tree desc, gfc_expr *expr, tree *size)
 			   *size, fold_convert (gfc_array_index_type, elem));
 }
 
+/* Helper function - return true if the argument is a pointer.  */
+
+static bool
+is_pointer (gfc_expr *e)
+{
+  gfc_symbol *sym;
+
+  if (e->expr_type != EXPR_VARIABLE ||  e->symtree == NULL)
+    return false;
+
+  sym = e->symtree->n.sym;
+  if (sym == NULL)
+    return false;
+
+  return sym->attr.pointer || sym->attr.proc_pointer;
+}
+
 /* Convert an array for passing as an actual parameter.  */
 
 void
@@ -8022,6 +8117,20 @@ gfc_conv_array_parameter (gfc_se * se, gfc_expr * expr, bool g77,
 	  else
 	    gfc_warning (OPT_Warray_temporaries,
 			 "Creating array temporary at %L", &expr->where);
+	}
+
+      /* When optmizing, we can use gfc_conv_subref_array_arg for
+	 making the packing and unpacking operation visible to the
+	 optimizers.  */
+
+      if (g77 && optimize && !optimize_size && expr->expr_type == EXPR_VARIABLE
+	  && !is_pointer (expr) && ! gfc_has_dimen_vector_ref (expr)
+	  && (fsym == NULL || fsym->ts.type != BT_ASSUMED))
+	{
+	  gfc_conv_subref_array_arg (se, expr, g77,
+				     fsym ? fsym->attr.intent : INTENT_INOUT,
+				     false, fsym, proc_name, sym, true);
+	  return;
 	}
 
       ptr = build_call_expr_loc (input_location,
@@ -10518,6 +10627,8 @@ static gfc_ss *
 gfc_walk_variable_expr (gfc_ss * ss, gfc_expr * expr)
 {
   gfc_ref *ref;
+
+  gfc_fix_class_refs (expr);
 
   for (ref = expr->ref; ref; ref = ref->next)
     if (ref->type == REF_ARRAY && ref->u.ar.type != AR_ELEMENT)

@@ -61,6 +61,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "opts.h"
 #include "predict.h"
 #include "rtx-vector-builder.h"
+#include "gimple.h"
+#include "gimple-ssa.h"
+#include "gimplify.h"
 
 struct target_rtl default_target_rtl;
 #if SWITCHABLE_TARGET
@@ -348,7 +351,7 @@ const_fixed_hasher::equal (rtx x, rtx y)
 /* Return true if the given memory attributes are equal.  */
 
 bool
-mem_attrs_eq_p (const struct mem_attrs *p, const struct mem_attrs *q)
+mem_attrs_eq_p (const class mem_attrs *p, const class mem_attrs *q)
 {
   if (p == q)
     return true;
@@ -1921,7 +1924,7 @@ set_mem_attributes_minus_bitpos (rtx ref, tree t, int objectp,
 {
   poly_int64 apply_bitpos = 0;
   tree type;
-  struct mem_attrs attrs, *defattrs, *refattrs;
+  class mem_attrs attrs, *defattrs, *refattrs;
   addr_space_t as;
 
   /* It can happen that type_for_mode was given a mode for which there
@@ -2128,6 +2131,27 @@ set_mem_attributes_minus_bitpos (rtx ref, tree t, int objectp,
 	  apply_bitpos = bitpos;
 	}
 
+      /* If this is a reference based on a partitioned decl replace the
+	 base with a MEM_REF of the pointer representative we created
+	 during stack slot partitioning.  */
+      if (attrs.expr
+	  && VAR_P (base)
+	  && ! is_global_var (base)
+	  && cfun->gimple_df->decls_to_pointers != NULL)
+	{
+	  tree *namep = cfun->gimple_df->decls_to_pointers->get (base);
+	  if (namep)
+	    {
+	      attrs.expr = unshare_expr (attrs.expr);
+	      tree *orig_base = &attrs.expr;
+	      while (handled_component_p (*orig_base))
+		orig_base = &TREE_OPERAND (*orig_base, 0);
+	      tree aptrt = reference_alias_ptr_type (*orig_base);
+	      *orig_base = build2 (MEM_REF, TREE_TYPE (*orig_base), *namep,
+				   build_int_cst (aptrt, 0));
+	    }
+	}
+
       /* Compute the alignment.  */
       unsigned int obj_align;
       unsigned HOST_WIDE_INT obj_bitpos;
@@ -2310,7 +2334,7 @@ change_address (rtx memref, machine_mode mode, rtx addr)
 {
   rtx new_rtx = change_address_1 (memref, mode, addr, 1, false);
   machine_mode mmode = GET_MODE (new_rtx);
-  struct mem_attrs *defattrs;
+  class mem_attrs *defattrs;
 
   mem_attrs attrs (*get_mem_attrs (memref));
   defattrs = mode_mem_attrs[(int) mmode];
@@ -2354,7 +2378,7 @@ adjust_address_1 (rtx memref, machine_mode mode, poly_int64 offset,
   rtx addr = XEXP (memref, 0);
   rtx new_rtx;
   scalar_int_mode address_mode;
-  struct mem_attrs attrs (*get_mem_attrs (memref)), *defattrs;
+  class mem_attrs attrs (*get_mem_attrs (memref)), *defattrs;
   unsigned HOST_WIDE_INT max_align;
 #ifdef POINTERS_EXTEND_UNSIGNED
   scalar_int_mode pointer_mode
@@ -2500,7 +2524,7 @@ offset_address (rtx memref, rtx offset, unsigned HOST_WIDE_INT pow2)
 {
   rtx new_rtx, addr = XEXP (memref, 0);
   machine_mode address_mode;
-  struct mem_attrs *defattrs;
+  class mem_attrs *defattrs;
 
   mem_attrs attrs (*get_mem_attrs (memref));
   address_mode = get_address_mode (memref);
@@ -3940,6 +3964,7 @@ try_split (rtx pat, rtx_insn *trial, int last)
 	  break;
 
 	case REG_NON_LOCAL_GOTO:
+	case REG_LABEL_TARGET:
 	  for (insn = insn_last; insn != NULL_RTX; insn = PREV_INSN (insn))
 	    {
 	      if (JUMP_P (insn))
@@ -3992,7 +4017,7 @@ try_split (rtx pat, rtx_insn *trial, int last)
   before = PREV_INSN (trial);
   after = NEXT_INSN (trial);
 
-  tem = emit_insn_after_setloc (seq, trial, INSN_LOCATION (trial));
+  emit_insn_after_setloc (seq, trial, INSN_LOCATION (trial));
 
   delete_insn (trial);
 
@@ -6555,6 +6580,18 @@ location_t
 curr_insn_location (void)
 {
   return curr_location;
+}
+
+/* Set the location of the insn chain starting at INSN to LOC.  */
+void
+set_insn_locations (rtx_insn *insn, location_t loc)
+{
+  while (insn)
+    {
+      if (INSN_P (insn))
+	INSN_LOCATION (insn) = loc;
+      insn = NEXT_INSN (insn);
+    }
 }
 
 /* Return lexical scope block insn belongs to.  */

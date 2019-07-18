@@ -2172,8 +2172,9 @@ process_alt_operands (int only_alternative)
 		    else
 		      {
 			/* Operands don't match.  If the operands are
-			   different user defined explicit hard registers,
-			   then we cannot make them match.  */
+			   different user defined explicit hard
+			   registers, then we cannot make them match
+			   when one is early clobber operand.  */
 			if ((REG_P (*curr_id->operand_loc[nop])
 			     || SUBREG_P (*curr_id->operand_loc[nop]))
 			    && (REG_P (*curr_id->operand_loc[m])
@@ -2192,9 +2193,17 @@ process_alt_operands (int only_alternative)
 				&& REG_P (m_reg)
 				&& HARD_REGISTER_P (m_reg)
 				&& REG_USERVAR_P (m_reg))
-			      break;
+			      {
+				int i;
+				
+				for (i = 0; i < early_clobbered_regs_num; i++)
+				  if (m == early_clobbered_nops[i])
+				    break;
+				if (i < early_clobbered_regs_num
+				    || early_clobber_p)
+				  break;
+			      }
 			  }
-
 			/* Both operands must allow a reload register,
 			   otherwise we cannot make them match.  */
 			if (curr_alt[m] == NO_REGS)
@@ -2350,6 +2359,8 @@ process_alt_operands (int only_alternative)
 		  break;
 
 		reg:
+		  if (mode == BLKmode)
+		    break;
 		  this_alternative = reg_class_subunion[this_alternative][cl];
 		  IOR_HARD_REG_SET (this_alternative_set,
 				    reg_class_contents[cl]);
@@ -2360,8 +2371,6 @@ process_alt_operands (int only_alternative)
 		      IOR_HARD_REG_SET (this_costly_alternative_set,
 					reg_class_contents[cl]);
 		    }
-		  if (mode == BLKmode)
-		    break;
 		  winreg = true;
 		  if (REG_P (op))
 		    {
@@ -2681,7 +2690,7 @@ process_alt_operands (int only_alternative)
 		  if (lra_dump_file != NULL)
 		    fprintf (lra_dump_file,
 			     "            alt=%d: reload pseudo for op %d "
-			     " cannot hold the mode value -- refuse\n",
+			     "cannot hold the mode value -- refuse\n",
 			     nalt, nop);
 		  goto fail;
 		}
@@ -4256,6 +4265,32 @@ curr_insn_transform (bool check_only_p)
 			   || MEM_P (SET_DEST (curr_insn_set))
 			   || GET_CODE (SET_DEST (curr_insn_set)) == SUBREG))))
 	    optional_p = true;
+	  else if (goal_alt_matched[i][0] != -1
+		   && curr_static_id->operand[i].type == OP_OUT
+		   && (curr_static_id->operand_alternative
+		       [goal_alt_number * n_operands + i].earlyclobber)
+		   && REG_P (op))
+	    {
+	      for (j = 0; goal_alt_matched[i][j] != -1; j++)
+		{
+		  rtx op2 = *curr_id->operand_loc[goal_alt_matched[i][j]];
+		  
+		  if (REG_P (op2) && REGNO (op) != REGNO (op2))
+		    break;
+		}
+	      if (goal_alt_matched[i][j] != -1)
+		{
+		  /* Generate reloads for different output and matched
+		     input registers.  This is the easiest way to avoid
+		     creation of non-existing register conflicts in
+		     lra-lives.c.  */
+		  match_reload (i, goal_alt_matched[i], outputs, goal_alt[i], &before,
+				&after, TRUE);
+		  outputs[n_outputs++] = i;
+		  outputs[n_outputs] = -1;
+		}
+	      continue;
+	    }
 	  else
 	    continue;
 	}
@@ -4872,7 +4907,7 @@ lra_constraints (bool first_p)
 	}
       if (new_insns_num > MAX_RELOAD_INSNS_NUMBER)
 	internal_error
-	  ("Max. number of generated reload insns per insn is achieved (%d)\n",
+	  ("maximum number of generated reload insns per insn achieved (%d)",
 	   MAX_RELOAD_INSNS_NUMBER);
       new_insns_num++;
       if (DEBUG_INSN_P (curr_insn))
@@ -5839,6 +5874,9 @@ invariant_p (const_rtx x)
   enum rtx_code code;
   int i, j;
 
+  if (side_effects_p (x))
+    return false;
+
   code = GET_CODE (x);
   mode = GET_MODE (x);
   if (code == SUBREG)
@@ -6365,6 +6403,7 @@ inherit_in_ebb (rtx_insn *head, rtx_insn *tail)
 			add_to_hard_reg_set (&s, PSEUDO_REGNO_MODE (dst_regno),
 					     reg_renumber[dst_regno]);
 		      AND_COMPL_HARD_REG_SET (live_hard_regs, s);
+		      AND_COMPL_HARD_REG_SET (potential_reload_hard_regs, s);
 		    }
 		  /* We should invalidate potential inheritance or
 		     splitting for the current insn usages to the next

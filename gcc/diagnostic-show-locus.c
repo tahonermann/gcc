@@ -39,6 +39,13 @@ along with GCC; see the file COPYING3.  If not see
 # include <sys/ioctl.h>
 #endif
 
+/* Disable warnings about quoting issues in the pp_xxx calls below
+   that (intentionally) don't follow GCC diagnostic conventions.  */
+#if __GNUC__ >= 10
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wformat-diag"
+#endif
+
 /* Classes for rendering source code and diagnostics, within an
    anonymous namespace.
    The work is done by "class layout", which embeds and uses
@@ -157,8 +164,9 @@ struct line_bounds
    splits the pertinent source lines into a list of disjoint line_span
    instances (e.g. lines 5-10, lines 15-20, line 23).  */
 
-struct line_span
+class line_span
 {
+public:
   line_span (linenum_type first_line, linenum_type last_line)
     : m_first_line (first_line), m_last_line (last_line)
   {
@@ -1402,8 +1410,9 @@ layout::print_annotation_line (linenum_type row, const line_bounds lbounds)
 
    A label within the given row of source.  */
 
-struct line_label
+class line_label
 {
+public:
   line_label (int state_idx, int column, label_text text)
   : m_state_idx (state_idx), m_column (column),
     m_text (text), m_length (strlen (text.m_buffer)),
@@ -1716,8 +1725,9 @@ layout::annotation_line_showed_range_p (linenum_type line, int start_column,
 
 /* A range of columns within a line.  */
 
-struct column_range
+class column_range
 {
+public:
   column_range (int start_, int finish_) : start (start_), finish (finish_)
   {
     /* We must have either a range, or an insertion.  */
@@ -1769,8 +1779,9 @@ get_printed_columns (const fixit_hint *hint)
    instances that affected the line, potentially consolidating hints
    into corrections to make the result easier for the user to read.  */
 
-struct correction
+class correction
 {
+public:
   correction (column_range affected_columns,
 	      column_range printed_columns,
 	      const char *new_text, size_t new_text_len)
@@ -1847,8 +1858,9 @@ correction::ensure_terminated ()
    This is used by layout::print_trailing_fixits for planning
    how to print the fix-it hints affecting the line.  */
 
-struct line_corrections
+class line_corrections
 {
+public:
   line_corrections (const char *filename, linenum_type row)
   : m_filename (filename), m_row (row)
   {}
@@ -1874,8 +1886,9 @@ line_corrections::~line_corrections ()
 /* A struct wrapping a particular source line, allowing
    run-time bounds-checking of accesses in a checked build.  */
 
-struct source_line
+class source_line
 {
+public:
   source_line (const char *filename, int line);
 
   char_span as_span () { return char_span (chars, width); }
@@ -3740,3 +3753,7 @@ diagnostic_show_locus_c_tests ()
 } // namespace selftest
 
 #endif /* #if CHECKING_P */
+
+#if __GNUC__ >= 10
+#  pragma GCC diagnostic pop
+#endif

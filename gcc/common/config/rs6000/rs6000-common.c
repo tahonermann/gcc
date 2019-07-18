@@ -31,6 +31,8 @@
 /* Implement TARGET_OPTION_OPTIMIZATION_TABLE.  */
 static const struct default_options rs6000_option_optimization_table[] =
   {
+    /* Split multi-word types early.  */
+    { OPT_LEVELS_ALL, OPT_fsplit_wide_types_early, NULL, 1 },
     /* Enable -fsched-pressure for first pass instruction scheduling.  */
     { OPT_LEVELS_1_PLUS, OPT_fsched_pressure, NULL, 1 },
     { OPT_LEVELS_NONE, 0, NULL, 0 }
@@ -178,7 +180,7 @@ rs6000_handle_option (struct gcc_options *opts, struct gcc_options *opts_set,
 	  else if (! strcmp (q, "builtin"))
 	    mask = MASK_DEBUG_BUILTIN;
 	  else
-	    error_at (loc, "unknown -mdebug-%s switch", q);
+	    error_at (loc, "unknown %<-mdebug-%s%> switch", q);
 
 	  if (invert)
 	    opts->x_rs6000_debug &= ~mask;
@@ -217,7 +219,7 @@ rs6000_handle_option (struct gcc_options *opts, struct gcc_options *opts_set,
     case OPT_mlong_double_:
       if (value != 64 && value != 128)
 	{
-	  error_at (loc, "unknown switch -mlong-double-%s", arg);
+	  error_at (loc, "unknown switch %<-mlong-double-%s%>", arg);
 	  opts->x_rs6000_long_double_type_size
 	    = RS6000_DEFAULT_LONG_DOUBLE_SIZE;
 	  return false;

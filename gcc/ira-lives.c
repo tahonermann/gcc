@@ -80,8 +80,9 @@ static int last_call_num;
 /* The number of last call at which given allocno was saved.  */
 static int *allocno_saved_at_call;
 
-/* The value of get_preferred_alternatives for the current instruction,
-   supplemental to recog_data.  */
+/* The value returned by ira_setup_alts for the current instruction;
+   i.e. the set of alternatives that we should consider to be likely
+   candidates during reloading.  */
 static alternative_mask preferred_alternatives;
 
 /* If non-NULL, the source operand of a register to register copy for which
@@ -163,7 +164,9 @@ static void
 make_object_dead (ira_object_t obj)
 {
   live_range_t lr;
+  int regno;
   int ignore_regno = -1;
+  int ignore_total_regno = -1;
   int end_regno = -1;
 
   sparseset_clear_bit (objects_live, OBJECT_CONFLICT_ID (obj));
@@ -174,16 +177,14 @@ make_object_dead (ira_object_t obj)
       && REGNO (ignore_reg_for_conflicts) < FIRST_PSEUDO_REGISTER)
     {
       end_regno = END_REGNO (ignore_reg_for_conflicts);
-      int src_regno = ignore_regno = REGNO (ignore_reg_for_conflicts);
+      ignore_regno = ignore_total_regno = REGNO (ignore_reg_for_conflicts);
 
-      while (src_regno < end_regno)
+      for (regno = ignore_regno; regno < end_regno; regno++)
 	{
-	  if (TEST_HARD_REG_BIT (OBJECT_CONFLICT_HARD_REGS (obj), src_regno))
-	    {
-	      ignore_regno = end_regno = -1;
-	      break;
-	    }
-	  src_regno++;
+	  if (TEST_HARD_REG_BIT (OBJECT_CONFLICT_HARD_REGS (obj), regno))
+	    ignore_regno = end_regno;
+	  if (TEST_HARD_REG_BIT (OBJECT_TOTAL_CONFLICT_HARD_REGS (obj), regno))
+	    ignore_total_regno = end_regno;
 	}
     }
 
@@ -192,8 +193,10 @@ make_object_dead (ira_object_t obj)
 
   /* If IGNORE_REG_FOR_CONFLICTS did not already conflict with OBJ, make
      sure it still doesn't.  */
-  for (; ignore_regno < end_regno; ignore_regno++)
-    CLEAR_HARD_REG_BIT (OBJECT_CONFLICT_HARD_REGS (obj), ignore_regno);
+  for (regno = ignore_regno; regno < end_regno; regno++)
+    CLEAR_HARD_REG_BIT (OBJECT_CONFLICT_HARD_REGS (obj), regno);
+  for (regno = ignore_total_regno; regno < end_regno; regno++)
+    CLEAR_HARD_REG_BIT (OBJECT_TOTAL_CONFLICT_HARD_REGS (obj), regno);
 
   lr = OBJECT_LIVE_RANGES (obj);
   ira_assert (lr != NULL);
@@ -1234,15 +1237,8 @@ process_bb_node_lives (ira_loop_tree_node_t loop_tree_node)
 		  }
 	      }
 
-	  extract_insn (insn);
-	  preferred_alternatives = get_preferred_alternatives (insn);
-	  preprocess_constraints (insn);
+	  preferred_alternatives = ira_setup_alts (insn);
 	  process_single_reg_class_operands (false, freq);
-
-	  /* See which defined values die here.  */
-	  FOR_EACH_INSN_DEF (def, insn)
-	    if (!call_p || !DF_REF_FLAGS_IS_SET (def, DF_REF_MAY_CLOBBER))
-	      mark_ref_dead (def);
 
 	  if (call_p)
 	    {
@@ -1306,6 +1302,17 @@ process_bb_node_lives (ira_loop_tree_node_t loop_tree_node)
 		    ALLOCNO_CHEAP_CALLS_CROSSED_NUM (a)++;
 		}
 	    }
+
+	  /* See which defined values die here.  Note that we include
+	     the call insn in the lifetimes of these values, so we don't
+	     mistakenly consider, for e.g. an addressing mode with a
+	     side-effect like a post-increment fetching the address,
+	     that the use happens before the call, and the def to happen
+	     after the call: we believe both to happen before the actual
+	     call.  (We don't handle return-values here.)  */
+	  FOR_EACH_INSN_DEF (def, insn)
+	    if (!call_p || !DF_REF_FLAGS_IS_SET (def, DF_REF_MAY_CLOBBER))
+	      mark_ref_dead (def);
 
 	  make_early_clobber_and_input_conflicts ();
 

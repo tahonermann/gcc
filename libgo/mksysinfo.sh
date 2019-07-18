@@ -735,13 +735,9 @@ if ! grep "const EAI_OVERFLOW " ${OUT} >/dev/null 2>&1; then
 fi
 
 # The passwd struct.
-# Force uid and gid from int32 to uint32 for consistency; they are
-# int32 on Solaris 10 but uint32 everywhere else including Solaris 11.
 grep '^type _passwd ' gen-sysinfo.go | \
     sed -e 's/_passwd/Passwd/' \
       -e 's/ pw_/ Pw_/g' \
-      -e 's/ Pw_uid int32/ Pw_uid uint32/' \
-      -e 's/ Pw_gid int32/ Pw_gid uint32/' \
     >> ${OUT}
 
 # The group struct.
@@ -1024,6 +1020,18 @@ grep '^type _ifinfomsg ' gen-sysinfo.go | \
       -e 's/ifi_change/Change/' \
     >> ${OUT}
 
+# The if_msghdr struct.
+grep '^type _if_msghdr ' gen-sysinfo.go | \
+    sed -e 's/_if_msghdr/IfMsgHdr/' \
+		-e 's/ifm_msglen/Msglen/' \
+		-e 's/ifm_version/Version/' \
+		-e 's/ifm_type/Type/' \
+		-e 's/ifm_addrs/Addrs/' \
+		-e 's/ifm_flags/Flags/' \
+		-e 's/ifm_index/Index/' \
+		-e 's/ifm_addrlen/Addrlen/' \
+		>> ${OUT}
+
 # The interface information types and flags.
 grep '^const _IFA' gen-sysinfo.go | \
     sed -e 's/^\(const \)_\(IFA[^= ]*\)\(.*\)$/\1\2 = _\2/' >> ${OUT}
@@ -1113,12 +1121,15 @@ grep '^const _FALLOC_' gen-sysinfo.go |
 
 # The statfs struct.
 # Prefer largefile variant if available.
+# CentOS 5 does not have f_flags, so pull from f_spare.
 statfs=`grep '^type _statfs64 ' gen-sysinfo.go || true`
-if test "$statfs" != ""; then
-  grep '^type _statfs64 ' gen-sysinfo.go
-else
-  grep '^type _statfs ' gen-sysinfo.go
-fi | sed -e 's/type _statfs64/type Statfs_t/' \
+if test "$statfs" == ""; then
+  statfs=`grep '^type _statfs ' gen-sysinfo.go || true`
+fi
+if ! echo "$statfs" | grep f_flags; then
+  statfs=`echo "$statfs" | sed -e 's/f_spare \[4+1\]\([^ ;]*\)/f_flags \1; f_spare [3+1]\1/'`
+fi
+echo "$statfs" | sed -e 's/type _statfs64/type Statfs_t/' \
 	 -e 's/type _statfs/type Statfs_t/' \
 	 -e 's/f_type/Type/' \
 	 -e 's/f_bsize/Bsize/' \

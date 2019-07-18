@@ -74,6 +74,8 @@ set_dec_flags (int value)
   SET_BITFLAG (flag_dec_static, value, value);
   SET_BITFLAG (flag_dec_math, value, value);
   SET_BITFLAG (flag_dec_include, value, value);
+  SET_BITFLAG (flag_dec_format_defaults, value, value);
+  SET_BITFLAG (flag_dec_blank_format_item, value, value);
 }
 
 /* Finalize DEC flags.  */
@@ -263,7 +265,7 @@ gfc_post_options (const char **pfilename)
   /* Excess precision other than "fast" requires front-end
      support.  */
   if (flag_excess_precision_cmdline == EXCESS_PRECISION_STANDARD)
-    sorry ("-fexcess-precision=standard for Fortran");
+    sorry ("%<-fexcess-precision=standard%> for Fortran");
   flag_excess_precision_cmdline = EXCESS_PRECISION_FAST;
 
   /* Fortran allows associative math - but we cannot reassociate if
@@ -578,12 +580,12 @@ gfc_handle_runtime_check_option (const char *arg)
   int result, pos = 0, n;
   static const char * const optname[] = { "all", "bounds", "array-temps",
 					  "recursion", "do", "pointer",
-					  "mem", NULL };
+					  "mem", "bits", NULL };
   static const int optmask[] = { GFC_RTCHECK_ALL, GFC_RTCHECK_BOUNDS,
 				 GFC_RTCHECK_ARRAY_TEMPS,
 				 GFC_RTCHECK_RECURSION, GFC_RTCHECK_DO,
 				 GFC_RTCHECK_POINTER, GFC_RTCHECK_MEM,
-				 0 };
+				 GFC_RTCHECK_BITS, 0 };
  
   while (*arg)
     {

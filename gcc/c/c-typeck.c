@@ -743,17 +743,18 @@ c_common_type (tree t1, tree t2)
     {
       if (code1 == VECTOR_TYPE || code2 == VECTOR_TYPE)
 	{
-	  error ("can%'t mix operands of decimal float and vector types");
+	  error ("cannot mix operands of decimal floating and vector types");
 	  return error_mark_node;
 	}
       if (code1 == COMPLEX_TYPE || code2 == COMPLEX_TYPE)
 	{
-	  error ("can%'t mix operands of decimal float and complex types");
+	  error ("cannot mix operands of decimal floating and complex types");
 	  return error_mark_node;
 	}
       if (code1 == REAL_TYPE && code2 == REAL_TYPE)
 	{
-	  error ("can%'t mix operands of decimal float and other float types");
+	  error ("cannot mix operands of decimal floating "
+		 "and other floating types");
 	  return error_mark_node;
 	}
     }
@@ -3509,12 +3510,10 @@ convert_arguments (location_t loc, vec<location_t> arg_loc, tree typelist,
 
       if (builtin_type == void_type_node)
 	{
-	  warning_at (loc, OPT_Wbuiltin_declaration_mismatch,
-		      "too many arguments to built-in function %qE "
-		      "expecting %d",
-		      function, parmnum);
-
-	  inform_declaration (fundecl);
+	  if (warning_at (loc, OPT_Wbuiltin_declaration_mismatch,
+			  "too many arguments to built-in function %qE "
+			  "expecting %d", function, parmnum))
+	    inform_declaration (fundecl);
 	  builtin_typetail = NULL_TREE;
 	}
 
@@ -3651,10 +3650,10 @@ convert_arguments (location_t loc, vec<location_t> arg_loc, tree typelist,
       for (tree t = builtin_typetail; t; t = TREE_CHAIN (t))
 	++nargs;
 
-      warning_at (loc, OPT_Wbuiltin_declaration_mismatch,
-		  "too few arguments to built-in function %qE expecting %u",
-		  function, nargs - 1);
-      inform_declaration (fundecl);
+      if (warning_at (loc, OPT_Wbuiltin_declaration_mismatch,
+		      "too few arguments to built-in function %qE "
+		      "expecting %u", function, nargs - 1))
+	inform_declaration (fundecl);
     }
 
   return error_args ? -1 : (int) parmnum;
@@ -5255,13 +5254,13 @@ build_conditional_expr (location_t colon_loc, tree ifexp, bool ifexp_bcp,
 			/* OK */;
 		      else if (unsigned_op2)
 			warning_at (op1_loc, OPT_Wsign_compare,
-				    "operand of ?: changes signedness from "
+				    "operand of %<?:%> changes signedness from "
 				    "%qT to %qT due to unsignedness of other "
 				    "operand", TREE_TYPE (orig_op1),
 				    TREE_TYPE (orig_op2));
 		      else
 			warning_at (op2_loc, OPT_Wsign_compare,
-				    "operand of ?: changes signedness from "
+				    "operand of %<?:%> changes signedness from "
 				    "%qT to %qT due to unsignedness of other "
 				    "operand", TREE_TYPE (orig_op2),
 				    TREE_TYPE (orig_op1));
@@ -7766,13 +7765,13 @@ digest_init (location_t init_loc, tree type, tree init, tree origtype,
 		 that is counted in the length of the constant.  */
 	      if (compare_tree_int (TYPE_SIZE_UNIT (type), len - unit) < 0)
 		pedwarn_init (init_loc, 0,
-			      ("initializer-string for array of chars "
-			       "is too long"));
+			      ("initializer-string for array of %qT "
+			       "is too long"), typ1);
 	      else if (warn_cxx_compat
 		       && compare_tree_int (TYPE_SIZE_UNIT (type), len) < 0)
 		warning_at (init_loc, OPT_Wc___compat,
-			    ("initializer-string for array chars "
-			     "is too long for C++"));
+			    ("initializer-string for array of %qT "
+			     "is too long for C++"), typ1);
 	      if (compare_tree_int (TYPE_SIZE_UNIT (type), len) < 0)
 		{
 		  unsigned HOST_WIDE_INT size
@@ -9890,7 +9889,7 @@ process_init_element (location_t loc, struct c_expr value, bool implicit,
       && integer_zerop (constructor_unfilled_index))
     {
       if (constructor_stack->replacement_value.value)
-	error_init (loc, "excess elements in char array initializer");
+	error_init (loc, "excess elements in %<char%> array initializer");
       constructor_stack->replacement_value = value;
       return;
     }
@@ -10629,7 +10628,8 @@ c_finish_return (location_t loc, tree retval, tree origtype)
 	      if (DECL_P (inner)
 		  && !DECL_EXTERNAL (inner)
 		  && !TREE_STATIC (inner)
-		  && DECL_CONTEXT (inner) == current_function_decl)
+		  && DECL_CONTEXT (inner) == current_function_decl
+		  && POINTER_TYPE_P (TREE_TYPE (TREE_TYPE (current_function_decl))))
 		{
 		  if (TREE_CODE (inner) == LABEL_DECL)
 		    warning_at (loc, OPT_Wreturn_local_addr,
@@ -10688,10 +10688,6 @@ struct c_switch {
   /* Remember whether the controlling expression had boolean type
      before integer promotions for the sake of -Wswitch-bool.  */
   bool bool_cond_p;
-
-  /* Remember whether there was a case value that is outside the
-     range of the ORIG_TYPE.  */
-  bool outside_range_p;
 };
 
 /* A stack of the currently active switch statements.  The innermost
@@ -10768,7 +10764,6 @@ c_start_case (location_t switch_loc,
   cs->cases = splay_tree_new (case_compare, NULL, NULL);
   cs->bindings = c_get_switch_bindings ();
   cs->bool_cond_p = bool_cond_p;
-  cs->outside_range_p = false;
   cs->next = c_switch_stack;
   c_switch_stack = cs;
 
@@ -10814,9 +10809,7 @@ do_case (location_t loc, tree low_value, tree high_value)
 
   label = c_add_case_label (loc, c_switch_stack->cases,
 			    SWITCH_COND (c_switch_stack->switch_expr),
-			    c_switch_stack->orig_type,
-			    low_value, high_value,
-			    &c_switch_stack->outside_range_p);
+			    low_value, high_value);
   if (label == error_mark_node)
     label = NULL_TREE;
   return label;
@@ -10837,8 +10830,7 @@ c_finish_case (tree body, tree type)
   switch_location = EXPR_LOCATION (cs->switch_expr);
   c_do_switch_warnings (cs->cases, switch_location,
 			type ? type : TREE_TYPE (cs->switch_expr),
-			SWITCH_COND (cs->switch_expr),
-			cs->bool_cond_p, cs->outside_range_p);
+			SWITCH_COND (cs->switch_expr), cs->bool_cond_p);
   if (c_switch_covers_all_cases_p (cs->cases, TREE_TYPE (cs->switch_expr)))
     SWITCH_ALL_CASES_P (cs->switch_expr) = 1;
 
@@ -10868,11 +10860,14 @@ c_finish_if_stmt (location_t if_locus, tree cond, tree then_block,
    the beginning of the loop.  COND is the loop condition.  COND_IS_FIRST
    is false for DO loops.  INCR is the FOR increment expression.  BODY is
    the statement controlled by the loop.  BLAB is the break label.  CLAB is
-   the continue label.  Everything is allowed to be NULL.  */
+   the continue label.  Everything is allowed to be NULL.
+   COND_LOCUS is the location of the loop condition, INCR_LOCUS is the
+   location of the FOR increment expression.  */
 
 void
-c_finish_loop (location_t start_locus, tree cond, tree incr, tree body,
-	       tree blab, tree clab, bool cond_is_first)
+c_finish_loop (location_t start_locus, location_t cond_locus, tree cond,
+	       location_t incr_locus, tree incr, tree body, tree blab,
+	       tree clab, bool cond_is_first)
 {
   tree entry = NULL, exit = NULL, t;
 
@@ -10914,12 +10909,8 @@ c_finish_loop (location_t start_locus, tree cond, tree incr, tree body,
 	    }
 
 	  t = build_and_jump (&blab);
-	  if (cond_is_first)
-	    exit = fold_build3_loc (start_locus,
-				COND_EXPR, void_type_node, cond, exit, t);
-	  else
-	    exit = fold_build3_loc (input_location,
-				COND_EXPR, void_type_node, cond, exit, t);
+	  exit = fold_build3_loc (cond_is_first ? start_locus : input_location,
+				  COND_EXPR, void_type_node, cond, exit, t);
 	}
       else
 	{
@@ -10940,9 +10931,23 @@ c_finish_loop (location_t start_locus, tree cond, tree incr, tree body,
   if (clab)
     add_stmt (build1 (LABEL_EXPR, void_type_node, clab));
   if (incr)
-    add_stmt (incr);
+    {
+      if (MAY_HAVE_DEBUG_MARKER_STMTS && incr_locus != UNKNOWN_LOCATION)
+	{
+	  t = build0 (DEBUG_BEGIN_STMT, void_type_node);
+	  SET_EXPR_LOCATION (t, incr_locus);
+	  add_stmt (t);
+	}
+      add_stmt (incr);
+    }
   if (entry)
     add_stmt (entry);
+  if (MAY_HAVE_DEBUG_MARKER_STMTS && cond_locus != UNKNOWN_LOCATION)
+    {
+      t = build0 (DEBUG_BEGIN_STMT, void_type_node);
+      SET_EXPR_LOCATION (t, cond_locus);
+      add_stmt (t);
+    }
   if (exit)
     add_stmt (exit);
   if (blab)
@@ -11934,7 +11939,7 @@ build_binary_op (location_t location, enum tree_code code,
       if (FLOAT_TYPE_P (type0) || FLOAT_TYPE_P (type1))
 	warning_at (location,
 		    OPT_Wfloat_equal,
-		    "comparing floating point with == or != is unsafe");
+		    "comparing floating-point with %<==%> or %<!=%> is unsafe");
       /* Result of comparison is always int,
 	 but don't convert the args to int!  */
       build_type = integer_type_node;
@@ -13656,13 +13661,16 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
   bool copyprivate_seen = false;
   bool linear_variable_step_check = false;
   tree *nowait_clause = NULL;
-  bool ordered_seen = false;
+  tree ordered_clause = NULL_TREE;
   tree schedule_clause = NULL_TREE;
   bool oacc_async = false;
   tree last_iterators = NULL_TREE;
   bool last_iterators_remove = false;
   tree *nogroup_seen = NULL;
-  bool reduction_seen = false;
+  tree *order_clause = NULL;
+  /* 1 if normal/task reduction has been seen, -1 if inscan reduction
+     has been seen, -2 if mixed inscan/normal reduction diagnosed.  */
+  int reduction_seen = 0;
 
   bitmap_obstack_initialize (NULL);
   bitmap_initialize (&generic_head, &bitmap_default_obstack);
@@ -13701,7 +13709,17 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  goto check_dup_generic;
 
 	case OMP_CLAUSE_REDUCTION:
-	  reduction_seen = true;
+	  if (reduction_seen == 0)
+	    reduction_seen = OMP_CLAUSE_REDUCTION_INSCAN (c) ? -1 : 1;
+	  else if (reduction_seen != -2
+		   && reduction_seen != (OMP_CLAUSE_REDUCTION_INSCAN (c)
+					 ? -1 : 1))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<inscan%> and non-%<inscan%> %<reduction%> clauses "
+			"on the same construct");
+	      reduction_seen = -2;
+	    }
 	  /* FALLTHRU */
 	case OMP_CLAUSE_IN_REDUCTION:
 	case OMP_CLAUSE_TASK_REDUCTION:
@@ -13716,6 +13734,15 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		}
 
 	      t = OMP_CLAUSE_DECL (c);
+	      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+		  && OMP_CLAUSE_REDUCTION_INSCAN (c))
+		{
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    "%<inscan%> %<reduction%> clause with array "
+			    "section");
+		  remove = true;
+		  break;
+		}
 	    }
 	  t = require_complete_type (OMP_CLAUSE_LOCATION (c), t);
 	  if (t == error_mark_node)
@@ -14605,6 +14632,25 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  pc = &OMP_CLAUSE_CHAIN (c);
 	  continue;
 
+	case OMP_CLAUSE_ORDER:
+	  if (ordered_clause)
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<order%> clause must not be used together "
+			"with %<ordered%>");
+	      remove = true;
+	      break;
+	    }
+	  else if (order_clause)
+	    {
+	      /* Silently remove duplicates.  */
+	      remove = true;
+	      break;
+	    }
+	  order_clause = pc;
+	  pc = &OMP_CLAUSE_CHAIN (c);
+	  continue;
+
 	case OMP_CLAUSE_IF:
 	case OMP_CLAUSE_NUM_THREADS:
 	case OMP_CLAUSE_NUM_TEAMS:
@@ -14656,7 +14702,15 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  continue;
 
 	case OMP_CLAUSE_ORDERED:
-	  ordered_seen = true;
+	  ordered_clause = c;
+	  if (order_clause)
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (*order_clause),
+			"%<order%> clause must not be used together "
+			"with %<ordered%>");
+	      *order_clause = OMP_CLAUSE_CHAIN (*order_clause);
+	      order_clause = NULL;
+	    }
 	  pc = &OMP_CLAUSE_CHAIN (c);
 	  continue;
 
@@ -14682,6 +14736,20 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  branch_seen = true;
 	  pc = &OMP_CLAUSE_CHAIN (c);
 	  continue;
+
+	case OMP_CLAUSE_INCLUSIVE:
+	case OMP_CLAUSE_EXCLUSIVE:
+	  need_complete = true;
+	  need_implicitly_determined = true;
+	  t = OMP_CLAUSE_DECL (c);
+	  if (!VAR_P (t) && TREE_CODE (t) != PARM_DECL)
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qE is not a variable in clause %qs", t,
+			omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+	      remove = true;
+	    }
+	  break;
 
 	default:
 	  gcc_unreachable ();
@@ -14755,7 +14823,7 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	= OMP_CLAUSE_SAFELEN_EXPR (safelen);
     }
 
-  if (ordered_seen
+  if (ordered_clause
       && schedule_clause
       && (OMP_CLAUSE_SCHEDULE_KIND (schedule_clause)
 	  & OMP_CLAUSE_SCHEDULE_NONMONOTONIC))
@@ -14769,7 +14837,23 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	   & ~OMP_CLAUSE_SCHEDULE_NONMONOTONIC);
     }
 
-  if (linear_variable_step_check)
+  if (reduction_seen < 0 && ordered_clause)
+    {
+      error_at (OMP_CLAUSE_LOCATION (ordered_clause),
+		"%qs clause specified together with %<inscan%> "
+		"%<reduction%> clause", "ordered");
+      reduction_seen = -2;
+    }
+
+  if (reduction_seen < 0 && schedule_clause)
+    {
+      error_at (OMP_CLAUSE_LOCATION (schedule_clause),
+		"%qs clause specified together with %<inscan%> "
+		"%<reduction%> clause", "schedule");
+      reduction_seen = -2;
+    }
+
+  if (linear_variable_step_check || reduction_seen == -2)
     for (pc = &clauses, c = clauses; c ; c = *pc)
       {
 	bool remove = false;
@@ -14784,6 +14868,8 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		      OMP_CLAUSE_LINEAR_STEP (c));
 	    remove = true;
 	  }
+	else if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION)
+	  OMP_CLAUSE_REDUCTION_INSCAN (c) = 0;
 
 	if (remove)
 	  *pc = OMP_CLAUSE_CHAIN (c);

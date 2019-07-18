@@ -53,6 +53,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "dce.h"
 #include "dbgcnt.h"
 #include "rtl-iter.h"
+#include "regs.h"
 
 #define FORWARDER_BLOCK_P(BB) ((BB)->flags & BB_FORWARDER_BLOCK)
 
@@ -306,6 +307,11 @@ thread_jump (edge e, basic_block b)
      dominate even when operands are not equivalent.  */
   if (!rtx_equal_p (XEXP (cond1, 0), XEXP (cond2, 0))
       || !rtx_equal_p (XEXP (cond1, 1), XEXP (cond2, 1)))
+    return NULL;
+
+  /* Punt if BB_END (e->src) is doloop-like conditional jump that modifies
+     the registers used in cond1.  */
+  if (modified_in_p (cond1, BB_END (e->src)))
     return NULL;
 
   /* Short circuit cases where block B contains some side effects, as we can't
@@ -1219,6 +1225,14 @@ old_insns_match_p (int mode ATTRIBUTE_UNUSED, rtx_insn *i1, rtx_insn *i2)
 		}
 	    }
 	}
+
+      HARD_REG_SET i1_used, i2_used;
+
+      get_call_reg_set_usage (i1, &i1_used, call_used_reg_set);
+      get_call_reg_set_usage (i2, &i2_used, call_used_reg_set);
+
+      if (!hard_reg_set_equal_p (i1_used, i2_used))
+        return dir_none;
     }
 
   /* If both i1 and i2 are frame related, verify all the CFA notes
@@ -2707,23 +2721,23 @@ try_optimize_cfg (int mode)
 
 		      if (current_ir_type () == IR_RTL_CFGLAYOUT)
 			{
-			  if (BB_FOOTER (b)
-			      && BARRIER_P (BB_FOOTER (b)))
+			  rtx_insn *insn;
+			  for (insn = BB_FOOTER (b);
+			       insn; insn = NEXT_INSN (insn))
+			    if (BARRIER_P (insn))
+			      break;
+			  if (insn)
 			    FOR_EACH_EDGE (e, ei, b->preds)
-			      if ((e->flags & EDGE_FALLTHRU)
-				  && BB_FOOTER (e->src) == NULL)
+			      if ((e->flags & EDGE_FALLTHRU))
 				{
-				  if (BB_FOOTER (b))
+				  if (BB_FOOTER (b)
+				      && BB_FOOTER (e->src) == NULL)
 				    {
 				      BB_FOOTER (e->src) = BB_FOOTER (b);
 				      BB_FOOTER (b) = NULL;
 				    }
 				  else
-				    {
-				      start_sequence ();
-				      BB_FOOTER (e->src) = emit_barrier ();
-				      end_sequence ();
-				    }
+				    emit_barrier_after_bb (e->src);
 				}
 			}
 		      else
@@ -3179,7 +3193,10 @@ cleanup_cfg (int mode)
 	      && !delete_trivially_dead_insns (get_insns (), max_reg_num ()))
 	    break;
 	  if ((mode & CLEANUP_CROSSJUMP) && crossjumps_occurred)
-	    run_fast_dce ();
+	    {
+	      run_fast_dce ();
+	      mode &= ~CLEANUP_FORCE_FAST_DCE;
+	    }
 	}
       else
 	break;
@@ -3187,6 +3204,9 @@ cleanup_cfg (int mode)
 
   if (mode & CLEANUP_CROSSJUMP)
     remove_fake_exit_edges ();
+
+  if (mode & CLEANUP_FORCE_FAST_DCE)
+    run_fast_dce ();
 
   /* Don't call delete_dead_jumptables in cfglayout mode, because
      that function assumes that jump tables are in the insns stream.

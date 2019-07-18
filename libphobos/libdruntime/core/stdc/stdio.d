@@ -429,7 +429,7 @@ else version (CRuntime_Glibc)
         int     _old_offset;
         ushort  _cur_column;
         byte    _vtable_offset;
-        char[1] _shortbuf;
+        char[1] _shortbuf = 0;
         void*   _lock;
     }
 
@@ -442,7 +442,7 @@ else version (CRuntime_Musl)
 {
     union fpos_t
     {
-        char[16] __opaque;
+        char[16] __opaque = 0;
         double __align;
     }
     struct _IO_FILE;
@@ -572,7 +572,7 @@ else version (NetBSD)
 
         int     function(void *)    _flush;
         /* Formerly used by fgetln/fgetwln; kept for binary compatibility */
-        char[__sbuf.sizeof - _flush.sizeof]    _lb_unused;
+        char[__sbuf.sizeof - _flush.sizeof]    _lb_unused = void;
 
 
         int             _blksize;
@@ -672,8 +672,8 @@ else version (Solaris)
             char* _ptr;
             int _cnt;
             char* _base;
-            char _flag;
-            char _magic;
+            char _flag = 0;
+            char _magic = 0;
             ushort __flags; // __orientation:2
                             // __ionolock:1
                             // __seekable:1
@@ -756,7 +756,7 @@ else version (CRuntime_UClibc)
     struct __STDIO_FILE_STRUCT
     {
         ushort __modeflags;
-        char[2] __ungot_width;
+        char[2] __ungot_width = 0;
         int __filedes;
         char* __bufstart;
         char* __bufend;
@@ -767,7 +767,7 @@ else version (CRuntime_UClibc)
         __STDIO_FILE_STRUCT* __nextopen;
         void *__cookie;
         _IO_cookie_io_functions_t __gcs;
-        wchar_t[2] __ungot;
+        wchar_t[2] __ungot = 0;
         mbstate_t __state;
         void *__unused;
         int __user_locking;
@@ -1291,35 +1291,7 @@ size_t fwrite(scope const void* ptr, size_t size, size_t nmemb, FILE* stream);
     c_long ftell(FILE* stream);
 }
 
-version (MinGW)
-{
-  // No unsafe pointer manipulation.
-  extern (D) @trusted
-  {
-    ///
-    void rewind()(FILE* stream)   { fseek(stream,0L,SEEK_SET); stream._flag = stream._flag & ~_IOERR; }
-    ///
-    pure void clearerr()(FILE* stream) { stream._flag = stream._flag & ~(_IOERR|_IOEOF); }
-    ///
-    pure int  feof()(FILE* stream)     { return stream._flag&_IOEOF; }
-    ///
-    pure int  ferror()(FILE* stream)   { return stream._flag&_IOERR; }
-  }
-  ///
-    int   __mingw_snprintf(scope char* s, size_t n, scope const char* fmt, ...);
-    ///
-    alias __mingw_snprintf _snprintf;
-    ///
-    alias __mingw_snprintf snprintf;
-
-    ///
-    int   __mingw_vsnprintf(scope char* s, size_t n, scope const char* format, va_list arg);
-    ///
-    alias __mingw_vsnprintf _vsnprintf;
-    ///
-    alias __mingw_vsnprintf vsnprintf;
-}
-else version (CRuntime_DigitalMars)
+version (CRuntime_DigitalMars)
 {
   // No unsafe pointer manipulation.
   extern (D) @trusted
@@ -1362,6 +1334,23 @@ else version (CRuntime_Microsoft)
     pure int  fileno(FILE* stream);
   }
 
+  version (MinGW)
+  {
+    int   __mingw_snprintf(scope char* s, size_t n, scope const char* fmt, ...);
+    ///
+    alias __mingw_snprintf _snprintf;
+    ///
+    alias __mingw_snprintf snprintf;
+
+    ///
+    int   __mingw_vsnprintf(scope char* s, size_t n, scope const char* format, va_list arg);
+    ///
+    alias __mingw_vsnprintf _vsnprintf;
+    ///
+    alias __mingw_vsnprintf vsnprintf;
+  }
+  else
+  {
     ///
     int _snprintf(scope char* s, size_t n, scope const char* format, ...);
     ///
@@ -1371,6 +1360,7 @@ else version (CRuntime_Microsoft)
     int _vsnprintf(scope char* s, size_t n, scope const char* format, va_list arg);
     ///
     int  vsnprintf(scope char* s, size_t n, scope const char* format, va_list arg);
+  }
 
     ///
     int _fputc_nolock(int c, FILE *fp);
@@ -1643,9 +1633,6 @@ else version (CRuntime_Bionic)
 }
 else version (CRuntime_Musl)
 {
-    import core.sys.posix.sys.types : off_t;
-    ///
-    int fseeko(FILE *, off_t, int);
     @trusted
     {
         ///

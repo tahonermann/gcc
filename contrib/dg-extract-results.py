@@ -296,7 +296,7 @@ class Prog:
                 # If we have a time out warning, make sure it appears
                 # before the following testcase diagnostic: we insert
                 # the testname before 'program' so that sort faces a
-                # list of testhanes.
+                # list of testnames.
                 if line.startswith ('WARNING: program timed out'):
                   has_warning = 1
                 else:
@@ -307,8 +307,8 @@ class Prog:
                       has_warning = 0
                   key = (name, len (harness.results))
                   harness.results.append ((key, line))
-                if not first_key and sort_logs:
-                    first_key = key
+                  if not first_key and sort_logs:
+                      first_key = key
                 if line.startswith ('ERROR: (DejaGnu)'):
                     for i in range (len (self.count_names)):
                         if 'DejaGnu errors' in self.count_names[i]:

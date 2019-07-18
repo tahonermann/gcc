@@ -760,15 +760,13 @@ c_strlen (tree src, int only_value, c_strlen_data *data, unsigned eltsize)
      runtime.  */
   if (eltoff < 0 || eltoff >= maxelts)
     {
-     /* Suppress multiple warnings for propagated constant strings.  */
+      /* Suppress multiple warnings for propagated constant strings.  */
       if (only_value != 2
-	  && !TREE_NO_WARNING (src))
-        {
-	  warning_at (loc, OPT_Warray_bounds,
-		      "offset %qwi outside bounds of constant string",
-		      eltoff);
-          TREE_NO_WARNING (src) = 1;
-        }
+	  && !TREE_NO_WARNING (src)
+	  && warning_at (loc, OPT_Warray_bounds,
+			 "offset %qwi outside bounds of constant string",
+			 eltoff))
+	TREE_NO_WARNING (src) = 1;
       return NULL_TREE;
     }
 
@@ -983,7 +981,7 @@ expand_builtin_setjmp_setup (rtx buf_addr, rtx receiver_label)
 
   mem = gen_rtx_MEM (Pmode, buf_addr);
   set_mem_alias_set (mem, setjmp_alias_set);
-  emit_move_insn (mem, targetm.builtin_setjmp_frame_value ());
+  emit_move_insn (mem, hard_frame_pointer_rtx);
 
   mem = gen_rtx_MEM (Pmode, plus_constant (Pmode, buf_addr,
 					   GET_MODE_SIZE (Pmode))),
@@ -1024,31 +1022,6 @@ expand_builtin_setjmp_receiver (rtx receiver_label)
   chain = rtx_for_static_chain (current_function_decl, true);
   if (chain && REG_P (chain))
     emit_clobber (chain);
-
-  /* Now put in the code to restore the frame pointer, and argument
-     pointer, if needed.  */
-  if (! targetm.have_nonlocal_goto ())
-    {
-      /* First adjust our frame pointer to its actual value.  It was
-	 previously set to the start of the virtual area corresponding to
-	 the stacked variables when we branched here and now needs to be
-	 adjusted to the actual hardware fp value.
-
-	 Assignments to virtual registers are converted by
-	 instantiate_virtual_regs into the corresponding assignment
-	 to the underlying register (fp in this case) that makes
-	 the original assignment true.
-	 So the following insn will actually be decrementing fp by
-	 TARGET_STARTING_FRAME_OFFSET.  */
-      emit_move_insn (virtual_stack_vars_rtx, hard_frame_pointer_rtx);
-
-      /* Restoring the frame pointer also modifies the hard frame pointer.
-	 Mark it used (so that the previous assignment remains live once
-	 the frame pointer is eliminated) and clobbered (to represent the
-	 implicit update from the assignment).  */
-      emit_use (hard_frame_pointer_rtx);
-      emit_clobber (hard_frame_pointer_rtx);
-    }
 
   if (!HARD_FRAME_POINTER_IS_ARG_POINTER && fixed_regs[ARG_POINTER_REGNUM])
     {
@@ -1139,15 +1112,20 @@ expand_builtin_longjmp (rtx buf_addr, rtx value)
 	emit_insn (targetm.gen_nonlocal_goto (value, lab, stack, fp));
       else
 	{
-	  lab = copy_to_reg (lab);
-
 	  emit_clobber (gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (VOIDmode)));
 	  emit_clobber (gen_rtx_MEM (BLKmode, hard_frame_pointer_rtx));
+
+	  lab = copy_to_reg (lab);
 
 	  /* Restore the frame pointer and stack pointer.  We must use a
 	     temporary since the setjmp buffer may be a local.  */
 	  fp = copy_to_reg (fp);
 	  emit_stack_restore (SAVE_NONLOCAL, stack);
+
+	  /* Ensure the frame pointer move is not optimized.  */
+	  emit_insn (gen_blockage ());
+	  emit_clobber (hard_frame_pointer_rtx);
+	  emit_clobber (frame_pointer_rtx);
 	  emit_move_insn (hard_frame_pointer_rtx, fp);
 
 	  emit_use (hard_frame_pointer_rtx);
@@ -1286,15 +1264,20 @@ expand_builtin_nonlocal_goto (tree exp)
     emit_insn (targetm.gen_nonlocal_goto (const0_rtx, r_label, r_sp, r_fp));
   else
     {
-      r_label = copy_to_reg (r_label);
-
       emit_clobber (gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (VOIDmode)));
       emit_clobber (gen_rtx_MEM (BLKmode, hard_frame_pointer_rtx));
+
+      r_label = copy_to_reg (r_label);
 
       /* Restore the frame pointer and stack pointer.  We must use a
 	 temporary since the setjmp buffer may be a local.  */
       r_fp = copy_to_reg (r_fp);
       emit_stack_restore (SAVE_NONLOCAL, r_sp);
+
+      /* Ensure the frame pointer move is not optimized.  */
+      emit_insn (gen_blockage ());
+      emit_clobber (hard_frame_pointer_rtx);
+      emit_clobber (frame_pointer_rtx);
       emit_move_insn (hard_frame_pointer_rtx, r_fp);
 
       /* USE of hard_frame_pointer_rtx added for consistency;
@@ -1417,7 +1400,7 @@ expand_builtin_prefetch (tree exp)
 
   if (targetm.have_prefetch ())
     {
-      struct expand_operand ops[3];
+      class expand_operand ops[3];
 
       create_address_operand (&ops[0], op0);
       create_integer_operand (&ops[1], INTVAL (op1));
@@ -1433,7 +1416,7 @@ expand_builtin_prefetch (tree exp)
 }
 
 /* Get a MEM rtx for expression EXP which is the address of an operand
-   to be used in a string instruction (cmpstrsi, movmemsi, ..).  LEN is
+   to be used in a string instruction (cmpstrsi, cpymemsi, ..).  LEN is
    the maximum length of the block of memory that might be accessed or
    NULL if unknown.  */
 
@@ -1655,11 +1638,8 @@ expand_builtin_apply_args_1 (void)
   /* Save the structure value address unless this is passed as an
      "invisible" first argument.  */
   if (struct_incoming_value)
-    {
-      emit_move_insn (adjust_address (registers, Pmode, size),
-		      copy_to_reg (struct_incoming_value));
-      size += GET_MODE_SIZE (Pmode);
-    }
+    emit_move_insn (adjust_address (registers, Pmode, size),
+		    copy_to_reg (struct_incoming_value));
 
   /* Return the address of the block.  */
   return copy_addr_to_reg (XEXP (registers, 0));
@@ -1808,7 +1788,6 @@ expand_builtin_apply (rtx function, rtx arguments, rtx argsize)
       emit_move_insn (struct_value, value);
       if (REG_P (struct_value))
 	use_reg (&call_fusage, struct_value);
-      size += GET_MODE_SIZE (Pmode);
     }
 
   /* All arguments and registers used for the call are set up by now!  */
@@ -2466,7 +2445,7 @@ expand_builtin_interclass_mathfn (tree exp, rtx target)
 
   if (icode != CODE_FOR_nothing)
     {
-      struct expand_operand ops[1];
+      class expand_operand ops[1];
       rtx_insn *last = get_last_insn ();
       tree orig_arg = arg;
 
@@ -2694,7 +2673,7 @@ expand_builtin_int_roundingfn (tree exp, rtx target)
   tree arg;
 
   if (!validate_arglist (exp, REAL_TYPE, VOID_TYPE))
-    gcc_unreachable ();
+    return NULL_RTX;
 
   arg = CALL_EXPR_ARG (exp, 0);
 
@@ -2830,7 +2809,7 @@ expand_builtin_int_roundingfn_2 (tree exp, rtx target)
   enum built_in_function fallback_fn = BUILT_IN_NONE;
 
   if (!validate_arglist (exp, REAL_TYPE, VOID_TYPE))
-     gcc_unreachable ();
+    return NULL_RTX;
 
   arg = CALL_EXPR_ARG (exp, 0);
 
@@ -2967,7 +2946,7 @@ expand_builtin_strlen (tree exp, rtx target,
   if (!validate_arglist (exp, POINTER_TYPE, VOID_TYPE))
     return NULL_RTX;
 
-  struct expand_operand ops[4];
+  class expand_operand ops[4];
   rtx pat;
   tree len;
   tree src = CALL_EXPR_ARG (exp, 0);
@@ -3099,7 +3078,7 @@ expand_builtin_strnlen (tree exp, rtx target, machine_mode target_mode)
 			 "%K%qD specified bound %E "
 			 "exceeds maximum object size %E",
 			 exp, func, bound, maxobjsize))
-	  TREE_NO_WARNING (exp) = true;
+	TREE_NO_WARNING (exp) = true;
 
       bool exact = true;
       if (!len || TREE_CODE (len) != INTEGER_CST)
@@ -3153,12 +3132,12 @@ expand_builtin_strnlen (tree exp, rtx target, machine_mode target_mode)
     return NULL_RTX;
 
   if (!TREE_NO_WARNING (exp)
-      && wi::ltu_p (wi::to_wide (maxobjsize), min)
+      && wi::ltu_p (wi::to_wide (maxobjsize, min.get_precision ()), min)
       && warning_at (loc, OPT_Wstringop_overflow_,
 		     "%K%qD specified bound [%wu, %wu] "
 		     "exceeds maximum object size %E",
 		     exp, func, min.to_uhwi (), max.to_uhwi (), maxobjsize))
-      TREE_NO_WARNING (exp) = true;
+    TREE_NO_WARNING (exp) = true;
 
   bool exact = true;
   if (!len || TREE_CODE (len) != INTEGER_CST)
@@ -3652,7 +3631,8 @@ compute_objsize (tree dest, int ostype)
 		      /* Ignore negative offsets for now.  For others,
 			 use the lower bound as the most optimistic
 			 estimate of the (remaining)size.  */
-		      if (wi::sign_mask (min))
+		      if (wi::sign_mask (min)
+			  || wi::sign_mask (max))
 			;
 		      else if (wi::ltu_p (min, wisiz))
 			return wide_int_to_tree (TREE_TYPE (size),
@@ -3840,6 +3820,8 @@ expand_builtin_memory_copy_args (tree dest, tree src, tree len,
   unsigned HOST_WIDE_INT max_size;
   unsigned HOST_WIDE_INT probable_max_size;
 
+  bool is_move_done;
+
   /* If DEST is not a pointer type, call the normal function.  */
   if (dest_align == 0)
     return NULL_RTX;
@@ -3889,11 +3871,22 @@ expand_builtin_memory_copy_args (tree dest, tree src, tree len,
   if (CALL_EXPR_TAILCALL (exp)
       && (retmode == RETURN_BEGIN || target == const0_rtx))
     method = BLOCK_OP_TAILCALL;
-  if (retmode == RETURN_END && target != const0_rtx)
+  bool use_mempcpy_call = (targetm.libc_has_fast_function (BUILT_IN_MEMPCPY)
+			   && retmode == RETURN_END
+			   && target != const0_rtx);
+  if (use_mempcpy_call)
     method = BLOCK_OP_NO_LIBCALL_RET;
   dest_addr = emit_block_move_hints (dest_mem, src_mem, len_rtx, method,
 				     expected_align, expected_size,
-				     min_size, max_size, probable_max_size);
+				     min_size, max_size, probable_max_size,
+				     use_mempcpy_call, &is_move_done);
+
+  /* Bail out when a mempcpy call would be expanded as libcall and when
+     we have a target that provides a fast implementation
+     of mempcpy routine.  */
+  if (!is_move_done)
+    return NULL_RTX;
+
   if (dest_addr == pc_rtx)
     return NULL_RTX;
 
@@ -3930,7 +3923,7 @@ expand_builtin_mempcpy_args (tree dest, tree src, tree len,
 static rtx
 expand_movstr (tree dest, tree src, rtx target, memop_ret retmode)
 {
-  struct expand_operand ops[3];
+  class expand_operand ops[3];
   rtx dest_mem;
   rtx src_mem;
 
@@ -4640,7 +4633,7 @@ expand_cmpstr (insn_code icode, rtx target, rtx arg1_rtx, rtx arg2_rtx,
   if (target && (!REG_P (target) || HARD_REGISTER_P (target)))
     target = NULL_RTX;
 
-  struct expand_operand ops[4];
+  class expand_operand ops[4];
   create_output_operand (&ops[0], target, insn_mode);
   create_fixed_operand (&ops[1], arg1_rtx);
   create_fixed_operand (&ops[2], arg2_rtx);
@@ -5613,7 +5606,7 @@ expand_builtin___clear_cache (tree exp)
 
   if (targetm.have_clear_cache ())
     {
-      struct expand_operand ops[2];
+      class expand_operand ops[2];
 
       begin = CALL_EXPR_ARG (exp, 0);
       begin_rtx = expand_expr (begin, NULL_RTX, Pmode, EXPAND_NORMAL);
@@ -6573,7 +6566,7 @@ expand_ifn_atomic_bit_test_and (gcall *call)
   machine_mode mode = TYPE_MODE (TREE_TYPE (flag));
   enum rtx_code code;
   optab optab;
-  struct expand_operand ops[5];
+  class expand_operand ops[5];
 
   gcc_assert (flag_inline_atomics);
 
@@ -6785,7 +6778,7 @@ expand_builtin_atomic_always_lock_free (tree exp)
 
   if (TREE_CODE (arg0) != INTEGER_CST)
     {
-      error ("non-constant argument 1 to __atomic_always_lock_free");
+      error ("non-constant argument 1 to %qs", "__atomic_always_lock_free");
       return const0_rtx;
     }
 
@@ -6827,7 +6820,7 @@ expand_builtin_atomic_is_lock_free (tree exp)
 
   if (!INTEGRAL_TYPE_P (TREE_TYPE (arg0)))
     {
-      error ("non-integer argument 1 to __atomic_is_lock_free");
+      error ("non-integer argument 1 to %qs", "__atomic_is_lock_free");
       return NULL_RTX;
     }
 
@@ -6881,7 +6874,7 @@ expand_builtin_thread_pointer (tree exp, rtx target)
   icode = direct_optab_handler (get_thread_pointer_optab, Pmode);
   if (icode != CODE_FOR_nothing)
     {
-      struct expand_operand op;
+      class expand_operand op;
       /* If the target is not sutitable then create a new target. */
       if (target == NULL_RTX
 	  || !REG_P (target)
@@ -6891,7 +6884,7 @@ expand_builtin_thread_pointer (tree exp, rtx target)
       expand_insn (icode, 1, &op);
       return target;
     }
-  error ("__builtin_thread_pointer is not supported on this target");
+  error ("%<__builtin_thread_pointer%> is not supported on this target");
   return const0_rtx;
 }
 
@@ -6904,14 +6897,14 @@ expand_builtin_set_thread_pointer (tree exp)
   icode = direct_optab_handler (set_thread_pointer_optab, Pmode);
   if (icode != CODE_FOR_nothing)
     {
-      struct expand_operand op;
+      class expand_operand op;
       rtx val = expand_expr (CALL_EXPR_ARG (exp, 0), NULL_RTX,
 			     Pmode, EXPAND_NORMAL);      
       create_input_operand (&op, val, Pmode);
       expand_insn (icode, 1, &op);
       return;
     }
-  error ("__builtin_set_thread_pointer is not supported on this target");
+  error ("%<__builtin_set_thread_pointer%> is not supported on this target");
 }
 
 
@@ -7125,8 +7118,19 @@ inline_expand_builtin_string_cmp (tree exp, rtx target)
     return NULL_RTX;
 
   /* For strncmp, if the length is not a const, not qualify.  */
-  if (is_ncmp && !tree_fits_uhwi_p (len3_tree))
-    return NULL_RTX;
+  if (is_ncmp)
+    {
+      if (!tree_fits_uhwi_p (len3_tree))
+	return NULL_RTX;
+      else
+	len3 = tree_to_uhwi (len3_tree);
+    }
+
+  if (src_str1 != NULL)
+    len1 = strnlen (src_str1, len1) + 1;
+
+  if (src_str2 != NULL)
+    len2 = strnlen (src_str2, len2) + 1;
 
   int const_str_n = 0;
   if (!len1)
@@ -7141,7 +7145,7 @@ inline_expand_builtin_string_cmp (tree exp, rtx target)
   gcc_checking_assert (const_str_n > 0);
   length = (const_str_n == 1) ? len1 : len2;
 
-  if (is_ncmp && (len3 = tree_to_uhwi (len3_tree)) < length)
+  if (is_ncmp && len3 < length)
     length = len3;
 
   /* If the length of the comparision is larger than the threshold,
@@ -10225,7 +10229,7 @@ fold_builtin_next_arg (tree exp, bool va_start_p)
 
   if (!stdarg_p (fntype))
     {
-      error ("%<va_start%> used in function with fixed args");
+      error ("%<va_start%> used in function with fixed arguments");
       return true;
     }
 
@@ -10604,6 +10608,9 @@ maybe_emit_sprintf_chk_warning (tree exp, enum built_in_function fcode)
 static void
 maybe_emit_free_warning (tree exp)
 {
+  if (call_expr_nargs (exp) != 1)
+    return;
+
   tree arg = CALL_EXPR_ARG (exp, 0);
 
   STRIP_NOPS (arg);

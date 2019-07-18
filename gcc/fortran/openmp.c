@@ -2265,7 +2265,7 @@ gfc_oacc_routine_lop (gfc_omp_clauses *clauses)
 	}
 
       if (n_lop_clauses > 1)
-	gfc_error ("Multiple loop axes specified for routine");
+	ret = OACC_ROUTINE_LOP_ERROR;
     }
 
   return ret;
@@ -2275,10 +2275,12 @@ match
 gfc_match_oacc_routine (void)
 {
   locus old_loc;
-  gfc_symbol *sym = NULL;
   match m;
+  gfc_intrinsic_sym *isym = NULL;
+  gfc_symbol *sym = NULL;
   gfc_omp_clauses *c = NULL;
   gfc_oacc_routine_name *n = NULL;
+  oacc_routine_lop lop = OACC_ROUTINE_LOP_NONE;
 
   old_loc = gfc_current_locus;
 
@@ -2296,29 +2298,34 @@ gfc_match_oacc_routine (void)
   if (m == MATCH_YES)
     {
       char buffer[GFC_MAX_SYMBOL_LEN + 1];
-      gfc_symtree *st;
 
       m = gfc_match_name (buffer);
       if (m == MATCH_YES)
 	{
-	  st = gfc_find_symtree (gfc_current_ns->sym_root, buffer);
+	  gfc_symtree *st = NULL;
+
+	  /* First look for an intrinsic symbol.  */
+	  isym = gfc_find_function (buffer);
+	  if (!isym)
+	    isym = gfc_find_subroutine (buffer);
+	  /* If no intrinsic symbol found, search the current namespace.  */
+	  if (!isym)
+	    st = gfc_find_symtree (gfc_current_ns->sym_root, buffer);
 	  if (st)
 	    {
 	      sym = st->n.sym;
+	      /* If the name in a 'routine' directive refers to the containing
+		 subroutine or function, then make sure that we'll later handle
+		 this accordingly.  */
 	      if (gfc_current_ns->proc_name != NULL
 		  && strcmp (sym->name, gfc_current_ns->proc_name->name) == 0)
 	        sym = NULL;
 	    }
 
-	  if (st == NULL
-	      || (sym
-		  && !sym->attr.external
-		  && !sym->attr.function
-		  && !sym->attr.subroutine))
+	  if (isym == NULL && st == NULL)
 	    {
-	      gfc_error ("Syntax error in !$ACC ROUTINE ( NAME ) at %C, "
-			 "invalid function name %s",
-			 (sym) ? sym->name : buffer);
+	      gfc_error ("Invalid NAME %qs in !$ACC ROUTINE ( NAME ) at %C",
+			 buffer);
 	      gfc_current_locus = old_loc;
 	      return MATCH_ERROR;
 	    }
@@ -2344,26 +2351,77 @@ gfc_match_oacc_routine (void)
 	  != MATCH_YES))
     return MATCH_ERROR;
 
-  if (sym != NULL)
+  lop = gfc_oacc_routine_lop (c);
+  if (lop == OACC_ROUTINE_LOP_ERROR)
     {
-      n = gfc_get_oacc_routine_name ();
-      n->sym = sym;
-      n->clauses = NULL;
-      n->next = NULL;
-      if (gfc_current_ns->oacc_routine_names != NULL)
-	n->next = gfc_current_ns->oacc_routine_names;
+      gfc_error ("Multiple loop axes specified for routine at %C");
+      goto cleanup;
+    }
 
-      gfc_current_ns->oacc_routine_names = n;
+  if (isym != NULL)
+    {
+      /* Diagnose any OpenACC 'routine' directive that doesn't match the
+	 (implicit) one with a 'seq' clause.  */
+      if (c && (c->gang || c->worker || c->vector))
+	{
+	  gfc_error ("Intrinsic symbol specified in !$ACC ROUTINE ( NAME )"
+		     " at %C marked with incompatible GANG, WORKER, or VECTOR"
+		     " clause");
+	  goto cleanup;
+	}
+    }
+  else if (sym != NULL)
+    {
+      bool add = true;
+
+      /* For a repeated OpenACC 'routine' directive, diagnose if it doesn't
+	 match the first one.  */
+      for (gfc_oacc_routine_name *n_p = gfc_current_ns->oacc_routine_names;
+	   n_p;
+	   n_p = n_p->next)
+	if (n_p->sym == sym)
+	  {
+	    add = false;
+	    if (lop != gfc_oacc_routine_lop (n_p->clauses))
+	      {
+		gfc_error ("!$ACC ROUTINE already applied at %C");
+		goto cleanup;
+	      }
+	  }
+
+      if (add)
+	{
+	  sym->attr.oacc_routine_lop = lop;
+
+	  n = gfc_get_oacc_routine_name ();
+	  n->sym = sym;
+	  n->clauses = c;
+	  n->next = gfc_current_ns->oacc_routine_names;
+	  n->loc = old_loc;
+	  gfc_current_ns->oacc_routine_names = n;
+	}
     }
   else if (gfc_current_ns->proc_name)
     {
+      /* For a repeated OpenACC 'routine' directive, diagnose if it doesn't
+	 match the first one.  */
+      oacc_routine_lop lop_p = gfc_current_ns->proc_name->attr.oacc_routine_lop;
+      if (lop_p != OACC_ROUTINE_LOP_NONE
+	  && lop != lop_p)
+	{
+	  gfc_error ("!$ACC ROUTINE already applied at %C");
+	  goto cleanup;
+	}
+
       if (!gfc_add_omp_declare_target (&gfc_current_ns->proc_name->attr,
 				       gfc_current_ns->proc_name->name,
 				       &old_loc))
 	goto cleanup;
-      gfc_current_ns->proc_name->attr.oacc_routine_lop
-	= gfc_oacc_routine_lop (c);
+      gfc_current_ns->proc_name->attr.oacc_routine_lop = lop;
     }
+  else
+    /* Something has gone wrong, possibly a syntax error.  */
+    goto cleanup;
 
   if (n)
     n->clauses = c;
@@ -4150,8 +4208,21 @@ resolve_omp_clauses (gfc_code *code, gfc_omp_clauses *omp_clauses,
 		  continue;
 	      }
 	  }
-	gfc_error ("Object %qs is not a variable at %L", n->sym->name,
-		   &n->where);
+	if (list == OMP_LIST_MAP
+	    && n->sym->attr.flavor == FL_PARAMETER)
+	  {
+	    if (openacc)
+	      gfc_error ("Object %qs is not a variable at %L; parameters"
+			 " cannot be and need not be copied", n->sym->name,
+			 &n->where);
+	    else
+	      gfc_error ("Object %qs is not a variable at %L; parameters"
+			 " cannot be and need not be mapped", n->sym->name,
+			 &n->where);
+	  }
+	else
+	  gfc_error ("Object %qs is not a variable at %L", n->sym->name,
+		     &n->where);
       }
 
   for (list = 0; list < OMP_LIST_NUM; list++)
@@ -5452,8 +5523,7 @@ gfc_resolve_do_iterator (gfc_code *code, gfc_symbol *sym, bool add_clause)
   if (!omp_current_ctx->is_openmp && !oacc_is_loop (omp_current_ctx->code))
     return;
 
-  if (omp_current_ctx->is_openmp
-      && omp_current_ctx->sharing_clauses->contains (sym))
+  if (omp_current_ctx->sharing_clauses->contains (sym))
     return;
 
   if (! omp_current_ctx->private_iterators->add (sym) && add_clause)
@@ -5913,19 +5983,34 @@ void
 gfc_resolve_oacc_blocks (gfc_code *code, gfc_namespace *ns)
 {
   fortran_omp_context ctx;
+  gfc_omp_clauses *omp_clauses = code->ext.omp_clauses;
+  gfc_omp_namelist *n;
+  int list;
 
   resolve_oacc_loop_blocks (code);
 
   ctx.code = code;
-  ctx.sharing_clauses = NULL;
+  ctx.sharing_clauses = new hash_set<gfc_symbol *>;
   ctx.private_iterators = new hash_set<gfc_symbol *>;
   ctx.previous = omp_current_ctx;
   ctx.is_openmp = false;
   omp_current_ctx = &ctx;
 
+  for (list = 0; list < OMP_LIST_NUM; list++)
+    switch (list)
+      {
+      case OMP_LIST_PRIVATE:
+	for (n = omp_clauses->lists[list]; n; n = n->next)
+	  ctx.sharing_clauses->add (n->sym);
+	break;
+      default:
+	break;
+      }
+
   gfc_resolve_blocks (code->block, ns);
 
   omp_current_ctx = ctx.previous;
+  delete ctx.sharing_clauses;
   delete ctx.private_iterators;
 }
 
@@ -6011,6 +6096,33 @@ gfc_resolve_oacc_declare (gfc_namespace *ns)
 	  n->sym->mark = 0;
     }
 }
+
+
+void
+gfc_resolve_oacc_routines (gfc_namespace *ns)
+{
+  for (gfc_oacc_routine_name *orn = ns->oacc_routine_names;
+       orn;
+       orn = orn->next)
+    {
+      gfc_symbol *sym = orn->sym;
+      if (!sym->attr.external
+	  && !sym->attr.function
+	  && !sym->attr.subroutine)
+	{
+	  gfc_error ("NAME %qs does not refer to a subroutine or function"
+		     " in !$ACC ROUTINE ( NAME ) at %L", sym->name, &orn->loc);
+	  continue;
+	}
+      if (!gfc_add_omp_declare_target (&sym->attr, sym->name, &orn->loc))
+	{
+	  gfc_error ("NAME %qs invalid"
+		     " in !$ACC ROUTINE ( NAME ) at %L", sym->name, &orn->loc);
+	  continue;
+	}
+    }
+}
+
 
 void
 gfc_resolve_oacc_directive (gfc_code *code, gfc_namespace *ns ATTRIBUTE_UNUSED)

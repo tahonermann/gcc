@@ -455,7 +455,7 @@ find_file_in_dir (cpp_reader *pfile, _cpp_file *file, bool *invalid_pch,
   return false;
 }
 
-/* Return tue iff the missing_header callback found the given HEADER.  */
+/* Return true iff the missing_header callback found the given HEADER.  */
 static bool
 search_path_exhausted (cpp_reader *pfile, const char *header, _cpp_file *file)
 {
@@ -906,11 +906,11 @@ _cpp_stack_file (cpp_reader *pfile, _cpp_file *file, bool import,
     sysp = MAX (pfile->buffer->sysp,  file->dir->sysp);
 
   /* Add the file to the dependencies on its first inclusion.  */
-  if (CPP_OPTION (pfile, deps.style) > !!sysp && !file->stack_count)
-    {
-      if (!file->main_file || !CPP_OPTION (pfile, deps.ignore_main_file))
-	deps_add_dep (pfile->deps, file->path);
-    }
+  if (!file->stack_count
+      && CPP_OPTION (pfile, deps.style) > !!sysp
+      && file->path[0]
+      && (!file->main_file || !CPP_OPTION (pfile, deps.ignore_main_file)))
+    deps_add_dep (pfile->deps, file->path);
 
   /* Clear buffer_valid since _cpp_clean_line messes it up.  */
   file->buffer_valid = false;
@@ -1369,7 +1369,7 @@ void
 cpp_make_system_header (cpp_reader *pfile, int syshdr, int externc)
 {
   int flags = 0;
-  const struct line_maps *line_table = pfile->line_table;
+  const class line_maps *line_table = pfile->line_table;
   const line_map_ordinary *map = LINEMAPS_LAST_ORDINARY_MAP (line_table);
   /* 1 = system header, 2 = system header to be treated as C.  */
   if (syshdr)

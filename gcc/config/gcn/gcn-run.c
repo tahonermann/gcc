@@ -66,7 +66,9 @@ bool debug = false;
 
 hsa_agent_t device = { 0 };
 hsa_queue_t *queue = NULL;
-uint64_t kernel = 0;
+uint64_t init_array_kernel = 0;
+uint64_t fini_array_kernel = 0;
+uint64_t main_kernel = 0;
 hsa_executable_t executable = { 0 };
 
 hsa_region_t kernargs_region = { 0 };
@@ -427,14 +429,30 @@ load_image (const char *filename)
   XHSA (hsa_fns.hsa_executable_freeze_fn (executable, ""),
 	"Freeze GCN executable");
 
-  /* Locate the "main" function, and read the kernel's properties.  */
+  /* Locate the "_init_array" function, and read the kernel's properties.  */
   hsa_executable_symbol_t symbol;
+  XHSA (hsa_fns.hsa_executable_get_symbol_fn (executable, NULL, "_init_array",
+					      device, 0, &symbol),
+	"Find '_init_array' function");
+  XHSA (hsa_fns.hsa_executable_symbol_get_info_fn
+	    (symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &init_array_kernel),
+	"Extract '_init_array' kernel object kernel object");
+
+  /* Locate the "_fini_array" function, and read the kernel's properties.  */
+  XHSA (hsa_fns.hsa_executable_get_symbol_fn (executable, NULL, "_fini_array",
+					      device, 0, &symbol),
+	"Find '_fini_array' function");
+  XHSA (hsa_fns.hsa_executable_symbol_get_info_fn
+	    (symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &fini_array_kernel),
+	"Extract '_fini_array' kernel object kernel object");
+
+  /* Locate the "main" function, and read the kernel's properties.  */
   XHSA (hsa_fns.hsa_executable_get_symbol_fn (executable, NULL, "main",
 					      device, 0, &symbol),
 	"Find 'main' function");
   XHSA (hsa_fns.hsa_executable_symbol_get_info_fn
-	    (symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &kernel),
-	"Extract kernel object");
+	    (symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &main_kernel),
+	"Extract 'main' kernel object");
   XHSA (hsa_fns.hsa_executable_symbol_get_info_fn
 	    (symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE,
 	     &kernarg_segment_size),
@@ -601,7 +619,7 @@ struct kernargs
   struct output
   {
     int return_value;
-    int next_output;
+    unsigned int next_output;
     struct printf_data
     {
       int written;
@@ -613,7 +631,8 @@ struct kernargs
 	double dvalue;
 	char text[128];
       };
-    } queue[1000];
+    } queue[1024];
+    unsigned int consumed;
   } output_data;
 
   struct heap
@@ -624,21 +643,34 @@ struct kernargs
 };
 
 /* Print any console output from the kernel.
-   We print all entries from print_index to the next entry without a "written"
-   flag.  Subsequent calls should use the returned print_index value to resume
-   from the same point.  */
+   We print all entries from "consumed" to the next entry without a "written"
+   flag, or "next_output" is reached.  The buffer is circular, but the
+   indices are absolute.  It is assumed the kernel will stop writing data
+   if "next_output" wraps (becomes smaller than "consumed").  */
 void
-gomp_print_output (struct kernargs *kernargs, int *print_index)
+gomp_print_output (struct kernargs *kernargs, bool final)
 {
-  int limit = (sizeof (kernargs->output_data.queue)
-	       / sizeof (kernargs->output_data.queue[0]));
+  unsigned int limit = (sizeof (kernargs->output_data.queue)
+			/ sizeof (kernargs->output_data.queue[0]));
 
-  int i;
-  for (i = *print_index; i < limit; i++)
+  unsigned int from = __atomic_load_n (&kernargs->output_data.consumed,
+				       __ATOMIC_ACQUIRE);
+  unsigned int to = kernargs->output_data.next_output;
+
+  if (from > to)
     {
-      struct printf_data *data = &kernargs->output_data.queue[i];
+      /* Overflow.  */
+      if (final)
+	printf ("GCN print buffer overflowed.\n");
+      return;
+    }
 
-      if (!data->written)
+  unsigned int i;
+  for (i = from; i < to; i++)
+    {
+      struct printf_data *data = &kernargs->output_data.queue[i%limit];
+
+      if (!data->written && !final)
 	break;
 
       switch (data->type)
@@ -655,22 +687,22 @@ gomp_print_output (struct kernargs *kernargs, int *print_index)
 	case 3:
 	  printf ("%.128s%.128s", data->msg, data->text);
 	  break;
+	default:
+	  printf ("GCN print buffer error!\n");
+	  break;
 	}
 
       data->written = 0;
+      __atomic_store_n (&kernargs->output_data.consumed, i+1,
+			__ATOMIC_RELEASE);
     }
-
-  if (*print_index < limit && i == limit
-      && kernargs->output_data.next_output > limit)
-    printf ("WARNING: GCN print buffer exhausted.\n");
-
-  *print_index = i;
+  fflush (stdout);
 }
 
 /* Execute an already-loaded kernel on the device.  */
 
 static void
-run (void *kernargs)
+run (uint64_t kernel, void *kernargs)
 {
   /* A "signal" is used to launch and monitor the kernel.  */
   hsa_signal_t signal;
@@ -711,16 +743,15 @@ run (void *kernargs)
   hsa_fns.hsa_queue_store_write_index_relaxed_fn (queue, index + 1);
   hsa_fns.hsa_signal_store_relaxed_fn (queue->doorbell_signal, index);
   /* Kernel running ......  */
-  int print_index = 0;
   while (hsa_fns.hsa_signal_wait_relaxed_fn (signal, HSA_SIGNAL_CONDITION_LT,
 					     1, 1000000,
 					     HSA_WAIT_STATE_ACTIVE) != 0)
     {
       usleep (10000);
-      gomp_print_output (kernargs, &print_index);
+      gomp_print_output (kernargs, false);
     }
 
-  gomp_print_output (kernargs, &print_index);
+  gomp_print_output (kernargs, true);
 
   if (debug)
     fprintf (stderr, "Kernel exited\n");
@@ -797,6 +828,7 @@ main (int argc, char *argv[])
   for (unsigned i = 0; i < (sizeof (kernargs->output_data.queue)
 			    / sizeof (kernargs->output_data.queue[0])); i++)
     kernargs->output_data.queue[i].written = 0;
+  kernargs->output_data.consumed = 0;
   int offset = 0;
   for (int i = 0; i < kernel_argc; i++)
     {
@@ -808,14 +840,23 @@ main (int argc, char *argv[])
   kernargs->heap_ptr = (int64_t) &kernargs->heap;
   kernargs->heap.size = heap_size;
 
+  /* Run constructors on the GPU.  */
+  run (init_array_kernel, kernargs);
+
   /* Run the kernel on the GPU.  */
-  run (kernargs);
+  run (main_kernel, kernargs);
   unsigned int return_value =
     (unsigned int) kernargs->output_data.return_value;
 
+  /* Run destructors on the GPU.  */
+  run (fini_array_kernel, kernargs);
+
   unsigned int upper = (return_value & ~0xffff) >> 16;
   if (upper == 0xcafe)
-    printf ("Kernel exit value was never set\n");
+    {
+      printf ("Kernel exit value was never set\n");
+      return_value = 0xff;
+    }
   else if (upper == 0xffff)
     ; /* Set by exit.  */
   else if (upper == 0)

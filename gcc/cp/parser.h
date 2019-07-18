@@ -166,6 +166,9 @@ struct GTY(()) cp_unparsed_functions_entry {
   /* Nested classes go in this vector, so that we can do some final
      processing after parsing any NSDMIs.  */
   vec<tree, va_gc> *classes;
+
+  /* Functions with noexcept-specifiers that require post-processing.  */
+  vec<tree, va_gc> *noexcepts;
 };
 
 
@@ -349,6 +352,9 @@ struct GTY(()) cp_parser {
      definitions are not permitted.  The string stored here will be
      issued as an error message if a type is defined.  */
   const char *type_definition_forbidden_message;
+
+  /* Argument for type_definition_forbidden_message if needed.  */
+  const char *type_definition_forbidden_message_arg;
 
   /* A stack used for member functions of local classes.  The lists
      contained in an individual entry can only be processed once the

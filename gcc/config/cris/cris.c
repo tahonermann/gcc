@@ -903,7 +903,7 @@ cris_print_operand (FILE *file, rtx x, int code)
     case ':':
       /* The PIC register.  */
       if (! flag_pic)
-	internal_error ("invalid use of ':' modifier");
+	internal_error ("invalid use of %<:%> modifier");
       fprintf (file, "$%s", reg_names [PIC_OFFSET_TABLE_REGNUM]);
       return;
 
@@ -2651,7 +2651,8 @@ cris_option_override (void)
 
       /* Do some sanity checking.  */
       if (cris_max_stackframe < 0 || cris_max_stackframe > 0x20000000)
-	internal_error ("-max-stackframe=%d is not usable, not between 0 and %d",
+	internal_error ("%<-max-stackframe=%d%> is not usable, "
+			"not between 0 and %d",
 			cris_max_stackframe, 0x20000000);
     }
 
@@ -2679,8 +2680,8 @@ cris_option_override (void)
 	cris_cpu_version = 10;
 
       if (cris_cpu_version < 0 || cris_cpu_version > 32)
-	error ("unknown CRIS version specification in -march= or -mcpu= : %s",
-	       cris_cpu_str);
+	error ("unknown CRIS version specification in %<-march=%> or "
+	       "%<-mcpu=%> : %s", cris_cpu_str);
 
       /* Set the target flags.  */
       if (cris_cpu_version >= CRIS_CPU_ETRAX4)
@@ -2715,7 +2716,7 @@ cris_option_override (void)
 	cris_tune = 10;
 
       if (cris_tune < 0 || cris_tune > 32)
-	error ("unknown CRIS cpu version specification in -mtune= : %s",
+	error ("unknown CRIS cpu version specification in %<-mtune=%> : %s",
 	       cris_tune_str);
 
       if (cris_tune >= CRIS_CPU_SVINTO)
@@ -2736,7 +2737,8 @@ cris_option_override (void)
 	 further errors.  */
       if (! TARGET_LINUX)
 	{
-	  error ("-fPIC and -fpic are not supported in this configuration");
+	  error ("%<-fPIC%> and %<-fpic%> are not supported "
+		 "in this configuration");
 	  flag_pic = 0;
 	}
 
@@ -2762,6 +2764,9 @@ cris_asm_output_mi_thunk (FILE *stream,
 			  HOST_WIDE_INT vcall_offset ATTRIBUTE_UNUSED,
 			  tree funcdecl)
 {
+  const char *fnname = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (thunkdecl));
+
+  assemble_start_function (thunkdecl, fnname);
   /* Make sure unwind info is emitted for the thunk if needed.  */
   final_start_function (emit_barrier (), stream, 1);
 
@@ -2804,6 +2809,7 @@ cris_asm_output_mi_thunk (FILE *stream,
     }
 
   final_end_function ();
+  assemble_end_function (thunkdecl, fnname);
 }
 
 /* Boilerplate emitted at start of file.

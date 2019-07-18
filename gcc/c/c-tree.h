@@ -288,6 +288,14 @@ enum c_declspec_word {
 			    enumerator.  */
 };
 
+enum c_declspec_il {
+  cdil_none,
+  cdil_gimple,		/* __GIMPLE  */
+  cdil_gimple_cfg,	/* __GIMPLE(cfg)  */
+  cdil_gimple_ssa,	/* __GIMPLE(ssa)  */
+  cdil_rtl		/* __RTL  */
+};
+
 /* A sequence of declaration specifiers in C.  When a new declaration
    specifier is added, please update the enum c_declspec_word above
    accordingly.  */
@@ -309,6 +317,8 @@ struct c_declspecs {
   tree attrs;
   /* The pass to start compiling a __GIMPLE or __RTL function with.  */
   char *gimple_or_rtl_pass;
+  /* ENTRY BB count.  */
+  profile_count entry_bb_count;
   /* The base-2 log of the greatest alignment required by an _Alignas
      specifier, in bytes, or -1 if no such specifiers with nonzero
      alignment.  */
@@ -326,6 +336,7 @@ struct c_declspecs {
   /* The kind of type specifier if one has been seen, ctsk_none
      otherwise.  */
   ENUM_BITFIELD (c_typespec_kind) typespec_kind : 3;
+  ENUM_BITFIELD (c_declspec_il) declspec_il : 3;
   /* Whether any expressions in typeof specifiers may appear in
      constant expressions.  */
   BOOL_BITFIELD expr_const_operands : 1;
@@ -381,10 +392,6 @@ struct c_declspecs {
   /* Whether any alignment specifier (even with zero alignment) was
      specified.  */
   BOOL_BITFIELD alignas_p : 1;
-  /* Whether any __GIMPLE specifier was specified.  */
-  BOOL_BITFIELD gimple_p : 1;
-  /* Whether any __RTL specifier was specified.  */
-  BOOL_BITFIELD rtl_p : 1;
   /* The address space that the declaration belongs to.  */
   addr_space_t address_space;
 };
@@ -518,7 +525,7 @@ extern void gen_aux_info_record (tree, int, int, int);
 
 /* in c-decl.c */
 struct c_spot_bindings;
-struct c_struct_parse_info;
+class c_struct_parse_info;
 extern struct obstack parser_obstack;
 extern tree c_break_label;
 extern tree c_cont_label;
@@ -555,7 +562,7 @@ extern void finish_decl (tree, location_t, tree, tree, tree);
 extern tree finish_enum (tree, tree, tree);
 extern void finish_function (void);
 extern tree finish_struct (location_t, tree, tree, tree,
-			   struct c_struct_parse_info *);
+			   class c_struct_parse_info *);
 extern struct c_arg_info *build_arg_info (void);
 extern struct c_arg_info *get_parm_info (bool, tree);
 extern tree grokfield (location_t, struct c_declarator *,
@@ -579,7 +586,7 @@ extern bool start_function (struct c_declspecs *, struct c_declarator *, tree);
 extern tree start_decl (struct c_declarator *, struct c_declspecs *, bool,
 			tree);
 extern tree start_struct (location_t, enum tree_code, tree,
-			  struct c_struct_parse_info **);
+			  class c_struct_parse_info **);
 extern void store_parm_decls (void);
 extern void store_parm_decls_from (struct c_arg_info *);
 extern void temp_store_parm_decls (tree, tree);
@@ -618,6 +625,7 @@ extern bool c_missing_noreturn_ok_p (tree);
 extern bool c_warn_unused_global_decl (const_tree);
 extern void c_initialize_diagnostics (diagnostic_context *);
 extern bool c_vla_unspec_p (tree x, tree fn);
+extern alias_set_type c_get_alias_set (tree);
 
 /* in c-typeck.c */
 extern int in_alignof;
@@ -688,7 +696,8 @@ extern int c_types_compatible_p (tree, tree);
 extern tree c_begin_compound_stmt (bool);
 extern tree c_end_compound_stmt (location_t, tree, bool);
 extern void c_finish_if_stmt (location_t, tree, tree, tree);
-extern void c_finish_loop (location_t, tree, tree, tree, tree, tree, bool);
+extern void c_finish_loop (location_t, location_t, tree, location_t, tree,
+			   tree, tree, tree, bool);
 extern tree c_begin_stmt_expr (void);
 extern tree c_finish_stmt_expr (location_t, tree);
 extern tree c_process_expr_stmt (location_t, tree);

@@ -113,6 +113,9 @@ struct copy_body_data
   /* True if trees may not be unshared.  */
   bool do_not_unshare;
 
+  /* True if trees should not be folded during the copying.  */
+  bool do_not_fold;
+
   /* True if new declarations may not be created during type remapping.  */
   bool prevent_decl_creation_for_types;
 
@@ -122,6 +125,13 @@ struct copy_body_data
   /* Replace error_mark_node as upper bound of array types with
      an uninitialized VAR_DECL temporary.  */
   bool adjust_array_error_bounds;
+
+  /* Usually copy_decl callback always creates new decls, in that case
+     we want to remap all variably_modified_type_p types.  If this flag
+     is set, remap_type will do further checks to see if remap_decl
+     of any decls mentioned in the type will remap to anything but itself
+     and only in that case will actually remap the type.  */
+  bool dont_remap_vla_if_no_change;
 
   /* A function to be called when duplicating BLOCK nodes.  */
   void (*transform_lang_insert_block) (tree);
@@ -152,6 +162,10 @@ struct copy_body_data
   /* A list of addressable local variables remapped into the caller
      when inlining a call within an OpenMP SIMD-on-SIMT loop.  */
   vec<tree> *dst_simt_vars;
+
+  /* Basic block to which clobbers for local variables from the inline
+     function that need to live in memory should be added.  */
+  basic_block eh_landing_pad_dest;
 
   /* If clobbers for local variables from the inline function
      that need to live in memory should be added to EH landing pads

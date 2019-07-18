@@ -268,6 +268,9 @@ if $GLIBCXX_IS_NATIVE; then
   # C11 functions for C++17 library
   AC_CHECK_FUNCS(timespec_get)
 
+  # For Networking TS.
+  AC_CHECK_FUNCS(sockatmark)
+
   # For iconv support.
   AM_ICONV
 
@@ -414,6 +417,8 @@ GCC_CHECK_ASSEMBLER_HWCAP
 
 # Check if assembler supports rdrand opcode.
 GLIBCXX_CHECK_X86_RDRAND
+# Check if assembler supports rdseed opcode.
+GLIBCXX_CHECK_X86_RDSEED
 
 # This depends on GLIBCXX_ENABLE_SYMVERS and GLIBCXX_IS_NATIVE.
 GLIBCXX_CONFIGURE_TESTSUITE
@@ -449,6 +454,7 @@ AC_CHECK_PROG([DOXYGEN], doxygen, yes, no)
 AC_CHECK_PROG([DOT], dot, yes, no)
 
 # Check for docbook
+AC_CHECK_PROG([XMLCATALOG], xmlcatalog, yes, no)
 AC_CHECK_PROG([XSLTPROC], xsltproc, yes, no)
 AC_CHECK_PROG([XMLLINT], xmllint, yes, no)
 GLIBCXX_CONFIGURE_DOCBOOK
@@ -477,6 +483,10 @@ AM_CONDITIONAL(BUILD_MAN,
 AC_CHECK_PROG([DBLATEX], dblatex, yes, no)
 AC_CHECK_PROG([PDFLATEX], pdflatex, yes, no)
 AM_CONDITIONAL(BUILD_PDF,
+	       test $ac_cv_prog_DOXYGEN = "yes" &&
+	       test $ac_cv_prog_DOT = "yes" &&
+	       test $ac_cv_prog_XSLTPROC = "yes" &&
+	       test $ac_cv_prog_XMLLINT = "yes" &&
 	       test $ac_cv_prog_DBLATEX = "yes" &&
 	       test $ac_cv_prog_PDFLATEX = "yes")
 

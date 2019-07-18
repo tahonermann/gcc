@@ -383,9 +383,14 @@ target_to_host (char *hostr, size_t hostsz, const char *targstr)
      overlong strings just like the translated strings are.  */
   if (target_to_host_charmap['\0'] == 1)
     {
-      strncpy (hostr, targstr, hostsz - 4);
-      if (strlen (targstr) >= hostsz)
-	strcpy (hostr + hostsz - 4, "...");
+      size_t len = strlen (targstr);
+      if (len >= hostsz)
+	{
+	  memcpy (hostr, targstr, hostsz - 4);
+	  strcpy (hostr + hostsz - 4, "...");
+	}
+      else
+	memcpy (hostr, targstr, len + 1);
       return hostr;
     }
 
@@ -399,10 +404,9 @@ target_to_host (char *hostr, size_t hostsz, const char *targstr)
       if (!*targstr)
 	break;
 
-      if (size_t (ph - hostr) == hostsz - 4)
+      if (size_t (ph - hostr) == hostsz)
 	{
-	  *ph = '\0';
-	  strcat (ph, "...");
+	  strcpy (ph - 4, "...");
 	  break;
 	}
     }
@@ -516,8 +520,9 @@ enum format_lengths
 /* Description of the result of conversion either of a single directive
    or the whole format string.  */
 
-struct fmtresult
+class fmtresult
 {
+public:
   /* Construct a FMTRESULT object with all counters initialized
      to MIN.  KNOWNRANGE is set when MIN is valid.  */
   fmtresult (unsigned HOST_WIDE_INT min = HOST_WIDE_INT_MAX)
@@ -1015,10 +1020,12 @@ build_intmax_type_nodes (tree *pintmax, tree *puintmax)
       for (int i = 0; i < NUM_INT_N_ENTS; i++)
 	if (int_n_enabled_p[i])
 	  {
-	    char name[50];
+	    char name[50], altname[50];
 	    sprintf (name, "__int%d unsigned", int_n_data[i].bitsize);
+	    sprintf (altname, "__int%d__ unsigned", int_n_data[i].bitsize);
 
-	    if (strcmp (name, UINTMAX_TYPE) == 0)
+	    if (strcmp (name, UINTMAX_TYPE) == 0
+		|| strcmp (altname, UINTMAX_TYPE) == 0)
 	      {
 	        *pintmax = int_n_trees[i].signed_type;
 	        *puintmax = int_n_trees[i].unsigned_type;
@@ -3012,12 +3019,10 @@ format_directive (const sprintf_dom_walker::call_info &info,
 	     help the user figure out how big a buffer they need.  */
 
 	  if (min == max)
-	    inform (callloc,
-		    (min == 1
-		     ? G_("%qE output %wu byte into a destination of size %wu")
-		     : G_("%qE output %wu bytes into a destination of size "
-			  "%wu")),
-		    info.func, min, info.objsize);
+	    inform_n (callloc, min,
+		      "%qE output %wu byte into a destination of size %wu",
+		      "%qE output %wu bytes into a destination of size %wu",
+		      info.func, min, info.objsize);
 	  else if (max < HOST_WIDE_INT_MAX)
 	    inform (callloc,
 		    "%qE output between %wu and %wu bytes into "
@@ -3040,11 +3045,9 @@ format_directive (const sprintf_dom_walker::call_info &info,
 	     of printf with no destination size just print the computed
 	     result.  */
 	  if (min == max)
-	    inform (callloc,
-		    (min == 1
-		     ? G_("%qE output %wu byte")
-		     : G_("%qE output %wu bytes")),
-		    info.func, min);
+	    inform_n (callloc, min,
+		      "%qE output %wu byte", "%qE output %wu bytes",
+		      info.func, min);
 	  else if (max < HOST_WIDE_INT_MAX)
 	    inform (callloc,
 		    "%qE output between %wu and %wu bytes",
@@ -3692,10 +3695,10 @@ try_substitute_return_value (gimple_stmt_iterator *gsi,
 	 are badly declared.  */
       && !stmt_ends_bb_p (info.callstmt))
     {
-      tree cst = build_int_cst (integer_type_node, retval[0]);
+      tree cst = build_int_cst (lhs ? TREE_TYPE (lhs) : integer_type_node,
+				retval[0]);
 
-      if (lhs == NULL_TREE
-	  && info.nowrite)
+      if (lhs == NULL_TREE && info.nowrite)
 	{
 	  /* Remove the call to the bounded function with a zero size
 	     (e.g., snprintf(0, 0, "%i", 123)) if there is no lhs.  */
@@ -3736,7 +3739,7 @@ try_substitute_return_value (gimple_stmt_iterator *gsi,
 	    }
 	}
     }
-  else if (lhs)
+  else if (lhs && types_compatible_p (TREE_TYPE (lhs), integer_type_node))
     {
       bool setrange = false;
 
@@ -3858,16 +3861,21 @@ sprintf_dom_walker::handle_gimple_call (gimple_stmt_iterator *gsi)
   if (!info.func)
     return false;
 
-  info.fncode = DECL_FUNCTION_CODE (info.func);
-
   /* Format string argument number (valid for all functions).  */
   unsigned idx_format = UINT_MAX;
-  if (!gimple_call_builtin_p (info.callstmt, BUILT_IN_NORMAL))
+  if (gimple_call_builtin_p (info.callstmt, BUILT_IN_NORMAL))
+    info.fncode = DECL_FUNCTION_CODE (info.func);
+  else
     {
       unsigned idx_args;
       idx_format = get_user_idx_format (info.func, &idx_args);
-      if (idx_format == UINT_MAX)
+      if (idx_format == UINT_MAX
+	  || idx_format >= gimple_call_num_args (info.callstmt)
+	  || idx_args > gimple_call_num_args (info.callstmt)
+	  || !POINTER_TYPE_P (TREE_TYPE (gimple_call_arg (info.callstmt,
+							  idx_format))))
 	return false;
+      info.fncode = BUILT_IN_NONE;
       info.argidx = idx_args;
     }
 

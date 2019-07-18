@@ -1,3 +1,31 @@
+2019-05-24  Clement Chigot  <clement.chigot@atos.net>
+
+	* Makefile.am (BUILDTESTS): Remove test_elf, add test_elf_32 and
+	test_elf_64.
+	* Makefile.in: Regenerate.
+
+2019-05-14  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* configure.ac (have_dl_iterate_phdr): Remove *-*-solaris2.10*
+	handling.
+	* configure: Regenerate.
+
+2019-03-11  Ian Lance Taylor  <iant@golang.org>
+
+	PR libbacktrace/89669
+	* Makefile.am (BUILDTESTS): Only add ztest and ztest_alloc if
+	HAVE_ELF.
+	* Makefile.in: Regenerate.
+
+2019-02-26  Tom de Vries  <tdevries@suse.de>
+
+	* btest.c (test5): Allow global.* as minimal symbol name for global.
+
+2019-02-26  Tom de Vries  <tdevries@suse.de>
+
+	* Makefile.am (TESTS): Only add b3test_dwz_buildid if HAVE_DWZ.
+	* Makefile.in: Regenerate.
+
 2019-02-12  Tom de Vries  <tdevries@suse.de>
 
 	PR libbacktrace/81983

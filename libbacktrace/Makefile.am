@@ -130,6 +130,15 @@ elf_for_test.c: elf.c
 endif HAVE_OBJCOPY_DEBUGLINK
 endif HAVE_ELF
 
+elf_%.c: elf.c
+	SEARCH='#error "Unknown BACKTRACE_ELF_SIZE"'; \
+	REPLACE='#undef BACKTRACE_ELF_SIZE\
+	#define BACKTRACE_ELF_SIZE'; \
+	$(SED) "s/^$$SEARCH\$$/$$REPLACE $*/" \
+		$< \
+		> $@.tmp
+	mv $@.tmp $@
+
 xcoff_%.c: xcoff.c
 	SEARCH='#error "Unknown BACKTRACE_XCOFF_SIZE"'; \
 	REPLACE='#undef BACKTRACE_XCOFF_SIZE\
@@ -139,10 +148,15 @@ xcoff_%.c: xcoff.c
 		> $@.tmp
 	mv $@.tmp $@
 
-test_elf_SOURCES = test_format.c testlib.c
-test_elf_LDADD = libbacktrace_noformat.la elf.lo
+test_elf_32_SOURCES = test_format.c testlib.c
+test_elf_32_LDADD = libbacktrace_noformat.la elf_32.lo
 
-BUILDTESTS += test_elf
+BUILDTESTS += test_elf_32
+
+test_elf_64_SOURCES = test_format.c testlib.c
+test_elf_64_LDADD = libbacktrace_noformat.la elf_64.lo
+
+BUILDTESTS += test_elf_64
 
 test_xcoff_32_SOURCES = test_format.c testlib.c
 test_xcoff_32_LDADD = libbacktrace_noformat.la xcoff_32.lo
@@ -205,6 +219,8 @@ b2test_LDADD = libbacktrace_elf_for_test.la
 check_PROGRAMS += b2test
 TESTS += b2test_buildid
 
+if HAVE_DWZ
+
 b3test_SOURCES = $(btest_SOURCES)
 b3test_CFLAGS = $(btest_CFLAGS)
 b3test_LDFLAGS = -Wl,--build-id
@@ -212,6 +228,8 @@ b3test_LDADD = libbacktrace_elf_for_test.la
 
 check_PROGRAMS += b3test
 TESTS += b3test_dwz_buildid
+
+endif HAVE_DWZ
 
 endif HAVE_OBJCOPY_DEBUGLINK
 endif HAVE_ELF
@@ -268,6 +286,8 @@ stest_alloc_LDADD = libbacktrace_alloc.la
 
 BUILDTESTS += stest_alloc
 
+if HAVE_ELF
+
 ztest_SOURCES = ztest.c testlib.c
 ztest_CFLAGS = -DSRCDIR=\"$(srcdir)\"
 ztest_LDADD = libbacktrace.la
@@ -286,6 +306,8 @@ ztest_alloc_SOURCES = $(ztest_SOURCES)
 ztest_alloc_CFLAGS = $(ztest_CFLAGS)
 
 BUILDTESTS += ztest_alloc
+
+endif HAVE_ELF
 
 edtest_SOURCES = edtest.c edtest2_build.c testlib.c
 edtest_LDADD = libbacktrace.la

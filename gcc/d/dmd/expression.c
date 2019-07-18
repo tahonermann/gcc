@@ -516,9 +516,9 @@ static bool checkPropertyCall(Expression *e)
             tf = (TypeFunction *)ce->f->type;
             /* If a forward reference to ce->f, try to resolve it
              */
-            if (!tf->deco && ce->f->_scope)
+            if (!tf->deco && ce->f->semanticRun < PASSsemanticdone)
             {
-                ce->f->semantic(ce->f->_scope);
+                ce->f->semantic(NULL);
                 tf = (TypeFunction *)ce->f->type;
             }
         }
@@ -1125,6 +1125,8 @@ bool arrayExpressionToCommonType(Scope *sc, Expressions *exps, Type **pt)
     Type *t0 = NULL;
     Expression *e0 = NULL;      // dead-store to prevent spurious warning
     size_t j0 = ~0;             // dead-store to prevent spurious warning
+    bool foundType = false;
+
     for (size_t i = 0; i < exps->dim; i++)
     {
         Expression *e = (*exps)[i];
@@ -1140,6 +1142,7 @@ bool arrayExpressionToCommonType(Scope *sc, Expressions *exps, Type **pt)
         }
         if (e->op == TOKtype)
         {
+            foundType = true;   // do not break immediately, there might be more errors
             e->checkValue();    // report an error "type T has no value"
             t0 = Type::terror;
             continue;
@@ -1158,7 +1161,7 @@ bool arrayExpressionToCommonType(Scope *sc, Expressions *exps, Type **pt)
 
         e = doCopyOrMove(sc, e);
 
-        if (t0 && !t0->equals(e->type))
+        if (!foundType && t0 && !t0->equals(e->type))
         {
             /* This applies ?: to merge the types. It's backwards;
              * ?: should call this function to merge types.
@@ -5744,6 +5747,7 @@ VectorExp::VectorExp(Loc loc, Expression *e, Type *t)
     assert(t->ty == Tvector);
     to = (TypeVector *)t;
     dim = ~0;
+    ownedByCtfe = OWNEDcode;
 }
 
 VectorExp *VectorExp::create(Loc loc, Expression *e, Type *t)
@@ -5754,6 +5758,24 @@ VectorExp *VectorExp::create(Loc loc, Expression *e, Type *t)
 Expression *VectorExp::syntaxCopy()
 {
     return new VectorExp(loc, e1->syntaxCopy(), to->syntaxCopy());
+}
+
+/************************************************************/
+
+VectorArrayExp::VectorArrayExp(Loc loc, Expression *e1)
+        : UnaExp(loc, TOKvectorarray, sizeof(VectorExp), e1)
+{
+}
+
+bool VectorArrayExp::isLvalue()
+{
+    return e1->isLvalue();
+}
+
+Expression *VectorArrayExp::toLvalue(Scope *sc, Expression *e)
+{
+    e1 = e1->toLvalue(sc, e);
+    return this;
 }
 
 /************************************************************/
@@ -6848,6 +6870,43 @@ Expression *resolveOpDollar(Scope *sc, ArrayExp *ae, Expression **pe0)
     }
 
     return ae;
+}
+
+/***********************************************************
+ * Resolve `exp` as a compile-time known string.
+ * Params:
+ *  sc  = scope
+ *  exp = Expression which expected as a string
+ *  s   = What the string is expected for, will be used in error diagnostic.
+ * Returns:
+ *  String literal, or `null` if error happens.
+ */
+StringExp *semanticString(Scope *sc, Expression *exp, const char *s)
+{
+    sc = sc->startCTFE();
+    exp = semantic(exp, sc);
+    exp = resolveProperties(sc, exp);
+    sc = sc->endCTFE();
+
+    if (exp->op == TOKerror)
+        return NULL;
+
+    Expression *e = exp;
+    if (exp->type->isString())
+    {
+        e = e->ctfeInterpret();
+        if (e->op == TOKerror)
+            return NULL;
+    }
+
+    StringExp *se = e->toStringExp();
+    if (!se)
+    {
+        exp->error("string expected for %s, not (%s) of type %s",
+            s, exp->toChars(), exp->type->toChars());
+        return NULL;
+    }
+    return se;
 }
 
 /**************************************

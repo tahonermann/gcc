@@ -929,8 +929,9 @@ static poly_int64 hard_frame_pointer_adjustment = -1;
 
 /* Data for adjust_mems callback.  */
 
-struct adjust_mem_data
+class adjust_mem_data
 {
+public:
   bool store;
   machine_mode mem_mode;
   HOST_WIDE_INT stack_adjust;
@@ -1030,7 +1031,7 @@ use_narrower_mode (rtx x, scalar_int_mode mode, scalar_int_mode wmode)
 static rtx
 adjust_mems (rtx loc, const_rtx old_rtx, void *data)
 {
-  struct adjust_mem_data *amd = (struct adjust_mem_data *) data;
+  class adjust_mem_data *amd = (class adjust_mem_data *) data;
   rtx mem, addr = loc, tem;
   machine_mode mem_mode_save;
   bool store_save;
@@ -6388,7 +6389,7 @@ prepare_call_arguments (basic_block bb, rtx_insn *insn)
 
 	    if (!frame_pointer_needed)
 	      {
-		struct adjust_mem_data amd;
+		class adjust_mem_data amd;
 		amd.mem_mode = VOIDmode;
 		amd.stack_adjust = -VTI (bb)->out.stack_adjust;
 		amd.store = true;
@@ -7182,7 +7183,7 @@ vt_find_locations (void)
 		  if (MAY_HAVE_DEBUG_BIND_INSNS)
 		    inform (DECL_SOURCE_LOCATION (cfun->decl),
 			    "variable tracking size limit exceeded with "
-			    "-fvar-tracking-assignments, retrying without");
+			    "%<-fvar-tracking-assignments%>, retrying without");
 		  else
 		    inform (DECL_SOURCE_LOCATION (cfun->decl),
 			    "variable tracking size limit exceeded");
@@ -7332,7 +7333,7 @@ dump_var (variable *var)
 static void
 dump_vars (variable_table_type *vars)
 {
-  if (vars->elements () > 0)
+  if (!vars->is_empty ())
     {
       fprintf (dump_file, "Variables:\n");
       vars->traverse <void *, dump_var_tracking_slot> (NULL);
@@ -8061,8 +8062,9 @@ delete_variable_part (dataflow_set *set, rtx loc, decl_or_value dv,
 
 /* Structure for passing some other parameters to function
    vt_expand_loc_callback.  */
-struct expand_loc_callback_data
+class expand_loc_callback_data
 {
+public:
   /* The variables and values active at this point.  */
   variable_table_type *vars;
 
@@ -8328,8 +8330,8 @@ static inline rtx
 vt_expand_var_loc_chain (variable *var, bitmap regs, void *data,
 			 bool *pendrecp)
 {
-  struct expand_loc_callback_data *elcd
-    = (struct expand_loc_callback_data *) data;
+  class expand_loc_callback_data *elcd
+    = (class expand_loc_callback_data *) data;
   location_chain *loc, *next;
   rtx result = NULL;
   int first_child, result_first_child, last_child;
@@ -8467,8 +8469,8 @@ vt_expand_loc_callback (rtx x, bitmap regs,
 			int max_depth ATTRIBUTE_UNUSED,
 			void *data)
 {
-  struct expand_loc_callback_data *elcd
-    = (struct expand_loc_callback_data *) data;
+  class expand_loc_callback_data *elcd
+    = (class expand_loc_callback_data *) data;
   decl_or_value dv;
   variable *var;
   rtx result, subreg;
@@ -8491,7 +8493,7 @@ vt_expand_loc_callback (rtx x, bitmap regs,
 
       /* Invalid SUBREGs are ok in debug info.  ??? We could try
 	 alternate expansions for the VALUE as well.  */
-      if (!result)
+      if (!result && GET_MODE (subreg) != VOIDmode)
 	result = gen_rtx_raw_SUBREG (GET_MODE (x), subreg, SUBREG_BYTE (x));
 
       return result;
@@ -8625,7 +8627,7 @@ resolve_expansions_pending_recursion (vec<rtx, va_heap> *pending)
 static rtx
 vt_expand_loc (rtx loc, variable_table_type *vars)
 {
-  struct expand_loc_callback_data data;
+  class expand_loc_callback_data data;
   rtx result;
 
   if (!MAY_HAVE_DEBUG_BIND_INSNS)
@@ -8647,7 +8649,7 @@ vt_expand_loc (rtx loc, variable_table_type *vars)
 static rtx
 vt_expand_1pvar (variable *var, variable_table_type *vars)
 {
-  struct expand_loc_callback_data data;
+  class expand_loc_callback_data data;
   rtx loc;
 
   gcc_checking_assert (var->onepart && var->n_var_parts == 1);
@@ -9060,7 +9062,7 @@ emit_notes_for_changes (rtx_insn *insn, enum emit_note_where where,
   emit_note_data data;
   variable_table_type *htab = shared_hash_htab (vars);
 
-  if (!changed_variables->elements ())
+  if (changed_variables->is_empty ())
     return;
 
   if (MAY_HAVE_DEBUG_BIND_INSNS)
@@ -9538,7 +9540,7 @@ vt_emit_notes (void)
   basic_block bb;
   dataflow_set cur;
 
-  gcc_assert (!changed_variables->elements ());
+  gcc_assert (changed_variables->is_empty ());
 
   /* Free memory occupied by the out hash tables, as they aren't used
      anymore.  */

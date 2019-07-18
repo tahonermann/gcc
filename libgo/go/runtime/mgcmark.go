@@ -1085,7 +1085,7 @@ func scanstackblockwithmap(pc, b0, n0 uintptr, ptrmask *uint8, gcw *gcWork) {
 						span != nil && span.state != mSpanManual &&
 							(obj < span.base() || obj >= span.limit || span.state != mSpanInUse) {
 						print("runtime: found in object at *(", hex(b), "+", hex(i), ") = ", hex(obj), ", pc=", hex(pc), "\n")
-						name, file, line := funcfileline(pc, -1)
+						name, file, line, _ := funcfileline(pc, -1)
 						print(name, "\n", file, ":", line, "\n")
 						//gcDumpObject("object", b, i)
 						throw("found bad pointer in Go stack (incorrect use of unsafe or cgo?)")
@@ -1106,9 +1106,9 @@ func scanstackblockwithmap(pc, b0, n0 uintptr, ptrmask *uint8, gcw *gcWork) {
 // Preemption must be disabled.
 //go:nowritebarrier
 func shade(b uintptr) {
-	if obj, span, objIndex := findObject(b, 0, 0, true); obj != 0 {
+	if obj, span, objIndex := findObject(b, 0, 0, !usestackmaps); obj != 0 {
 		gcw := &getg().m.p.ptr().gcw
-		greyobject(obj, 0, 0, span, gcw, objIndex, true)
+		greyobject(obj, 0, 0, span, gcw, objIndex, !usestackmaps)
 	}
 }
 

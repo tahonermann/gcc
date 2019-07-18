@@ -679,7 +679,6 @@ static void sparc_output_dwarf_dtprel (FILE *, int, rtx) ATTRIBUTE_UNUSED;
 static void sparc_file_end (void);
 static bool sparc_frame_pointer_required (void);
 static bool sparc_can_eliminate (const int, const int);
-static rtx sparc_builtin_setjmp_frame_value (void);
 static void sparc_conditional_register_usage (void);
 static bool sparc_use_pseudo_pic_reg (void);
 static void sparc_init_pic_reg (void);
@@ -724,11 +723,6 @@ static const struct attribute_spec sparc_attribute_table[] =
 };
 #endif
 
-/* Option handling.  */
-
-/* Parsed value.  */
-enum cmodel sparc_cmodel;
-
 char sparc_hard_reg_printed[8];
 
 /* Initialize the GCC target structure.  */
@@ -882,9 +876,6 @@ char sparc_hard_reg_printed[8];
 
 #undef TARGET_FRAME_POINTER_REQUIRED
 #define TARGET_FRAME_POINTER_REQUIRED sparc_frame_pointer_required
-
-#undef TARGET_BUILTIN_SETJMP_FRAME_VALUE
-#define TARGET_BUILTIN_SETJMP_FRAME_VALUE sparc_builtin_setjmp_frame_value
 
 #undef TARGET_CAN_ELIMINATE
 #define TARGET_CAN_ELIMINATE sparc_can_eliminate
@@ -1636,22 +1627,10 @@ dump_target_flags (const char *prefix, const int flags)
 static void
 sparc_option_override (void)
 {
-  static struct code_model {
-    const char *const name;
-    const enum cmodel value;
-  } const cmodels[] = {
-    { "32", CM_32 },
-    { "medlow", CM_MEDLOW },
-    { "medmid", CM_MEDMID },
-    { "medany", CM_MEDANY },
-    { "embmedany", CM_EMBMEDANY },
-    { NULL, (enum cmodel) 0 }
-  };
-  const struct code_model *cmodel;
   /* Map TARGET_CPU_DEFAULT to value for -m{cpu,tune}=.  */
   static struct cpu_default {
     const int cpu;
-    const enum processor_type processor;
+    const enum sparc_processor_type processor;
   } const cpu_default[] = {
     /* There must be one entry here for each TARGET_CPU value.  */
     { TARGET_CPU_sparc, PROCESSOR_CYPRESS },
@@ -1757,7 +1736,7 @@ sparc_option_override (void)
 	  else if (! strcmp (q, "options"))
 	    mask = MASK_DEBUG_OPTIONS;
 	  else
-	    error ("unknown -mdebug-%s switch", q);
+	    error ("unknown %<-mdebug-%s%> switch", q);
 
 	  if (invert)
 	    sparc_debug &= ~mask;
@@ -1791,39 +1770,15 @@ sparc_option_override (void)
   /* We force all 64bit archs to use 128 bit long double */
   if (TARGET_ARCH64 && !TARGET_LONG_DOUBLE_128)
     {
-      error ("-mlong-double-64 not allowed with -m64");
+      error ("%<-mlong-double-64%> not allowed with %<-m64%>");
       target_flags |= MASK_LONG_DOUBLE_128;
-    }
-
-  /* Code model selection.  */
-  sparc_cmodel = SPARC_DEFAULT_CMODEL;
-
-#ifdef SPARC_BI_ARCH
-  if (TARGET_ARCH32)
-    sparc_cmodel = CM_32;
-#endif
-
-  if (sparc_cmodel_string != NULL)
-    {
-      if (TARGET_ARCH64)
-	{
-	  for (cmodel = &cmodels[0]; cmodel->name; cmodel++)
-	    if (strcmp (sparc_cmodel_string, cmodel->name) == 0)
-	      break;
-	  if (cmodel->name == NULL)
-	    error ("bad value (%s) for -mcmodel= switch", sparc_cmodel_string);
-	  else
-	    sparc_cmodel = cmodel->value;
-	}
-      else
-	error ("-mcmodel= is not supported on 32-bit systems");
     }
 
   /* Check that -fcall-saved-REG wasn't specified for out registers.  */
   for (i = 8; i < 16; i++)
     if (!call_used_regs [i])
       {
-	error ("-fcall-saved-REG is not supported for out registers");
+	error ("%<-fcall-saved-REG%> is not supported for out registers");
         call_used_regs [i] = 1;
       }
 
@@ -1935,6 +1890,48 @@ sparc_option_override (void)
   if (sparc_fix_ut699)
     target_flags &= ~MASK_FSMULD;
 
+#ifdef TARGET_DEFAULT_LONG_DOUBLE_128
+  if (!(target_flags_explicit & MASK_LONG_DOUBLE_128))
+    target_flags |= MASK_LONG_DOUBLE_128;
+#endif
+
+  if (TARGET_DEBUG_OPTIONS)
+    dump_target_flags ("Final target_flags", target_flags);
+
+  /* Set the code model if no -mcmodel option was specified.  */
+  if (global_options_set.x_sparc_code_model)
+    {
+      if (TARGET_ARCH32)
+	error ("%<-mcmodel=%> is not supported in 32-bit mode");
+    }
+  else
+    {
+      if (TARGET_ARCH32)
+	sparc_code_model = CM_32;
+      else
+	sparc_code_model = SPARC_DEFAULT_CMODEL;
+    }
+
+  /* Set the memory model if no -mmemory-model option was specified.  */
+  if (!global_options_set.x_sparc_memory_model)
+    {
+      /* Choose the memory model for the operating system.  */
+      enum sparc_memory_model_type os_default = SUBTARGET_DEFAULT_MEMORY_MODEL;
+      if (os_default != SMM_DEFAULT)
+	sparc_memory_model = os_default;
+      /* Choose the most relaxed model for the processor.  */
+      else if (TARGET_V9)
+	sparc_memory_model = SMM_RMO;
+      else if (TARGET_LEON3)
+	sparc_memory_model = SMM_TSO;
+      else if (TARGET_LEON)
+	sparc_memory_model = SMM_SC;
+      else if (TARGET_V8)
+	sparc_memory_model = SMM_PSO;
+      else
+	sparc_memory_model = SMM_SC;
+    }
+
   /* Supply a default value for align_functions.  */
   if (flag_align_functions && !str_align_functions)
     {
@@ -1958,12 +1955,7 @@ sparc_option_override (void)
   if (!TARGET_ARCH64)
     targetm.asm_out.unaligned_op.di = NULL;
 
-  /* Do various machine dependent initializations.  */
-  sparc_init_modes ();
-
-  /* Set up function hooks.  */
-  init_machine_status = sparc_init_machine_status;
-
+  /* Set the processor costs.  */
   switch (sparc_cpu)
     {
     case PROCESSOR_V7:
@@ -2020,33 +2012,6 @@ sparc_option_override (void)
     case PROCESSOR_NATIVE:
       gcc_unreachable ();
     };
-
-  if (sparc_memory_model == SMM_DEFAULT)
-    {
-      /* Choose the memory model for the operating system.  */
-      enum sparc_memory_model_type os_default = SUBTARGET_DEFAULT_MEMORY_MODEL;
-      if (os_default != SMM_DEFAULT)
-	sparc_memory_model = os_default;
-      /* Choose the most relaxed model for the processor.  */
-      else if (TARGET_V9)
-	sparc_memory_model = SMM_RMO;
-      else if (TARGET_LEON3)
-	sparc_memory_model = SMM_TSO;
-      else if (TARGET_LEON)
-	sparc_memory_model = SMM_SC;
-      else if (TARGET_V8)
-	sparc_memory_model = SMM_PSO;
-      else
-	sparc_memory_model = SMM_SC;
-    }
-
-#ifdef TARGET_DEFAULT_LONG_DOUBLE_128
-  if (!(target_flags_explicit & MASK_LONG_DOUBLE_128))
-    target_flags |= MASK_LONG_DOUBLE_128;
-#endif
-
-  if (TARGET_DEBUG_OPTIONS)
-    dump_target_flags ("Final target_flags", target_flags);
 
   /* PARAM_SIMULTANEOUS_PREFETCHES is the number of prefetches that
      can run at the same time.  More important, it is the threshold
@@ -2146,6 +2111,12 @@ sparc_option_override (void)
      redundant 32-to-64-bit extensions.  */
   if (!global_options_set.x_flag_ree && TARGET_ARCH32)
     flag_ree = 0;
+
+  /* Do various machine dependent initializations.  */
+  sparc_init_modes ();
+
+  /* Set up function hooks.  */
+  init_machine_status = sparc_init_machine_status;
 }
 
 /* Miscellaneous utilities.  */
@@ -2460,8 +2431,8 @@ sparc_emit_set_symbolic_const64 (rtx op0, rtx op1, rtx temp)
       temp = gen_rtx_REG (DImode, REGNO (temp));
     }
 
-  /* SPARC-V9 code-model support.  */
-  switch (sparc_cmodel)
+  /* SPARC-V9 code model support.  */
+  switch (sparc_code_model)
     {
     case CM_MEDLOW:
       /* The range spanned by all instructions in the object is less
@@ -5105,7 +5076,7 @@ sparc_legitimize_reload_address (rtx x, machine_mode mode,
       && GET_MODE (x) == SImode
       && GET_CODE (x) != LO_SUM
       && GET_CODE (x) != HIGH
-      && sparc_cmodel <= CM_MEDLOW
+      && sparc_code_model <= CM_MEDLOW
       && !(flag_pic
 	   && (symbolic_operand (x, Pmode) || pic_address_needs_scratch (x))))
     {
@@ -12302,6 +12273,7 @@ sparc_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
 		       HOST_WIDE_INT delta, HOST_WIDE_INT vcall_offset,
 		       tree function)
 {
+  const char *fnname = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (thunk_fndecl));
   rtx this_rtx, funexp;
   rtx_insn *insn;
   unsigned int int_arg_first;
@@ -12455,7 +12427,7 @@ sparc_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
 	}
       else  /* TARGET_ARCH64 */
         {
-	  switch (sparc_cmodel)
+	  switch (sparc_code_model)
 	    {
 	    case CM_MEDLOW:
 	    case CM_MEDMID:
@@ -12486,13 +12458,14 @@ sparc_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
 
   /* Run just enough of rest_of_compilation to get the insns emitted.
      There's not really enough bulk here to make other passes such as
-     instruction scheduling worth while.  Note that use_thunk calls
-     assemble_start_function and assemble_end_function.  */
+     instruction scheduling worth while.  */
   insn = get_insns ();
   shorten_branches (insn);
+  assemble_start_function (thunk_fndecl, fnname);
   final_start_function (insn, file, 1);
   final (insn, file, 1);
   final_end_function ();
+  assemble_end_function (thunk_fndecl, fnname);
 
   reload_completed = 0;
   epilogue_completed = 0;
@@ -13024,14 +12997,6 @@ static bool
 sparc_can_eliminate (const int from ATTRIBUTE_UNUSED, const int to)
 {
   return to == HARD_FRAME_POINTER_REGNUM || !sparc_frame_pointer_required ();
-}
-
-/* Return the hard frame pointer directly to bypass the stack bias.  */
-
-static rtx
-sparc_builtin_setjmp_frame_value (void)
-{
-  return hard_frame_pointer_rtx;
 }
 
 /* If !TARGET_FPU, then make the fp registers and fp cc regs fixed so that

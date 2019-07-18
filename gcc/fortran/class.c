@@ -911,6 +911,9 @@ finalize_component (gfc_expr *expr, gfc_symbol *derived, gfc_component *comp,
   if (!comp_is_finalizable (comp))
     return;
 
+  if (comp->finalized)
+    return;
+
   e = gfc_copy_expr (expr);
   if (!e->ref)
     e->ref = ref = gfc_get_ref ();
@@ -1038,6 +1041,7 @@ finalize_component (gfc_expr *expr, gfc_symbol *derived, gfc_component *comp,
 			    sub_ns);
       gfc_free_expr (e);
     }
+  comp->finalized = true;
 }
 
 
@@ -2674,6 +2678,7 @@ find_intrinsic_vtab (gfc_typespec *ts)
 	      gfc_namespace *sub_ns;
 	      gfc_namespace *contained;
 	      gfc_expr *e;
+	      size_t e_size;
 
 	      gfc_get_symbol (name, ns, &vtype);
 	      if (!gfc_add_flavor (&vtype->attr, FL_DERIVED, NULL,
@@ -2708,11 +2713,13 @@ find_intrinsic_vtab (gfc_typespec *ts)
 	      e = gfc_get_expr ();
 	      e->ts = *ts;
 	      e->expr_type = EXPR_VARIABLE;
+	      if (ts->type == BT_CHARACTER)
+		e_size = ts->kind;
+	      else
+		gfc_element_size (e, &e_size);
 	      c->initializer = gfc_get_int_expr (gfc_size_kind,
 						 NULL,
-						 ts->type == BT_CHARACTER
-						 ? ts->kind
-						 : gfc_element_size (e));
+						 e_size);
 	      gfc_free_expr (e);
 
 	      /* Add component _extends.  */

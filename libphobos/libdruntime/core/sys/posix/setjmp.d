@@ -153,6 +153,15 @@ version (CRuntime_Glibc)
         }
         alias __jmp_buf = __riscv_jmp_buf[1];
     }
+    else version (S390)
+    {
+        struct __s390_jmp_buf
+        {
+            c_long[10] __gregs;
+            c_long[4] __fpregs;
+        }
+        alias __jmp_buf = __s390_jmp_buf[1];
+    }
     else version (SystemZ)
     {
         struct __s390_jmp_buf
@@ -296,6 +305,10 @@ else version (CRuntime_Bionic)
     else version (AArch64)
     {
         enum _JBLEN = 32;
+    }
+    else version (X86_64)
+    {
+        enum _JBLEN = 11;
     }
     else
     {

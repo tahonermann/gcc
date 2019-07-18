@@ -785,8 +785,8 @@ CC_FOR_BUILD = @CC_FOR_BUILD@
 CXX_FOR_BUILD = @CXX_FOR_BUILD@
 NO_PIE_CFLAGS_FOR_BUILD = @NO_PIE_CFLAGS_FOR_BUILD@
 NO_PIE_FLAG_FOR_BUILD = @NO_PIE_FLAG_FOR_BUILD@
-BUILD_CFLAGS= @BUILD_CFLAGS@ -DGENERATOR_FILE
-BUILD_CXXFLAGS = @BUILD_CXXFLAGS@ -DGENERATOR_FILE
+BUILD_CFLAGS= @BUILD_CFLAGS@ $(GENERATOR_CFLAGS) -DGENERATOR_FILE
+BUILD_CXXFLAGS = @BUILD_CXXFLAGS@ $(GENERATOR_CFLAGS) -DGENERATOR_FILE
 BUILD_NO_PIE_CFLAGS = @BUILD_NO_PIE_CFLAGS@
 BUILD_CFLAGS += $(BUILD_NO_PIE_CFLAGS)
 BUILD_CXXFLAGS += $(BUILD_NO_PIE_CFLAGS)
@@ -1065,7 +1065,7 @@ BUILD_LIBDEPS= $(BUILD_LIBIBERTY)
 LIBS = @LIBS@ libcommon.a $(CPPLIB) $(LIBINTL) $(LIBICONV) $(LIBBACKTRACE) \
 	$(LIBIBERTY) $(LIBDECNUMBER) $(HOST_LIBS)
 BACKENDLIBS = $(ISLLIBS) $(GMPLIBS) $(PLUGINLIBS) $(HOST_LIBS) \
-	$(ZLIB)
+	$(ZLIB) $(ZSTD_LIB)
 # Any system libraries needed just for GNAT.
 SYSLIBS = @GNAT_LIBEXC@
 
@@ -1075,6 +1075,8 @@ GNATMAKE = @GNATMAKE@
 
 # Libs needed (at present) just for jcf-dump.
 LDEXP_LIB = @LDEXP_LIB@
+
+ZSTD_LIB = @ZSTD_LIB@
 
 # Likewise, for use in the tools that must run on this machine
 # even if we are cross-building GCC.
@@ -1559,7 +1561,6 @@ OBJS = \
 	tree-ssa-loop.o \
 	tree-ssa-math-opts.o \
 	tree-ssa-operands.o \
-	tree-ssa-phionlycprop.o \
 	tree-ssa-phiopt.o \
 	tree-ssa-phiprop.o \
 	tree-ssa-pre.o \
@@ -2803,11 +2804,11 @@ genprogmd = $(genprogrtl) mddeps constants enums
 $(genprogmd:%=build/gen%$(build_exeext)): $(BUILD_MD)
 
 # All these programs need to report errors.
-genprogerr = $(genprogmd) genrtl modes gtype hooks cfn-macros
+genprogerr = $(genprogmd) genrtl modes gtype hooks cfn-macros condmd
 $(genprogerr:%=build/gen%$(build_exeext)): $(BUILD_ERRORS)
 
 # Remaining build programs.
-genprog = $(genprogerr) check checksum condmd match
+genprog = $(genprogerr) check checksum match
 
 # These programs need libs over and above what they get from the above list.
 build/genautomata$(build_exeext) : BUILD_LIBS += -lm
@@ -3158,7 +3159,7 @@ TEXI_GCC_FILES = gcc.texi gcc-common.texi gcc-vers.texi frontends.texi	\
 	 gcov.texi trouble.texi bugreport.texi service.texi		\
 	 contribute.texi compat.texi funding.texi gnu.texi gpl_v3.texi	\
 	 fdl.texi contrib.texi cppenv.texi cppopts.texi avr-mmcu.texi	\
-	 implement-c.texi implement-cxx.texi gcov-tool.texi gcov-dump.texi
+	 implement-c.texi implement-cxx.texi gcov-tool.texi gcov-dump.texi lto-dump.texi
 
 # we explicitly use $(srcdir)/doc/tm.texi here to avoid confusion with
 # the generated tm.texi; the latter might have a more recent timestamp,

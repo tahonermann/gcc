@@ -153,24 +153,22 @@ enum gf_mask {
     GF_OMP_PARALLEL_GRID_PHONY = 1 << 1,
     GF_OMP_TASK_TASKLOOP	= 1 << 0,
     GF_OMP_TASK_TASKWAIT	= 1 << 1,
-    GF_OMP_FOR_KIND_MASK	= (1 << 4) - 1,
+    GF_OMP_FOR_KIND_MASK	= (1 << 3) - 1,
     GF_OMP_FOR_KIND_FOR		= 0,
     GF_OMP_FOR_KIND_DISTRIBUTE	= 1,
     GF_OMP_FOR_KIND_TASKLOOP	= 2,
     GF_OMP_FOR_KIND_OACC_LOOP	= 4,
-    GF_OMP_FOR_KIND_GRID_LOOP = 5,
-    /* Flag for SIMD variants of OMP_FOR kinds.  */
-    GF_OMP_FOR_SIMD		= 1 << 3,
-    GF_OMP_FOR_KIND_SIMD	= GF_OMP_FOR_SIMD | 0,
-    GF_OMP_FOR_COMBINED		= 1 << 4,
-    GF_OMP_FOR_COMBINED_INTO	= 1 << 5,
+    GF_OMP_FOR_KIND_GRID_LOOP	= 5,
+    GF_OMP_FOR_KIND_SIMD	= 6,
+    GF_OMP_FOR_COMBINED		= 1 << 3,
+    GF_OMP_FOR_COMBINED_INTO	= 1 << 4,
     /* The following flag must not be used on GF_OMP_FOR_KIND_GRID_LOOP loop
        statements.  */
-    GF_OMP_FOR_GRID_PHONY	= 1 << 6,
+    GF_OMP_FOR_GRID_PHONY	= 1 << 5,
     /* The following two flags should only be set on GF_OMP_FOR_KIND_GRID_LOOP
        loop statements.  */
-    GF_OMP_FOR_GRID_INTRA_GROUP	= 1 << 6,
-    GF_OMP_FOR_GRID_GROUP_ITER  = 1 << 7,
+    GF_OMP_FOR_GRID_INTRA_GROUP	= 1 << 5,
+    GF_OMP_FOR_GRID_GROUP_ITER  = 1 << 6,
     GF_OMP_TARGET_KIND_MASK	= (1 << 4) - 1,
     GF_OMP_TARGET_KIND_REGION	= 0,
     GF_OMP_TARGET_KIND_DATA	= 1,
@@ -741,7 +739,8 @@ struct GTY((tag("GSS_OMP_CONTINUE")))
   tree control_use;
 };
 
-/* GIMPLE_OMP_SINGLE, GIMPLE_OMP_ORDERED, GIMPLE_OMP_TASKGROUP.  */
+/* GIMPLE_OMP_SINGLE, GIMPLE_OMP_ORDERED, GIMPLE_OMP_TASKGROUP,
+   GIMPLE_OMP_SCAN.  */
 
 struct GTY((tag("GSS_OMP_SINGLE_LAYOUT")))
   gimple_statement_omp_single_layout : public gimple_statement_omp
@@ -771,6 +770,13 @@ struct GTY((tag("GSS_OMP_SINGLE_LAYOUT")))
 {
     /* No extra fields; adds invariant:
 	 stmt->code == GIMPLE_OMP_ORDERED.  */
+};
+
+struct GTY((tag("GSS_OMP_SINGLE_LAYOUT")))
+  gomp_scan : public gimple_statement_omp_single_layout
+{
+    /* No extra fields; adds invariant:
+	 stmt->code == GIMPLE_OMP_SCAN.  */
 };
 
 
@@ -1115,6 +1121,14 @@ is_a_helper <gomp_ordered *>::test (gimple *gs)
 template <>
 template <>
 inline bool
+is_a_helper <gomp_scan *>::test (gimple *gs)
+{
+  return gs->code == GIMPLE_OMP_SCAN;
+}
+
+template <>
+template <>
+inline bool
 is_a_helper <gomp_for *>::test (gimple *gs)
 {
   return gs->code == GIMPLE_OMP_FOR;
@@ -1333,6 +1347,14 @@ is_a_helper <const gomp_ordered *>::test (const gimple *gs)
 template <>
 template <>
 inline bool
+is_a_helper <const gomp_scan *>::test (const gimple *gs)
+{
+  return gs->code == GIMPLE_OMP_SCAN;
+}
+
+template <>
+template <>
+inline bool
 is_a_helper <const gomp_for *>::test (const gimple *gs)
 {
   return gs->code == GIMPLE_OMP_FOR;
@@ -1475,6 +1497,7 @@ gimple *gimple_build_omp_taskgroup (gimple_seq, tree);
 gomp_continue *gimple_build_omp_continue (tree, tree);
 gomp_ordered *gimple_build_omp_ordered (gimple_seq, tree);
 gimple *gimple_build_omp_return (bool);
+gomp_scan *gimple_build_omp_scan (gimple_seq, tree);
 gomp_sections *gimple_build_omp_sections (gimple_seq, tree);
 gimple *gimple_build_omp_sections_switch (void);
 gomp_single *gimple_build_omp_single (gimple_seq, tree);
@@ -4946,6 +4969,35 @@ gimple_omp_ordered_set_clauses (gomp_ordered *ord_stmt, tree clauses)
 }
 
 
+/* Return the clauses associated with OMP_SCAN statement SCAN_STMT.  */
+
+static inline tree
+gimple_omp_scan_clauses (const gomp_scan *scan_stmt)
+{
+  return scan_stmt->clauses;
+}
+
+
+/* Return a pointer to the clauses associated with OMP scan statement
+   ORD_STMT.  */
+
+static inline tree *
+gimple_omp_scan_clauses_ptr (gomp_scan *scan_stmt)
+{
+  return &scan_stmt->clauses;
+}
+
+
+/* Set CLAUSES to be the clauses associated with OMP scan statement
+   ORD_STMT.  */
+
+static inline void
+gimple_omp_scan_set_clauses (gomp_scan *scan_stmt, tree clauses)
+{
+  scan_stmt->clauses = clauses;
+}
+
+
 /* Return the clauses associated with OMP_TASKGROUP statement GS.  */
 
 static inline tree
@@ -6379,6 +6431,7 @@ gimple_return_set_retval (greturn *gs, tree retval)
     case GIMPLE_OMP_TASKGROUP:			\
     case GIMPLE_OMP_ORDERED:			\
     case GIMPLE_OMP_CRITICAL:			\
+    case GIMPLE_OMP_SCAN:			\
     case GIMPLE_OMP_RETURN:			\
     case GIMPLE_OMP_ATOMIC_LOAD:		\
     case GIMPLE_OMP_ATOMIC_STORE:		\

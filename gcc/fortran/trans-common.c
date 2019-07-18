@@ -1007,10 +1007,8 @@ static void
 add_equivalences (bool *saw_equiv)
 {
   segment_info *f;
-  bool seen_one, more;
+  bool more = TRUE;
 
-  seen_one = false;
-  more = TRUE;
   while (more)
     {
       more = FALSE;
@@ -1019,7 +1017,7 @@ add_equivalences (bool *saw_equiv)
 	  if (!f->sym->equiv_built)
 	    {
 	      f->sym->equiv_built = 1;
-	      seen_one = find_equivalence (f);
+	      bool seen_one = find_equivalence (f);
 	      if (seen_one)
 		{
 		  *saw_equiv = true;
@@ -1156,13 +1154,13 @@ translate_common (gfc_common_head *common, gfc_symbol *var_list)
 		    gfc_warning (OPT_Walign_commons,
 				 "Padding of %d bytes required before %qs in "
 				 "COMMON %qs at %L; reorder elements or use "
-				 "-fno-align-commons", (int)offset,
+				 "%<-fno-align-commons%>", (int)offset,
 				 s->sym->name, common->name, &common->where);
 		  else
 		    gfc_warning (OPT_Walign_commons,
 				 "Padding of %d bytes required before %qs in "
 				 "COMMON at %L; reorder elements or use "
-				 "-fno-align-commons", (int)offset,
+				 "%<-fno-align-commons%>", (int)offset,
 				 s->sym->name, &common->where);
 		}
 	    }

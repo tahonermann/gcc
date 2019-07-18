@@ -808,6 +808,23 @@ symtab_node::dump_referring (FILE *file)
 
 static const char * const symtab_type_names[] = {"symbol", "function", "variable"};
 
+/* Dump the visibility of the symbol.  */
+
+const char *
+symtab_node::get_visibility_string () const
+{
+  static const char * const visibility_types[]
+    = { "default", "protected", "hidden", "internal" };
+  return visibility_types[DECL_VISIBILITY (decl)];
+}
+
+/* Dump the type_name of the symbol.  */
+const char *
+symtab_node::get_symtab_type_string () const
+{
+  return symtab_type_names[type];
+}
+
 /* Dump base fields of symtab nodes to F.  Not to be used directly.  */
 
 void
@@ -985,6 +1002,15 @@ symtab_node::debug (void)
 
 /* Verify common part of symtab nodes.  */
 
+#if __GNUC__ >= 10
+/* Disable warnings about missing quoting in GCC diagnostics for
+   the verification errors.  Their format strings don't follow GCC
+   diagnostic conventions and the calls are ultimately followed by
+   one to internal_error.  */
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wformat-diag"
+#endif
+
 DEBUG_FUNCTION bool
 symtab_node::verify_base (void)
 {
@@ -1002,7 +1028,7 @@ symtab_node::verify_base (void)
 		!= NULL)
 	       != dyn_cast <cgraph_node *> (this)->ifunc_resolver)
 	{
-          error ("inconsistent `ifunc' attribute");
+	  error ("inconsistent %<ifunc%> attribute");
           error_found = true;
 	}
     }
@@ -1040,23 +1066,30 @@ symtab_node::verify_base (void)
   if (symtab->assembler_name_hash)
     {
       hashed_node = symtab_node::get_for_asmname (DECL_ASSEMBLER_NAME (decl));
-      if (hashed_node && hashed_node->previous_sharing_asm_name)
+      if (hashed_node)
 	{
-          error ("assembler name hash list corrupted");
-          error_found = true;
-	}
-      while (hashed_node)
-	{
-	  if (hashed_node == this)
-	    break;
-	  hashed_node = hashed_node->next_sharing_asm_name;
-	}
-      if (!hashed_node
-	  && !(is_a <varpool_node *> (this)
-	       && DECL_HARD_REGISTER (decl)))
-	{
-          error ("node not found in symtab assembler name hash");
-          error_found = true;
+	  if (hashed_node->previous_sharing_asm_name)
+	    {
+	      error ("assembler name hash list corrupted");
+	      error_found = true;
+	    }
+	  else if (previous_sharing_asm_name == NULL)
+	    {
+	      if (hashed_node != this)
+		{
+		  error ("assembler name hash list corrupted");
+		  error_found = true;
+		}
+	    }
+	  else if (!(is_a <varpool_node *> (this) && DECL_HARD_REGISTER (decl)))
+	    {
+	      if (!asmname_hasher::equal (previous_sharing_asm_name,
+					  DECL_ASSEMBLER_NAME (decl)))
+		{
+		  error ("node not found in symtab assembler name hash");
+		  error_found = true;
+		}
+	    }
 	}
     }
   if (previous_sharing_asm_name
@@ -1148,7 +1181,7 @@ symtab_node::verify_base (void)
     }
   if (implicit_section && !get_section ())
     {
-      error ("implicit_section flag is set but section isn't");
+      error ("implicit_section flag is set but section isn%'t");
       error_found = true;
     }
   if (get_section () && get_comdat_group ()
@@ -1167,14 +1200,14 @@ symtab_node::verify_base (void)
 	  || strcmp (get_section(),
 		     get_alias_target ()->get_section ())))
     {
-      error ("Alias and target's section differs");
+      error ("Alias and target%'s section differs");
       get_alias_target ()->dump (stderr);
       error_found = true;
     }
   if (alias && definition
       && get_comdat_group () != get_alias_target ()->get_comdat_group ())
     {
-      error ("Alias and target's comdat groups differs");
+      error ("Alias and target%'s comdat groups differs");
       get_alias_target ()->dump (stderr);
       error_found = true;
     }
@@ -1189,7 +1222,7 @@ symtab_node::verify_base (void)
 	    ultimate_transparent_alias_target (DECL_ASSEMBLER_NAME (to->decl)));
       if (!symbol_table::assembler_names_equal_p (name1, name2))
 	{
-	  error ("Transparent alias and target's assembler names differs");
+	  error ("Transparent alias and target%'s assembler names differs");
 	  get_alias_target ()->dump (stderr);
 	  error_found = true;
 	}
@@ -1263,6 +1296,10 @@ symtab_node::verify_symtab_nodes (void)
 	}
     }
 }
+
+#if __GNUC__ >= 10
+#  pragma GCC diagnostic pop
+#endif
 
 /* Make DECL local.  FIXME: We shouldn't need to mess with rtl this early,
    but other code such as notice_global_symbol generates rtl.  */
@@ -1546,7 +1583,7 @@ symtab_node::set_section (symtab_node *n, void *s)
 void
 symtab_node::set_section (const char *section)
 {
-  gcc_assert (!this->alias);
+  gcc_assert (!this->alias || !this->analyzed);
   call_for_symbol_and_aliases
     (symtab_node::set_section, const_cast<char *>(section), true);
 }

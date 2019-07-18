@@ -68,8 +68,8 @@ extern GTY(()) const char *weak_global_object_name;
 const char *first_global_object_name;
 const char *weak_global_object_name;
 
-struct addr_const;
-struct constant_descriptor_rtx;
+class addr_const;
+class constant_descriptor_rtx;
 struct rtx_constant_pool;
 
 #define n_deferred_constants (crtl->varasm.deferred_constants)
@@ -105,7 +105,7 @@ static int contains_pointers_p (tree);
 #ifdef ASM_OUTPUT_EXTERNAL
 static bool incorporeal_function_p (tree);
 #endif
-static void decode_addr_const (tree, struct addr_const *);
+static void decode_addr_const (tree, class addr_const *);
 static hashval_t const_hash_1 (const tree);
 static int compare_constant (const tree, const tree);
 static void output_constant_def_contents (rtx);
@@ -363,7 +363,11 @@ use_object_blocks_p (void)
 
 /* Return the object_block structure for section SECT.  Create a new
    structure if we haven't created one already.  Return null if SECT
-   itself is null.  */
+   itself is null.  Return also null for mergeable sections since
+   section anchors can't be used in mergeable sections anyway,
+   because the linker might move objects around, and using the
+   object blocks infrastructure in that case is both a waste and a
+   maintenance burden.  */
 
 static struct object_block *
 get_block_for_section (section *sect)
@@ -371,6 +375,9 @@ get_block_for_section (section *sect)
   struct object_block *block;
 
   if (sect == NULL)
+    return NULL;
+
+  if (sect->common.flags & SECTION_MERGE)
     return NULL;
 
   object_block **slot
@@ -1858,28 +1865,22 @@ assemble_start_function (tree decl, const char *fnname)
       tree pp_val = TREE_VALUE (patchable_function_entry_attr);
       tree patchable_function_entry_value1 = TREE_VALUE (pp_val);
 
-      if (tree_fits_uhwi_p (patchable_function_entry_value1))
-	patch_area_size = tree_to_uhwi (patchable_function_entry_value1);
-      else
-	gcc_unreachable ();
-
+      patch_area_size = tree_to_uhwi (patchable_function_entry_value1);
       patch_area_entry = 0;
-      if (list_length (pp_val) > 1)
+      if (TREE_CHAIN (pp_val) != NULL_TREE)
 	{
-	  tree patchable_function_entry_value2 =
-	    TREE_VALUE (TREE_CHAIN (pp_val));
-
-	  if (tree_fits_uhwi_p (patchable_function_entry_value2))
-	    patch_area_entry = tree_to_uhwi (patchable_function_entry_value2);
-	  else
-	    gcc_unreachable ();
+	  tree patchable_function_entry_value2
+	    = TREE_VALUE (TREE_CHAIN (pp_val));
+	  patch_area_entry = tree_to_uhwi (patchable_function_entry_value2);
 	}
     }
 
   if (patch_area_entry > patch_area_size)
     {
       if (patch_area_size > 0)
-	warning (OPT_Wattributes, "Patchable function entry > size");
+	warning (OPT_Wattributes,
+		 "patchable function entry %wu exceeds size %wu",
+		 patch_area_entry, patch_area_size);
       patch_area_entry = 0;
     }
 
@@ -1899,7 +1900,8 @@ assemble_start_function (tree decl, const char *fnname)
   /* And the area after the label.  Record it if we haven't done so yet.  */
   if (patch_area_size > patch_area_entry)
     targetm.asm_out.print_patchable_function_entry (asm_out_file,
-					     patch_area_size-patch_area_entry,
+						    patch_area_size
+						    - patch_area_entry,
 						    patch_area_entry == 0);
 
   if (lookup_attribute ("no_split_stack", DECL_ATTRIBUTES (decl)))
@@ -2897,13 +2899,14 @@ assemble_real (REAL_VALUE_TYPE d, scalar_float_mode mode, unsigned int align,
    Store them both in the structure *VALUE.
    EXP must be reducible.  */
 
-struct addr_const {
+class addr_const {
+public:
   rtx base;
   poly_int64 offset;
 };
 
 static void
-decode_addr_const (tree exp, struct addr_const *value)
+decode_addr_const (tree exp, class addr_const *value)
 {
   tree target = TREE_OPERAND (exp, 0);
   poly_int64 offset = 0;
@@ -3073,7 +3076,7 @@ const_hash_1 (const tree exp)
       /* Fallthru.  */
     case FDESC_EXPR:
       {
-	struct addr_const value;
+	class addr_const value;
 
 	decode_addr_const (exp, &value);
 	switch (GET_CODE (value.base))
@@ -3269,7 +3272,7 @@ compare_constant (const tree t1, const tree t2)
     case ADDR_EXPR:
     case FDESC_EXPR:
       {
-	struct addr_const value1, value2;
+	class addr_const value1, value2;
 	enum rtx_code code;
 	int ret;
 
@@ -3619,8 +3622,9 @@ tree_output_constant_def (tree exp)
   return decl;
 }
 
-struct GTY((chain_next ("%h.next"), for_user)) constant_descriptor_rtx {
-  struct constant_descriptor_rtx *next;
+class GTY((chain_next ("%h.next"), for_user)) constant_descriptor_rtx {
+public:
+  class constant_descriptor_rtx *next;
   rtx mem;
   rtx sym;
   rtx constant;
@@ -3647,8 +3651,8 @@ struct const_rtx_desc_hasher : ggc_ptr_hash<constant_descriptor_rtx>
 
 struct GTY(()) rtx_constant_pool {
   /* Pointers to first and last constant in pool, as ordered by offset.  */
-  struct constant_descriptor_rtx *first;
-  struct constant_descriptor_rtx *last;
+  class constant_descriptor_rtx *first;
+  class constant_descriptor_rtx *last;
 
   /* Hash facility for making memory-constants from constant rtl-expressions.
      It is used on RISC machines where immediate integer arguments and
@@ -3808,7 +3812,7 @@ simplify_subtraction (rtx x)
 rtx
 force_const_mem (machine_mode in_mode, rtx x)
 {
-  struct constant_descriptor_rtx *desc, tmp;
+  class constant_descriptor_rtx *desc, tmp;
   struct rtx_constant_pool *pool;
   char label[256];
   rtx def, symbol;
@@ -3916,7 +3920,7 @@ get_pool_constant (const_rtx addr)
 rtx
 get_pool_constant_mark (rtx addr, bool *pmarked)
 {
-  struct constant_descriptor_rtx *desc;
+  class constant_descriptor_rtx *desc;
 
   desc = SYMBOL_REF_CONSTANT (addr);
   *pmarked = (desc->mark != 0);
@@ -4024,7 +4028,7 @@ output_constant_pool_2 (fixed_size_mode mode, rtx x, unsigned int align)
    giving it ALIGN bits of alignment.  */
 
 static void
-output_constant_pool_1 (struct constant_descriptor_rtx *desc,
+output_constant_pool_1 (class constant_descriptor_rtx *desc,
 			unsigned int align)
 {
   rtx x, tmp;
@@ -4101,7 +4105,7 @@ output_constant_pool_1 (struct constant_descriptor_rtx *desc,
 static void
 recompute_pool_offsets (struct rtx_constant_pool *pool)
 {
-  struct constant_descriptor_rtx *desc;
+  class constant_descriptor_rtx *desc;
   pool->offset = 0;
 
   for (desc = pool->first; desc ; desc = desc->next)
@@ -4130,7 +4134,7 @@ mark_constants_in_pattern (rtx insn)
 	{
 	  if (CONSTANT_POOL_ADDRESS_P (x))
 	    {
-	      struct constant_descriptor_rtx *desc = SYMBOL_REF_CONSTANT (x);
+	      class constant_descriptor_rtx *desc = SYMBOL_REF_CONSTANT (x);
 	      if (desc->mark == 0)
 		{
 		  desc->mark = 1;
@@ -4199,7 +4203,7 @@ mark_constant_pool (void)
 static void
 output_constant_pool_contents (struct rtx_constant_pool *pool)
 {
-  struct constant_descriptor_rtx *desc;
+  class constant_descriptor_rtx *desc;
 
   for (desc = pool->first; desc ; desc = desc->next)
     if (desc->mark)
@@ -5902,7 +5906,7 @@ do_assemble_alias (tree decl, tree target)
       else
 #endif
 	error_at (DECL_SOURCE_LOCATION (decl),
-		  "ifunc is not supported on this target");
+		  "%qs is not supported on this target", "ifunc");
     }
 
 # ifdef ASM_OUTPUT_DEF_FROM_DECLS
@@ -5960,9 +5964,9 @@ assemble_alias (tree decl, tree target)
       ultimate_transparent_alias_target (&target);
 
       if (alias == target)
-	error ("weakref %q+D ultimately targets itself", decl);
+	error ("%qs symbol %q+D ultimately targets itself", "weakref", decl);
       if (TREE_PUBLIC (decl))
-	error ("weakref %q+D must have static linkage", decl);
+	error ("%qs symbol %q+D must have static linkage", "weakref", decl);
     }
   else
     {
@@ -5979,7 +5983,7 @@ assemble_alias (tree decl, tree target)
 	  if (TREE_CODE (decl) == FUNCTION_DECL
 	      && lookup_attribute ("ifunc", DECL_ATTRIBUTES (decl)))
 	    error_at (DECL_SOURCE_LOCATION (decl),
-		      "ifunc is not supported in this configuration");
+		      "%qs is not supported in this configuration", "ifunc");
 	  else
 	    error_at (DECL_SOURCE_LOCATION (decl),
 		      "only weak aliases are supported in this configuration");
@@ -7014,14 +7018,13 @@ default_asm_output_anchor (rtx symbol)
 bool
 default_use_anchors_for_symbol_p (const_rtx symbol)
 {
-  section *sect;
   tree decl;
+  section *sect = SYMBOL_REF_BLOCK (symbol)->sect;
 
-  /* Don't use anchors for mergeable sections.  The linker might move
-     the objects around.  */
-  sect = SYMBOL_REF_BLOCK (symbol)->sect;
-  if (sect->common.flags & SECTION_MERGE)
-    return false;
+  /* This function should only be called with non-zero SYMBOL_REF_BLOCK,
+     furthermore get_block_for_section should not create object blocks
+     for mergeable sections.  */
+  gcc_checking_assert (sect && !(sect->common.flags & SECTION_MERGE));
 
   /* Don't use anchors for small data sections.  The small data register
      acts as an anchor for such sections.  */
@@ -7449,7 +7452,7 @@ void
 place_block_symbol (rtx symbol)
 {
   unsigned HOST_WIDE_INT size, mask, offset;
-  struct constant_descriptor_rtx *desc;
+  class constant_descriptor_rtx *desc;
   unsigned int alignment;
   struct object_block *block;
   tree decl;
@@ -7611,7 +7614,7 @@ get_section_anchor (struct object_block *block, HOST_WIDE_INT offset,
 static void
 output_object_block (struct object_block *block)
 {
-  struct constant_descriptor_rtx *desc;
+  class constant_descriptor_rtx *desc;
   unsigned int i;
   HOST_WIDE_INT offset;
   tree decl;
@@ -7630,6 +7633,7 @@ output_object_block (struct object_block *block)
   else
     switch_to_section (block->sect);
 
+  gcc_checking_assert (!(block->sect->common.flags & SECTION_MERGE));
   assemble_align (block->alignment);
 
   /* Define the values of all anchors relative to the current section
