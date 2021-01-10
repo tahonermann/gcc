@@ -571,6 +571,11 @@ cpp_init_builtins (cpp_reader *pfile, int hosted)
   else if (CPP_OPTION (pfile, c99))
     _cpp_define_builtin (pfile, "__STDC_VERSION__ 199901L");
 
+  if (CPP_OPTION (pfile, char8))
+    {
+      _cpp_define_builtin (pfile, "__STDC_UTF_8__ 1");
+    }
+
   if (CPP_OPTION (pfile, uliterals)
       && !(CPP_OPTION (pfile, cplusplus)
 	   && (CPP_OPTION (pfile, lang) == CLK_GNUCXX

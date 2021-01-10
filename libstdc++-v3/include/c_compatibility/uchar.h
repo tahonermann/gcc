@@ -33,6 +33,11 @@
 
 #ifdef _GLIBCXX_NAMESPACE_C
 
+#if _GLIBCXX_USE_CHAR8_T && defined(__STDC_CHAR8_T) && __STDC_CHAR8_T > 0
+using std::mbrtoc8;
+using std::c8rtomb;
+#endif
+
 #if _GLIBCXX_USE_C11_UCHAR_CXX11
 using std::mbrtoc16;
 using std::c16rtomb;
