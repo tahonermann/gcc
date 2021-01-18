@@ -5,7 +5,7 @@
 
 namespace gnu
 {
-#if defined(__STDC_CHAR8_T) && __STDC_CHAR8_T > 0
+#if _GLIBCXX_USE_UCHAR_CHAR8_T
   using std::mbrtoc8;
   using std::c8rtomb;
 #endif

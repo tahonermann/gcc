@@ -7,10 +7,8 @@
 
 extern void abort (void);
 
-#if defined(__STDC_CHAR8_T) && __STDC_CHAR8_T > 0
 _Atomic __CHAR8_TYPE__ ac8a;
 atomic_char8_t ac8t;
-#endif
 
 #define CHECK_TYPE(MACRO, V1, V2)		\
   do						\
@@ -38,9 +36,7 @@ atomic_char8_t ac8t;
 int
 main ()
 {
-#if defined(__STDC_CHAR8_T) && __STDC_CHAR8_T > 0
   CHECK_TYPE (ATOMIC_CHAR8_T_LOCK_FREE, ac8a, ac8t);
-#endif
 
   return 0;
 }

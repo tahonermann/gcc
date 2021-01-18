@@ -49,7 +49,7 @@ typedef _Atomic long atomic_long;
 typedef _Atomic unsigned long atomic_ulong;
 typedef _Atomic long long atomic_llong;
 typedef _Atomic unsigned long long atomic_ullong;
-#if defined(__STDC_CHAR8_T) && __STDC_CHAR8_T > 0
+#if defined(_CHAR8_T_SOURCE)
 typedef _Atomic __CHAR8_TYPE__ atomic_char8_t;
 #endif
 typedef _Atomic __CHAR16_TYPE__ atomic_char16_t;
@@ -100,7 +100,7 @@ extern void atomic_signal_fence (memory_order);
 
 #define ATOMIC_BOOL_LOCK_FREE		__GCC_ATOMIC_BOOL_LOCK_FREE
 #define ATOMIC_CHAR_LOCK_FREE		__GCC_ATOMIC_CHAR_LOCK_FREE
-#if defined(__STDC_CHAR8_T) && __STDC_CHAR8_T > 0
+#if defined(_CHAR8_T_SOURCE)
 #define ATOMIC_CHAR8_T_LOCK_FREE	__GCC_ATOMIC_CHAR8_T_LOCK_FREE
 #endif
 #define ATOMIC_CHAR16_T_LOCK_FREE	__GCC_ATOMIC_CHAR16_T_LOCK_FREE
