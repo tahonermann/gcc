@@ -2120,6 +2120,7 @@ AC_DEFUN([GLIBCXX_CHECK_UCHAR_H], [
 	      namespace std in <cuchar>.])
   fi
 
+  CXXFLAGS="$CXXFLAGS -fchar8_t"
   if test x"$ac_has_uchar_h" = x"yes"; then
     AC_MSG_CHECKING([for char8_t support in <uchar.h>])
     AC_TRY_COMPILE([#include <uchar.h>

@@ -19140,6 +19140,7 @@ $as_echo "#define _GLIBCXX_USE_C11_UCHAR_CXX11 1" >>confdefs.h
 
   fi
 
+  CXXFLAGS="$CXXFLAGS -fchar8_t"
   if test x"$ac_has_uchar_h" = x"yes"; then
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for char8_t support in <uchar.h>" >&5
 $as_echo_n "checking for char8_t support in <uchar.h>... " >&6; }
