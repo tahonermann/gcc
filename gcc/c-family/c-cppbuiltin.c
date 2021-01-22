@@ -1430,7 +1430,7 @@ c_cpp_builtins (cpp_reader *pfile)
 
   /* Express intent for char8_t support in C (not C++) to the C library if
      requested.  */
-  if (!c_dialect_cxx () && flag_char8)
+  if (!c_dialect_cxx () && flag_char8_t)
     cpp_define (pfile, "_CHAR8_T_SOURCE");
 
   if (!flag_signed_char)
