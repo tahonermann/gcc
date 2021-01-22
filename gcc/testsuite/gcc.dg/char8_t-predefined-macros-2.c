@@ -3,6 +3,10 @@
 // { dg-do compile }
 // { dg-options "-fchar8_t" }
 
+#if !defined(_CHAR8_T_SOURCE)
+# error _CHAR8_T_SOURCE is not defined!
+#endif
+
 #if !defined(__CHAR8_TYPE__)
 # error __CHAR8_TYPE__ is not defined!
 #endif

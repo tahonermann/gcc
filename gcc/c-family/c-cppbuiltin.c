@@ -1428,6 +1428,11 @@ c_cpp_builtins (cpp_reader *pfile)
   if (flag_iso)
     cpp_define (pfile, "__STRICT_ANSI__");
 
+  /* Express intent for char8_t support in C (not C++) to the C library if
+     requested.  */
+  if (!c_dialect_cxx () && flag_char8)
+    cpp_define (pfile, "_CHAR8_T_SOURCE");
+
   if (!flag_signed_char)
     cpp_define (pfile, "__CHAR_UNSIGNED__");
 

@@ -3,6 +3,10 @@
 // { dg-do compile }
 // { dg-options "-fno-char8_t" }
 
+#if defined(_CHAR8_T_SOURCE)
+# error _CHAR8_T_SOURCE is defined!
+#endif
+
 #if defined(__CHAR8_TYPE__)
 # error __CHAR8_TYPE__ is defined!
 #endif
