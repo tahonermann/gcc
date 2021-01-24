@@ -1,7 +1,7 @@
 /* Test that char and signed char buffers cannot be initialized by UTF-8
    string literals and that unsigned char (char8_t) buffers can be if
    -fchar8_t is enabled.  */
-/* { dg-do compile { target c11 } } */
+/* { dg-do compile } */
 /* { dg-options "-fchar8_t" } */
 
 char cbuf1[] = "text";
