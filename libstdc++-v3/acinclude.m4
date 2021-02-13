@@ -2063,6 +2063,28 @@ AC_DEFUN([GLIBCXX_CHECK_UCHAR_H], [
 	      namespace std in <cuchar>.])
   fi
 
+  CXXFLAGS="$CXXFLAGS -fchar8_t"
+  if test x"$ac_has_uchar_h" = x"yes"; then
+    AC_MSG_CHECKING([for char8_t support in <uchar.h>])
+    AC_TRY_COMPILE([#include <uchar.h>
+		    char8_t c8;
+		    namespace test
+		    {
+		      using ::c8rtomb;
+		      using ::mbrtoc8;
+		    }
+		   ],
+		   [], [ac_uchar_char8_t=yes], [ac_uchar_char8_t=no])
+  else
+    ac_uchar_char8_t=no
+  fi
+  AC_MSG_RESULT($ac_uchar_char8_t)
+  if test x"$ac_uchar_char8_t" = x"yes"; then
+    AC_DEFINE(_GLIBCXX_USE_UCHAR_CHAR8_T, 1,
+	      [Define if char8_t functions in <uchar.h> should be imported into
+	      namespace std in <cuchar>.])
+  fi
+
   CXXFLAGS="$ac_save_CXXFLAGS"
   AC_LANG_RESTORE
 ])

@@ -991,6 +991,10 @@
 /* Define if obsolescent tmpnam is available in <stdio.h>. */
 #undef _GLIBCXX_USE_TMPNAM
 
+/* Define if char8_t functions in <uchar.h> should be imported into namespace
+   std in <cuchar>. */
+#undef _GLIBCXX_USE_UCHAR_CHAR8_T
+
 /* Define if utime is available in <utime.h>. */
 #undef _GLIBCXX_USE_UTIME
 
