@@ -718,6 +718,10 @@ c_common_handle_option (size_t scode, const char *arg, HOST_WIDE_INT value,
     case OPT_v:
       verbose = true;
       break;
+
+    case OPT_fchar8_t:
+      cpp_opts->char8 = value;
+      break;
     }
 
   switch (c_language)
