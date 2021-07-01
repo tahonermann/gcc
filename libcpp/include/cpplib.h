@@ -358,9 +358,6 @@ struct cpp_options
   /* Nonzero means process u8 prefixed character literals (UTF-8).  */
   unsigned char utf8_char_literals;
 
-  /* Nonzero means char8_t support is enabled.  */
-  unsigned char char8;
-
   /* Nonzero means process r/R raw strings.  If this is set, uliterals
      must be set as well.  */
   unsigned char rliterals;
