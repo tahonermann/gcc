@@ -404,7 +404,7 @@ struct c_common_resword
 {
   const char *const word;
   ENUM_BITFIELD(rid) const rid : 16;
-  const unsigned int disable   : 16;
+  const unsigned int disable   : 20;
 };
 
 /* Mode used to build pointers (VOIDmode means ptr_mode).  */
@@ -439,25 +439,26 @@ extern machine_mode c_default_pointer_mode;
    mask) is _true_.  Thus for keywords which are present in all
    languages the disable field is zero.  */
 
-#define D_CONLY		0x0001	/* C only (not in C++).  */
-#define D_CXXONLY	0x0002	/* C++ only (not in C).  */
-#define D_C99		0x0004	/* In C, C99 only.  */
-#define D_CXX11         0x0008	/* In C++, C++11 only.  */
-#define D_EXT		0x0010	/* GCC extension.  */
-#define D_EXT89		0x0020	/* GCC extension incorporated in C99.  */
-#define D_ASM		0x0040	/* Disabled by -fno-asm.  */
-#define D_OBJC		0x0080	/* In Objective C and neither C nor C++.  */
-#define D_CXX_OBJC	0x0100	/* In Objective C, and C++, but not C.  */
-#define D_CXXWARN	0x0200	/* In C warn with -Wcxx-compat.  */
-#define D_CXX_CONCEPTS  0x0400	/* In C++, only with concepts.  */
-#define D_TRANSMEM	0X0800	/* C++ transactional memory TS.  */
-#define D_CXX_CHAR8_T	0X1000	/* In C++, only with -fchar8_t.  */
-#define D_CXX20		0x2000  /* In C++, C++20 only.  */
-#define D_CXX_COROUTINES 0x4000  /* In C++, only with coroutines.  */
-#define D_CXX_MODULES	0x8000  /* In C++, only with modules.  */
+#define D_CONLY			0x00001	/* C only (not in C++).  */
+#define D_CXXONLY		0x00002	/* C++ only (not in C).  */
+#define D_C99			0x00004	/* In C, C99 only.  */
+#define D_CXX11         	0x00008	/* In C++, C++11 only.  */
+#define D_EXT			0x00010	/* GCC extension.  */
+#define D_EXT89			0x00020	/* GCC extension incorporated in C99.  */
+#define D_ASM			0x00040	/* Disabled by -fno-asm.  */
+#define D_OBJC			0x00080	/* In Objective C and neither C nor C++.  */
+#define D_CXX_OBJC		0x00100	/* In Objective C, and C++, but not C.  */
+#define D_CXXWARN		0x00200	/* In C warn with -Wcxx-compat.  */
+#define D_CXX_CONCEPTS  	0x00400	/* In C++, only with concepts.  */
+#define D_TRANSMEM		0X00800	/* C++ transactional memory TS.  */
+#define D_CHAR8_T		0X01000	/* Builtin char8_t.  */
+#define D_CXX20			0x02000	/* In C++, C++20 only.  */
+#define D_CXX_COROUTINES	0x04000	/* In C++, only with coroutines.  */
+#define D_CXX_MODULES		0x08000	/* In C++, only with modules.  */
+#define D_BUILTIN_CHARN_T	0x10000	/* In C with -fbuiltin-charn_t.  */
+#define D_BUILTIN_WCHAR_T	0x20000	/* In C with -fbuiltin-wchar_t.  */
 
 #define D_CXX_CONCEPTS_FLAGS D_CXXONLY | D_CXX_CONCEPTS
-#define D_CXX_CHAR8_T_FLAGS D_CXXONLY | D_CXX_CHAR8_T
 #define D_CXX_MODULES_FLAGS (D_CXXONLY | D_CXX_MODULES)
 #define D_CXX_COROUTINES_FLAGS (D_CXXONLY | D_CXX_COROUTINES)
 

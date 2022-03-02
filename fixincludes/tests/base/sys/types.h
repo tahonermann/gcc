@@ -25,7 +25,7 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 typedef __SIZE_TYPE__ size_t;
 #endif
  /* uint_t */
-#ifndef __cplusplus
+#if !defined(__cplusplus) && ! defined(__BUILTIN_WCHAR_T__)
 #if !defined(_GCC_WCHAR_T) && ! defined(__cplusplus)
 #define _GCC_WCHAR_T
 typedef __WCHAR_TYPE__ wchar_t;

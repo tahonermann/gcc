@@ -464,9 +464,9 @@ const struct c_common_resword c_common_reswords[] =
   { "case",		RID_CASE,	0 },
   { "catch",		RID_CATCH,	D_CXX_OBJC | D_CXXWARN },
   { "char",		RID_CHAR,	0 },
-  { "char8_t",		RID_CHAR8,	D_CXX_CHAR8_T_FLAGS | D_CXXWARN },
-  { "char16_t",		RID_CHAR16,	D_CXXONLY | D_CXX11 | D_CXXWARN },
-  { "char32_t",		RID_CHAR32,	D_CXXONLY | D_CXX11 | D_CXXWARN },
+  { "char8_t",		RID_CHAR8,	D_CHAR8_T | D_CXXWARN },
+  { "char16_t",		RID_CHAR16,	D_BUILTIN_CHARN_T | D_CXXWARN },
+  { "char32_t",		RID_CHAR32,	D_BUILTIN_CHARN_T | D_CXXWARN },
   { "class",		RID_CLASS,	D_CXX_OBJC | D_CXXWARN },
   { "const",		RID_CONST,	0 },
   { "consteval",	RID_CONSTEVAL,	D_CXXONLY | D_CXX20 | D_CXXWARN },
@@ -531,7 +531,7 @@ const struct c_common_resword c_common_reswords[] =
   { "virtual",		RID_VIRTUAL,	D_CXXONLY | D_CXXWARN },
   { "void",		RID_VOID,	0 },
   { "volatile",		RID_VOLATILE,	0 },
-  { "wchar_t",		RID_WCHAR,	D_CXXONLY },
+  { "wchar_t",		RID_WCHAR,	D_BUILTIN_WCHAR_T },
   { "while",		RID_WHILE,	0 },
   { "__is_assignable", RID_IS_ASSIGNABLE, D_CXXONLY },
   { "__is_constructible", RID_IS_CONSTRUCTIBLE, D_CXXONLY },
@@ -4523,7 +4523,7 @@ c_common_nodes_and_builtins (void)
   wchar_type_node = TREE_TYPE (identifier_global_value (wchar_type_node));
   wchar_type_size = TYPE_PRECISION (wchar_type_node);
   underlying_wchar_type_node = wchar_type_node;
-  if (c_dialect_cxx ())
+  if (c_dialect_cxx () || flag_builtin_wchar_t)
     {
       if (TYPE_UNSIGNED (wchar_type_node))
 	wchar_type_node = make_unsigned_type (wchar_type_size);
@@ -4540,7 +4540,7 @@ c_common_nodes_and_builtins (void)
   char8_type_node = get_identifier (CHAR8_TYPE);
   char8_type_node = TREE_TYPE (identifier_global_value (char8_type_node));
   char8_type_size = TYPE_PRECISION (char8_type_node);
-  if (c_dialect_cxx ())
+  if (c_dialect_cxx () || flag_builtin_charn_t)
     {
       char8_type_node = make_unsigned_type (char8_type_size);
 
@@ -4556,11 +4556,11 @@ c_common_nodes_and_builtins (void)
   char16_type_node = get_identifier (CHAR16_TYPE);
   char16_type_node = TREE_TYPE (identifier_global_value (char16_type_node));
   char16_type_size = TYPE_PRECISION (char16_type_node);
-  if (c_dialect_cxx ())
+  if (c_dialect_cxx () || flag_builtin_charn_t)
     {
       char16_type_node = make_unsigned_type (char16_type_size);
 
-      if (cxx_dialect >= cxx11)
+      if (cxx_dialect >= cxx11 || flag_builtin_charn_t)
 	record_builtin_type (RID_CHAR16, "char16_t", char16_type_node);
     }
 
@@ -4572,11 +4572,11 @@ c_common_nodes_and_builtins (void)
   char32_type_node = get_identifier (CHAR32_TYPE);
   char32_type_node = TREE_TYPE (identifier_global_value (char32_type_node));
   char32_type_size = TYPE_PRECISION (char32_type_node);
-  if (c_dialect_cxx ())
+  if (c_dialect_cxx () || flag_builtin_charn_t)
     {
       char32_type_node = make_unsigned_type (char32_type_size);
 
-      if (cxx_dialect >= cxx11)
+      if (cxx_dialect >= cxx11 || flag_builtin_charn_t)
 	record_builtin_type (RID_CHAR32, "char32_t", char32_type_node);
     }
 
@@ -5351,6 +5351,11 @@ boolean_increment (enum tree_code code, tree arg)
 void
 c_stddef_cpp_builtins(void)
 {
+  if (flag_builtin_wchar_t)
+    builtin_define_with_int_value ("__BUILTIN_WCHAR_T__", 1);
+  if (flag_builtin_charn_t)
+    builtin_define_with_int_value ("__BUILTIN_CHARN_T__", 1);
+
   builtin_define_with_value ("__SIZE_TYPE__", SIZE_TYPE, 0);
   builtin_define_with_value ("__PTRDIFF_TYPE__", PTRDIFF_TYPE, 0);
   builtin_define_with_value ("__WCHAR_TYPE__", MODIFIED_WCHAR_TYPE, 0);

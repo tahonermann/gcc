@@ -19468,6 +19468,9 @@ cp_parser_type_specifier (cp_parser* parser,
 
      nested-name-specifier(opt) template-name
 
+   C++20 extension:
+     char8_t
+
    GNU Extension:
 
    simple-type-specifier:

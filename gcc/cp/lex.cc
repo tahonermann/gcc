@@ -227,7 +227,10 @@ init_reswords (void)
   int mask = 0;
 
   if (cxx_dialect < cxx11)
-    mask |= D_CXX11;
+    {
+      mask |= D_CXX11;
+      mask |= D_BUILTIN_CHARN_T;
+    }
   if (cxx_dialect < cxx20)
     mask |= D_CXX20;
   if (!flag_concepts)
@@ -239,7 +242,7 @@ init_reswords (void)
   if (!flag_tm)
     mask |= D_TRANSMEM;
   if (!flag_char8_t)
-    mask |= D_CXX_CHAR8_T;
+    mask |= D_CHAR8_T;
   if (flag_no_asm)
     mask |= D_ASM | D_EXT;
   if (flag_no_gnu_keywords)

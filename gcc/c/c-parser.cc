@@ -127,6 +127,12 @@ c_parse_init (void)
     }
   if (!c_dialect_objc ())
     mask |= D_OBJC | D_CXX_OBJC;
+  if (!flag_builtin_wchar_t)
+    mask |= D_BUILTIN_WCHAR_T;
+  if (!flag_builtin_charn_t)
+    mask |= D_BUILTIN_CHARN_T;
+  if (!flag_builtin_charn_t || !flag_char8_t)
+    mask |= D_CHAR8_T;
 
   ridpointers = ggc_cleared_vec_alloc<tree> ((int) RID_MAX);
   for (i = 0; i < num_c_common_reswords; i++)
@@ -557,6 +563,10 @@ c_keyword_starts_typename (enum rid keyword)
     case RID_COMPLEX:
     case RID_INT:
     case RID_CHAR:
+    case RID_CHAR8:
+    case RID_CHAR16:
+    case RID_CHAR32:
+    case RID_WCHAR:
     case RID_FLOAT:
     case RID_DOUBLE:
     case RID_VOID:
@@ -734,6 +744,10 @@ c_token_starts_declspecs (c_token *token)
 	case RID_COMPLEX:
 	case RID_INT:
 	case RID_CHAR:
+	case RID_CHAR8:
+	case RID_CHAR16:
+	case RID_CHAR32:
+	case RID_WCHAR:
 	case RID_FLOAT:
 	case RID_DOUBLE:
 	case RID_VOID:
@@ -2954,6 +2968,10 @@ c_parser_declspecs (c_parser *parser, struct c_declspecs *specs,
 	case RID_COMPLEX:
 	case RID_INT:
 	case RID_CHAR:
+	case RID_CHAR8:
+	case RID_CHAR16:
+	case RID_CHAR32:
+	case RID_WCHAR:
 	case RID_FLOAT:
 	case RID_DOUBLE:
 	case RID_VOID:
@@ -4521,6 +4539,10 @@ c_parser_gnu_attribute_any_word (c_parser *parser)
 	case RID_THREAD:
 	case RID_INT:
 	case RID_CHAR:
+	case RID_CHAR8:
+	case RID_CHAR16:
+	case RID_CHAR32:
+	case RID_WCHAR:
 	case RID_FLOAT:
 	case RID_DOUBLE:
 	case RID_VOID:
@@ -11825,6 +11847,10 @@ c_parser_objc_selector (c_parser *parser)
     case RID_ONEWAY:
     case RID_INT:
     case RID_CHAR:
+    case RID_CHAR8:
+    case RID_CHAR16:
+    case RID_CHAR32:
+    case RID_WCHAR:
     case RID_FLOAT:
     case RID_DOUBLE:
     CASE_RID_FLOATN_NX:

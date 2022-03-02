@@ -10932,6 +10932,22 @@ declspecs_add_type (location_t loc, struct c_declspecs *specs,
 		error_at (loc,
 			  ("both %<long%> and %<char%> in "
 			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char8)
+		error_at (loc,
+			  ("both %<long%> and %<char8_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char16)
+		error_at (loc,
+			  ("both %<long%> and %<char16_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char32)
+		error_at (loc,
+			  ("both %<long%> and %<char32_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_wchar)
+		error_at (loc,
+			  ("both %<long%> and %<wchar_t%> in "
+			   "declaration specifiers"));
 	      else if (specs->typespec_word == cts_float)
 		error_at (loc,
 			  ("both %<long%> and %<float%> in "
@@ -10989,6 +11005,22 @@ declspecs_add_type (location_t loc, struct c_declspecs *specs,
 		error_at (loc,
 			  ("both %<short%> and %<char%> in "
 			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char8)
+		error_at (loc,
+			  ("both %<short%> and %<char8_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char16)
+		error_at (loc,
+			  ("both %<short%> and %<char16_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char32)
+		error_at (loc,
+			  ("both %<short%> and %<char32_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_wchar)
+		error_at (loc,
+			  ("both %<short%> and %<wchar_t%> in "
+			   "declaration specifiers"));
 	      else if (specs->typespec_word == cts_float)
 		error_at (loc,
 			  ("both %<short%> and %<float%> in "
@@ -11041,6 +11073,22 @@ declspecs_add_type (location_t loc, struct c_declspecs *specs,
 		error_at (loc,
 			  ("both %<signed%> and %<_Bool%> in "
 			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char8)
+		error_at (loc,
+			  ("both %<signed%> and %<char8_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char16)
+		error_at (loc,
+			  ("both %<signed%> and %<char16_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char32)
+		error_at (loc,
+			  ("both %<signed%> and %<char32_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_wchar)
+		error_at (loc,
+			  ("both %<signed%> and %<wchar_t%> in "
+			   "declaration specifiers"));
 	      else if (specs->typespec_word == cts_float)
 		error_at (loc,
 			  ("both %<signed%> and %<float%> in "
@@ -11092,6 +11140,22 @@ declspecs_add_type (location_t loc, struct c_declspecs *specs,
 	      else if (specs->typespec_word == cts_bool)
 		error_at (loc,
 			  ("both %<unsigned%> and %<_Bool%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char8)
+		error_at (loc,
+			  ("both %<unsigned%> and %<char8_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char16)
+		error_at (loc,
+			  ("both %<unsigned%> and %<char16_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char32)
+		error_at (loc,
+			  ("both %<unsigned%> and %<char32_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_wchar)
+		error_at (loc,
+			  ("both %<unsigned%> and %<wchar_t%> in "
 			   "declaration specifiers"));
 	      else if (specs->typespec_word == cts_float)
 		error_at (loc,
@@ -11201,6 +11265,22 @@ declspecs_add_type (location_t loc, struct c_declspecs *specs,
 		error_at (loc,
 			  ("both %<_Sat%> and %<char%> in "
 			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char8)
+		error_at (loc,
+			  ("both %<_Sat%> and %<char8_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char16)
+		error_at (loc,
+			  ("both %<_Sat%> and %<char16_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_char32)
+		error_at (loc,
+			  ("both %<_Sat%> and %<char32)t%> in "
+			   "declaration specifiers"));
+	      else if (specs->typespec_word == cts_wchar)
+		error_at (loc,
+			  ("both %<_Sat%> and %<wchar_t%> in "
+			   "declaration specifiers"));
 	      else if (specs->typespec_word == cts_int)
 		error_at (loc,
 			  ("both %<_Sat%> and %<int%> in "
@@ -11254,10 +11334,10 @@ declspecs_add_type (location_t loc, struct c_declspecs *specs,
 	}
       else
 	{
-	  /* "void", "_Bool", "char", "int", "float", "double",
-	     "_FloatN", "_FloatNx", "_Decimal32", "__intN",
-	     "_Decimal64", "_Decimal128", "_Fract", "_Accum" or
-	     "__auto_type".  */
+	  /* "void", "_Bool", "char", "char8_t", "char16_t", "char32_t",
+	     "wchar_t", "int", "float", "double", "_FloatN", "_FloatNx",
+	     "_Decimal32", "__intN", "_Decimal64", "_Decimal128",
+	     "_Fract", "_Accum" or "__auto_type".  */
 	  if (specs->typespec_word != cts_none)
 	    {
 	      error_at (loc,
@@ -11420,6 +11500,82 @@ declspecs_add_type (location_t loc, struct c_declspecs *specs,
 	      else
 		{
 		  specs->typespec_word = cts_char;
+		  specs->locations[cdw_typespec] = loc;
+		}
+	      return specs;
+	    case RID_CHAR8:
+	      if (specs->long_p)
+		error_at (loc,
+			  ("both %<long%> and %<char8_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->short_p)
+		error_at (loc,
+			  ("both %<short%> and %<char8_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->saturating_p)
+		error_at (loc,
+			  ("both %<_Sat%> and %<char8_t%> in "
+			   "declaration specifiers"));
+	      else
+		{
+		  specs->typespec_word = cts_char8;
+		  specs->locations[cdw_typespec] = loc;
+		}
+	      return specs;
+	    case RID_CHAR16:
+	      if (specs->long_p)
+		error_at (loc,
+			  ("both %<long%> and %<char16_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->short_p)
+		error_at (loc,
+			  ("both %<short%> and %<char16_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->saturating_p)
+		error_at (loc,
+			  ("both %<_Sat%> and %<char16_t%> in "
+			   "declaration specifiers"));
+	      else
+		{
+		  specs->typespec_word = cts_char16;
+		  specs->locations[cdw_typespec] = loc;
+		}
+	      return specs;
+	    case RID_CHAR32:
+	      if (specs->long_p)
+		error_at (loc,
+			  ("both %<long%> and %<char32_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->short_p)
+		error_at (loc,
+			  ("both %<short%> and %<char32_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->saturating_p)
+		error_at (loc,
+			  ("both %<_Sat%> and %<char32_t%> in "
+			   "declaration specifiers"));
+	      else
+		{
+		  specs->typespec_word = cts_char32;
+		  specs->locations[cdw_typespec] = loc;
+		}
+	      return specs;
+	    case RID_WCHAR:
+	      if (specs->long_p)
+		error_at (loc,
+			  ("both %<long%> and %<wchar_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->short_p)
+		error_at (loc,
+			  ("both %<short%> and %<wchar_t%> in "
+			   "declaration specifiers"));
+	      else if (specs->saturating_p)
+		error_at (loc,
+			  ("both %<_Sat%> and %<wchar_t%> in "
+			   "declaration specifiers"));
+	      else
+		{
+		  specs->typespec_word = cts_wchar;
 		  specs->locations[cdw_typespec] = loc;
 		}
 	      return specs;
@@ -11972,6 +12128,50 @@ finish_declspecs (struct c_declspecs *specs)
 	specs->type = unsigned_char_type_node;
       else
 	specs->type = char_type_node;
+      if (specs->complex_p)
+	{
+	  pedwarn (specs->locations[cdw_complex], OPT_Wpedantic,
+		   "ISO C does not support complex integer types");
+	  specs->type = build_complex_type (specs->type);
+	}
+      break;
+    case cts_char8:
+      gcc_assert (!specs->long_p && !specs->short_p);
+      gcc_assert (!(specs->signed_p && specs->unsigned_p));
+      specs->type = char8_type_node;
+      if (specs->complex_p)
+	{
+	  pedwarn (specs->locations[cdw_complex], OPT_Wpedantic,
+		   "ISO C does not support complex integer types");
+	  specs->type = build_complex_type (specs->type);
+	}
+      break;
+    case cts_char16:
+      gcc_assert (!specs->long_p && !specs->short_p);
+      gcc_assert (!(specs->signed_p && specs->unsigned_p));
+      specs->type = char16_type_node;
+      if (specs->complex_p)
+	{
+	  pedwarn (specs->locations[cdw_complex], OPT_Wpedantic,
+		   "ISO C does not support complex integer types");
+	  specs->type = build_complex_type (specs->type);
+	}
+      break;
+    case cts_char32:
+      gcc_assert (!specs->long_p && !specs->short_p);
+      gcc_assert (!(specs->signed_p && specs->unsigned_p));
+      specs->type = char32_type_node;
+      if (specs->complex_p)
+	{
+	  pedwarn (specs->locations[cdw_complex], OPT_Wpedantic,
+		   "ISO C does not support complex integer types");
+	  specs->type = build_complex_type (specs->type);
+	}
+      break;
+    case cts_wchar:
+      gcc_assert (!specs->long_p && !specs->short_p);
+      gcc_assert (!(specs->signed_p && specs->unsigned_p));
+      specs->type = wchar_type_node;
       if (specs->complex_p)
 	{
 	  pedwarn (specs->locations[cdw_complex], OPT_Wpedantic,

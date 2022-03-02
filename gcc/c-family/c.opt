@@ -1514,6 +1514,14 @@ Recognize built-in functions.
 fbuiltin-
 C ObjC C++ ObjC++ Joined
 
+fbuiltin-charn_t
+C ObjC Var(flag_builtin_charn_t) Init(0)
+Use unique builtin types for char8_t, char16_t, and char32_t in C.
+
+fbuiltin-wchar_t
+C ObjC Var(flag_builtin_wchar_t) Init(0)
+Use a unique builtin type for wchar_t in C.
+
 fcanonical-system-headers
 C ObjC C++ ObjC++
 Where shorter, use canonicalized paths to systems headers.
